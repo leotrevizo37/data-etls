@@ -11,5 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create .env for validation
+        run: cp compose-mcdonalds/.env.example compose-mcdonalds/.env
+
       - name: Validate compose
         run: docker compose -f compose-mcdonalds/docker-compose.yml config
