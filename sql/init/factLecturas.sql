@@ -1,12 +1,10 @@
-CREATE TABLE dwh.factlecturas
+CREATE TABLE dwh.factLecturas
 (
     ReadId UNIQUEIDENTIFIER NOT NULL,
     SensorId UNIQUEIDENTIFIER NOT NULL,
     TimeSpan DATETIME2(0) NOT NULL,
     LocalTimeSpan DATETIME2(0) NULL,
     ReadingValue DECIMAL(19, 9) NOT NULL,
-    Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
-    Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
     CONSTRAINT pk_factlecturas PRIMARY KEY CLUSTERED (ReadId)
 );
 GO
