@@ -52,6 +52,7 @@ class SparkResource:
             SparkConf()
             .setAppName(self.app_name)
             .setMaster(self.master_url)
+            .set("spark.executor.memory", "2g")
         )
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
@@ -133,6 +134,9 @@ class SparkResource:
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> None:
         if df.rdd.isEmpty():
             return
+        df_dedup = df.dropDuplicates(["ReadId"])
+        if df_dedup.rdd.isEmpty():
+            return
         url = (
             "jdbc:sqlserver://"
             + self.jdbc_host
@@ -146,8 +150,15 @@ class SparkResource:
             "user": self.jdbc_user,
             "password": self.jdbc_password,
             "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+            "batchsize": "4000",
         }
-        df.write.mode("append").jdbc(url=url, table="dwh.factLecturas", properties=properties)
+
+        target_partitions = 4
+        df_write = df_dedup.coalesce(target_partitions)
+
+        df_write.write \
+            .mode("append") \
+            .jdbc(url=url, table="dwh.factLecturas", properties=properties)
 
     def get_max_timespan(self, df: DataFrame) -> Optional[datetime]:
         if df.rdd.isEmpty():
