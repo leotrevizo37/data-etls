@@ -25,8 +25,6 @@ def start_run_and_get_range_op(context) -> Dict[str, Any]:
 
     from_utc = _truncate_to_seconds(last_loaded_at)
     now_utc = _truncate_to_seconds(datetime.utcnow())
-    #now_utc = _truncate_to_seconds(datetime.now(datetime.UTC))
-    #now_utc = _truncate_to_seconds(datetime.now(datetime.timezone.utc))
 
     sql.mark_run_started(ingestion_name)
 
@@ -92,7 +90,6 @@ def finalize_run_op(context, result: Dict[str, Any]) -> None:
     sql: SqlServerResource = context.resources.sqlserver
     ingestion_name = "FactLecturas"
 
-    from_utc: datetime = result["from_utc"]
     to_utc: datetime = result["to_utc"]
     original_last_loaded_at: datetime = result["original_last_loaded_at"]
     max_time_span: Optional[datetime] = result["max_time_span"]

@@ -56,7 +56,7 @@ class SqlServerResource:
                         ingestion_name,
                     )
                     row = cursor.fetchone()
-                except pyodbc.Error as e:
+                except pyodbc.Error:
                     return None
                 if row is None:
                     return None
