@@ -38,7 +38,7 @@ BEGIN
 
     DELETE FROM dwh.FactLecturas WITH (ROWLOCK)
     WHERE
-         TimeSpan >= @FromUtc
+        TimeSpan >= @FromUtc
         AND TimeSpan <= @ToUtc;
 
     DECLARE @DeletedRows INT = @@ROWCOUNT;

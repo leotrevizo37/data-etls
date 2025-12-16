@@ -17,8 +17,9 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
-    DECLARE @status VARCHAR(20)
-        = CASE
+    DECLARE
+        @status VARCHAR(20) =
+        CASE
             WHEN @Succeeded = 1 THEN 'SUCCESS'
             ELSE 'FAILED'
         END;
@@ -26,10 +27,10 @@ BEGIN
     UPDATE dwh.ctlIngestionFactLecturas WITH (ROWLOCK, UPDLOCK)
     SET
         LastLoadedAt =
-            CASE
-                WHEN @Succeeded = 1 THEN @NewLastLoadedAt
-                ELSE LastLoadedAt
-            END,
+        CASE
+            WHEN @Succeeded = 1 THEN @NewLastLoadedAt
+            ELSE LastLoadedAt
+        END,
         LastRunStatus = @status,
         LastRunFinishedAt = @now,
         LastRunError = @ErrorMessage,
