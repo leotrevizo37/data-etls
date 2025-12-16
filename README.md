@@ -74,7 +74,10 @@ make up
 ```bash
 docker compose --env-file compose-mcdonalds/.env -f compose-mcdonalds/docker-compose.yml up -d --build
 ```
-
+### Para mejor renidmiento si el host lo permite, se agregan workers
+```bash
+docker compose --env-file compose-mcdonalds/.env -f compose-mcdonalds/docker-compose.yml up -d --scale spark-worker=4
+```
 ## Para desarrollo local y pruebas
 
 ### Localizarse en la raiz del proyecto dagster

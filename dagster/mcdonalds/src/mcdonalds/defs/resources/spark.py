@@ -52,7 +52,7 @@ class SparkResource:
             SparkConf()
             .setAppName(self.app_name)
             .setMaster(self.master_url)
-            .set("spark.executor.memory", "2g")
+            .set("spark.executor.memory", "3g")
         )
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
