@@ -86,7 +86,13 @@ cd dagster/mcdonalds
 
 * Windows: 
 ```bash
-.\.venv\Scripts\activate.bat
+py -m venv .venv
+```
+```bash
+uv sync
+```
+```bash
+.venv\Scripts\activate.bat
 ```
 * Linux:
 ```bash
