@@ -4,7 +4,7 @@ dagster-graphql
 dagster-pyspark
 dagster-postgres
 dagster-docker
-pyspark
+pyspark==4.0.1
 polars
 pymssql
 adlfs
