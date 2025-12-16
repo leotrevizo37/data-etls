@@ -18,8 +18,8 @@ BEGIN
 
     DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
     DECLARE
-        @status VARCHAR(20) =
-        CASE
+        @status VARCHAR(20)
+        = CASE
             WHEN @Succeeded = 1 THEN 'SUCCESS'
             ELSE 'FAILED'
         END;
