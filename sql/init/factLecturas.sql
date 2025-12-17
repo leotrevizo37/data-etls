@@ -4,7 +4,7 @@ CREATE TABLE dwh.factLecturas
     SensorId UNIQUEIDENTIFIER NOT NULL,
     TimeSpan DATETIME2(0) NOT NULL,
     LocalTimeSpan DATETIME2(0) NULL,
-    ReadingValue DECIMAL(19, 9) NOT NULL,
+    Value DECIMAL(19, 9) NOT NULL,
     CONSTRAINT pk_factlecturas PRIMARY KEY CLUSTERED (ReadId)
 );
 GO

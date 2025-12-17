@@ -5,8 +5,9 @@ CREATE TABLE dwh.factOperaciones
     LocalTimeSpan DATETIME2(0) NOT NULL,
     Estatus SMALLINT NOT NULL,
     Valor DECIMAL(9, 4) NULL,
-    Fecha AS CONVERT (DATE, LocalTimeSpan) PERSISTED,
-    Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
+    Anomalias INTEGER NULL,
+    Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
+    Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED
 );
 GO
 
