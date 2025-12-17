@@ -95,7 +95,7 @@ py -m venv .venv
 uv sync
 ```
 ```bash
-.venv\Scripts\activate.bat
+.venv\Scripts\activate
 ```
 * Linux:
 ```bash
