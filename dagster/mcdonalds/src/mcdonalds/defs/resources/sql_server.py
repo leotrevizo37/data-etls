@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import os
 import pyodbc
@@ -107,6 +107,24 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def get_basic_options(self) -> Dict[str, Any]:
+        url = (
+                "jdbc:sqlserver://"
+                + self.host
+                + ":"
+                + str(self.port)
+                + ";databaseName="
+                + self.database
+                + ";encrypt=true;trustServerCertificate=true"
+                + ";Connection Timeout="
+                + str(self.connect_timeout)
+        )
+        return {
+            "url": url,
+            "user": self.user,
+            "password": self.password,
+            "driver": self.driver,
+        }
 
 @resource
 def sqlserver_resource(_):
