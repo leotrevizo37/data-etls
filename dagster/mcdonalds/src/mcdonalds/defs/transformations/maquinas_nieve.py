@@ -1,6 +1,5 @@
 from typing import Optional
 
-from dagster import AssetExecutionContext
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (col,
                                    date_trunc,
