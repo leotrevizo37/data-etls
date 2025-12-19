@@ -13,11 +13,16 @@ from pyspark.sql.functions import (col,
                                    max as spark_max,
                                    unix_timestamp,
                                    from_unixtime,
-                                   floor)
-
+                                   floor,
+                                   min as spark_min,
+                                   explode,
+                                   sequence,
+                                   expr,
+                                   coalesce)
 
 from pyspark.sql.window import Window
 
+THRESHOLD_MIN_ROWS = 20
 def maquinas_nieve(
         factlecturas_extended_df: DataFrame,
         context: AssetExecutionContext) -> Optional[DataFrame]:
@@ -45,35 +50,13 @@ def maquinas_nieve(
         )
     )
 
-
-    if base is None:
-        context.log.info("No rows when filtering for maquinas nieve; skipping write.")
-        return None
-    context.log.info(
-        "entries for maquinas nieve:  "
-        + str(base.count())
-        + "\n top:   "
-        + str(base.first)
-    )
-
     w = Window.partitionBy("HourStart").orderBy("LocalTimeSpan")
-
     base = base.withColumn(
         "is_zero",
         (col("Value") <= 1).cast("int")
     )
-    if base is None:
-        context.log.info("No rows when grouping by hour; skipping write.")
-        return None
-    context.log.info(
-        "number of rows after hour grouping:  "
-        + str(base.count())
-        + "\n top:   "
-        + str(base.first)
-    )
 
     prev_is_zero = lag("is_zero", 1).over(w)
-
     base = base.withColumn(
         "zero_run_start",
         spark_when(
@@ -83,81 +66,15 @@ def maquinas_nieve(
         ).otherwise(0)
     )
 
-    if base is None:
-        context.log.info("No rows when putting 1s for counting anomalies; skipping write.")
-        return None
-    context.log.info(
-        "entries for anomalies fisrt count:  "
-        + str(base.count())
-        + "\n top:   "
-        + str(base.first)
-    )
-
     base = base.withColumn(
         "zero_group",
         spark_sum("zero_run_start").over(w)
     )
-
-    if base is None:
-        context.log.info("No rows when counting fron start to finish anomalies; skipping write.")
-        return None
-    context.log.info(
-        "entries for anomalies:  "
-        + str(base.count())
-        + "\n top:   "
-        + str(base.first)
-    )
-
     w_group = Window.partitionBy("HourStart", "zero_group")
-
     base = base.withColumn(
         "zero_run_len",
         spark_sum("is_zero").over(w_group)
     )
-
-    five_minute_df = (
-        base
-        .groupBy("DeviceId", "SensorId", "LocationId", "HourStart", "5MinuteStart")
-        .agg(
-            # Por ejemplo: si al menos una lectura está en cero, el bloque cuenta como cero
-            spark_max(col("is_zero").cast("int")).alias("is_zero_bucket")
-            # si quieres, también podrías sacar avg(Valor) aquí
-        )
-    )
-
-    if base is None:
-        context.log.info("second timespan for count anomalies; skipping write.")
-        return None
-    context.log.info(
-        "entries for the second amonalies window anomalies:  "
-        + str(base.count())
-        + "\n top:   "
-        + str(base.first)
-        + str(base.first())
-    )
-
-    """maquinas_nieve_df = (
-        base
-        .groupBy("HourStart")
-        .agg(
-            avg("Value").alias("Valor"),
-            spark_sum(
-                spark_when(col("Value") > 3, 1).otherwise(0)
-            ).alias("amperaje_mayor_3"),
-            count("*").alias("total_readings"),
-            spark_max("zero_run_len").alias("max_zero_run_len"),
-        )
-        .withColumn(
-            "estatus",
-            spark_when(col("amperaje_encendido") >= 18, 1).otherwise(3)
-        )
-        .withColumn(
-            "Anomalias",
-            spark_when(col("max_zero_run_len") >= 12, 1).otherwise(0)
-        )
-        .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
-        .withColumnRenamed("HourStart", "LocalTimeSpan")
-    )"""
 
     stats_df = (
         base
@@ -172,18 +89,8 @@ def maquinas_nieve(
         )
         .withColumn(
             "Estatus",
-            spark_when(col("amperaje_encendido")/col("total_readings")>=0.50, 1).otherwise(3)
+            spark_when(col("amperaje_encendido") / col("total_readings") >= 0.50, 1).otherwise(3)
         )
-    )
-
-    if stats_df is None:
-        context.log.info("no rows after amepraje count; skipping write.")
-        return None
-    context.log.info(
-        "entries for the amperaje first etl:  "
-        + str(stats_df.count())
-        + "\n top:   "
-        + str(stats_df.first)
     )
 
     per_min5_max_df = (
@@ -199,19 +106,6 @@ def maquinas_nieve(
         date_trunc("hour", col("5MinuteStart"))
     )
 
-
-
-
-    if per5max_df is None:
-        context.log.info("no rows after counting the max amperage pero phases; skipping write.")
-        return None
-    context.log.info(
-        "entries for the biggeet ameprage per phases first etl:  "
-        + str(per5max_df.count())
-        + "\n top:   "
-        + str(per5max_df.first)
-    )
-
     valor_df = (
         per5max_df
         .groupBy("DeviceId", "HourStart", "LocationId")
@@ -221,40 +115,75 @@ def maquinas_nieve(
         )
     )
 
-    if valor_df is None:
-        context.log.info("no rows after establishing the average value from amperage; skipping write.")
-        return None
-    context.log.info(
-        "entries for the avg amperage first etl:  "
-        + str(valor_df.count())
-        + "\n top:   "
-        + str(valor_df.first)
+    agg_20 = (
+        base
+        .groupBy("DeviceId", "LocationId", "HourStart", "20MinuteStart")
+        .agg(
+            count("*").alias("row_count"),
+            spark_sum(col("is_zero").cast("int")).alias("zero_count"),
+        )
+    )
+
+    device_span = (
+        base
+        .groupBy("DeviceId", "LocationId")
+        .agg(
+            spark_min("20MinuteStart").alias("min_win"),
+            spark_max("20MinuteStart").alias("max_win"),
+        )
+    )
+
+    all_windows = (
+        device_span
+        .select(
+            "DeviceId",
+            "LocationId",
+            explode(
+                sequence("min_win", "max_win", expr("INTERVAL 20 MINUTES"))
+            ).alias("20MinuteStart"),
+        )
+    )
+
+    windows_with_data = (
+        all_windows
+        .join(
+            agg_20,
+            on=["DeviceId", "LocationId", "20MinuteStart"],
+            how="left",
+        )
+        .withColumn("row_count", coalesce(col("row_count"), lit(0)))
+        .withColumn("zero_count", coalesce(col("zero_count"), lit(0)))
+    )
+
+    windows_with_data = windows_with_data.withColumn(
+        "HourStart",
+        date_trunc("hour", col("20MinuteStart"))
+    )
+
+    windows_with_anom = (
+        windows_with_data
+        .withColumn(
+            "Anomalia_20min",
+            spark_when(
+                (col("row_count") == 0) |
+                ((col("row_count") > 0) & (col("zero_count") == col("row_count"))) |
+                ((col("row_count") < lit(THRESHOLD_MIN_ROWS)) & (col("zero_count") > 0)),
+                lit(1),
+            ).otherwise(lit(0)),
+        )
     )
 
     anomalies_df = (
-        base
-        .where(col("zero_run_start") == 1)
-        .groupBy("DeviceId", "HourStart", "SensorId", "LocationId")
+        windows_with_anom
+        .groupBy("DeviceId", "LocationId", "HourStart")
         .agg(
-            spark_sum(
-                spark_when(col("zero_run_len") >= 12, 1).otherwise(0)
-            ).alias("Anomalias_raw")
+            spark_sum("Anomalia_20min").alias("Anomalias_raw"),
         )
         .withColumn(
             "Anomalias",
             spark_when(col("Anomalias_raw") > 3, lit(3)).otherwise(col("Anomalias_raw"))
         )
         .select("HourStart", "Anomalias", "DeviceId")
-    )
-
-    if anomalies_df is None:
-        context.log.info("no rows after setting anomalies into df; skipping write.")
-        return None
-    context.log.info(
-        "entries for the new df with anomalies:  "
-        + str(anomalies_df.count())
-        + "\n top:   "
-        + str(anomalies_df.first)
     )
 
     maquinas_nieve_df = (
@@ -264,16 +193,6 @@ def maquinas_nieve(
         .fillna({"Anomalias": 0})
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
-    )
-
-    if maquinas_nieve_df is None:
-        context.log.info("putting the etl altogether; skipping write.")
-        return None
-    context.log.info(
-        "entries for the the maquina nieve etl output:  "
-        + str(maquinas_nieve_df.count())
-        + "\n top:   "
-        + str(maquinas_nieve_df.first)
     )
 
     if maquinas_nieve_df.rdd.isEmpty():

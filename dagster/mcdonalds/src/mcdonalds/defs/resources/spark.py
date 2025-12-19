@@ -29,6 +29,7 @@ class SparkResource:
         jdbc_port: int,
         jdbc_database: str,
         jdbc_user: str,
+        jdbc_driver: str,
         jdbc_password: str,
     ) -> None:
         self.master_url = master_url
@@ -41,6 +42,7 @@ class SparkResource:
         self.jdbc_port = jdbc_port
         self.jdbc_database = jdbc_database
         self.jdbc_user = jdbc_user
+        self.jdbc_driver = jdbc_driver
         self.jdbc_password = jdbc_password
         self._spark: Optional[SparkSession] = None
 
@@ -160,6 +162,61 @@ class SparkResource:
             .mode("append") \
             .jdbc(url=url, table="dwh.factLecturas", properties=properties)
 
+    def write_fact_operations_incremental(self, df: DataFrame) -> int:
+        if df.rdd.isEmpty():
+            return 0
+
+        url = (
+                "jdbc:sqlserver://"
+                + self.jdbc_host
+                + ":"
+                + str(self.jdbc_port)
+                + ";databaseName="
+                + self.jdbc_database
+                + ";encrypt=true;trustServerCertificate=true"
+        )
+        properties = {
+            "user": self.jdbc_user,
+            "password": self.jdbc_password,
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+        }
+
+        try:
+            max_df = self._spark.read.jdbc(
+                url=url,
+                table="(SELECT MAX(LocalTimeSpan) AS max_ts FROM dwh.FactOperaciones) AS t",
+                properties=properties,
+            )
+            row = max_df.collect()[0]
+            max_ts = row.max_ts
+        except Exception:
+            max_ts = None
+
+        df_filtered = df
+        if max_ts is not None:
+            df_filtered = df_filtered.filter(col("LocalTimeSpan") > max_ts)
+
+        if df_filtered.rdd.isEmpty():
+            return 0
+
+        df_write = df_filtered.coalesce(4)
+        row_count = df_write.count()
+
+        df_write.write.jdbc(
+            url=url,
+            table="dwh.FactOperaciones",
+            mode="append",
+            properties={
+                "user": self.jdbc_user,
+                "password": self.jdbc_password,
+                "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+                "batchsize": "4000",
+            },
+        )
+
+        return row_count
+
+
     def get_max_timespan(self, df: DataFrame) -> Optional[datetime]:
         if df.rdd.isEmpty():
             return None
@@ -182,6 +239,7 @@ def spark_resource(_):
     jdbc_port = int(os.getenv("MSSQL_PORT", "1433"))
     jdbc_database = os.getenv("APP_DB", "")
     jdbc_user = os.getenv("MSSQL_USER", "")
+    jdbc_driver = os.getenv("MSSQL_DRIVER", "")
     jdbc_password = os.getenv("MSSQL_PASSWORD", "")
     spark_res = SparkResource(
         master_url=master_url,
@@ -194,6 +252,7 @@ def spark_resource(_):
         jdbc_port=jdbc_port,
         jdbc_database=jdbc_database,
         jdbc_user=jdbc_user,
+        jdbc_driver=jdbc_driver,
         jdbc_password=jdbc_password,
     )
     try:

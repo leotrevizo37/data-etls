@@ -123,7 +123,7 @@ class SqlServerResource:
             "url": url,
             "user": self.user,
             "password": self.password,
-            "driver": self.driver,
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
         }
 
 @resource

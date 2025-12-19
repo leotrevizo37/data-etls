@@ -35,49 +35,13 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     if factlecturas_extended_df is None:
         context.log.info("No rows in extended factLecturas; skipping write.")
         return None
-    context.log.info(
-        "fact Lecturas join dims row count:  "
-        + str(factlecturas_extended_df.count())
-        + "\n top:   "
-        + str(factlecturas_extended_df.first)
-    )
 
-    filter_expr = (
-            (col("_device_type") == "Corriente")
-            & (
-                    (col("_device_name") == "Máquinas de nieve")
-                    | (col("_device_name") == "Máquina de nieve")
-            )
-    )
-
-    filtered_df = factlecturas_extended_df.filter(filter_expr)
-
-    match_count = filtered_df.count()
-
-    if match_count == 0:
-        context.log.info(
-            "factLecturas_extended: 0 rows matching devices 'Corriente' + 'Máquina(s) de nieve'."
-        )
-    else:
-        first_match = filtered_df.first()
-        context.log.info(
-            "factLecturas_extended matches: "
-            + str(match_count)
-            + "\nfirst match: "
-            + str(first_match)
-        )
-
+    context.log.info("Materializing maquinas de nieve ETL")
     maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df, context)
 
     if maquinas_nieve_df is None:
         context.log.info("No rows in maquinas nieve; skipping write.")
         return None
-    context.log.info(
-        "maquinas nieve etl rows count:  "
-        + str(maquinas_nieve_df.count())
-        + "\n top:   "
-        + str(maquinas_nieve_df.first())
-    )
 
     maquinas_nieve_df = (
         maquinas_nieve_df
@@ -91,15 +55,9 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
         )
     )
 
-    context.log.info(
-        "maquinas nieve df top"
-        + str(maquinas_nieve_df.first)
-        + str(maquinas_nieve_df.first())
-        + str(maquinas_nieve_df.count())
-    )
-
+    context.log.info("Writing " + str(maquinas_nieve_df.count()) + " rows into factOperaciones.")
     inserted = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
-    context.log.info(inserted)
+    context.log.info(str(inserted) + " rows correctly written into factOperaciones.")
 
     return MaterializeResult(
         metadata={"row_count": inserted},
