@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from pyspark.sql.functions import col
 
 from dagster import (asset,
@@ -28,13 +30,29 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     dim_sql: SqlDimServerResource = context.resources.dim_sqlserver
     sqlserver: SqlServerResource = context.resources.sqlserver
 
-    raw_dims_df = raw_dimensions(spark_res, dim_sql)
-    factlecturas_extended_df = factlecturas_extended(spark_res, sqlserver, raw_dims_df)
+    max_op_ts = sqlserver.fetch_scalar(
+        "SELECT MAX(LocalTimeSpan) FROM dwh.factOperaciones"
+    )
+    fetch_from_ts = max_op_ts - timedelta(hours=4)
+    delete_from_ts = max_op_ts - timedelta(hours=2)
 
+    raw_dims_df = raw_dimensions(spark_res, dim_sql)
+    factlecturas_extended_df = factlecturas_extended(spark_res, sqlserver, raw_dims_df, fetch_from_ts)
 
     if factlecturas_extended_df is None:
-        context.log.info("No rows in extended factLecturas; skipping write.")
+        context.log.info("No new rows detected in factLecturas; skipping write.")
         return None
+
+    context.log.info("Deleting las period rows from FactOperaciones.")
+    deleted_rows = sqlserver.execute_query(
+        "DELETE FROM dwh.factOperaciones WHERE LocalTimeSpan >= ?",
+        delete_from_ts,
+    )
+    if deleted_rows is None or deleted_rows == 0:
+        context.log.info("No new rows deleted from factOperaciones "
+                         "for this period; skipping write.")
+    else:
+        context.log.info("Deleted" + str(deleted_rows) + "from FactOperaciones.")
 
     context.log.info("Materializing maquinas de nieve ETL")
     maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df, context)
@@ -46,7 +64,7 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     maquinas_nieve_df = (
         maquinas_nieve_df
         .select(
-            col("DeviceId"),
+            col("SensorId"),
             col("LocationId"),
             col("LocalTimeSpan"),
             col("Estatus"),

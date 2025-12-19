@@ -71,6 +71,23 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def execute_query(self, query: str, *args) -> Optional[int]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(query, *args)
+                    conn.commit()
+                    return cursor.rowcount
+                except pyodbc.Error as e:
+                    return e
+
+    def fetch_scalar(self, query: str, *args):
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, *args)
+                row = cursor.fetchone()
+                return row[0] if row is not None else None
+
     def delete_range(self, from_utc: datetime, to_utc: datetime) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
