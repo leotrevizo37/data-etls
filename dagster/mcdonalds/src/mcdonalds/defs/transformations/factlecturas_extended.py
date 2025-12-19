@@ -1,4 +1,3 @@
-from datetime import timedelta
 from typing import Optional
 
 from pyspark.sql import DataFrame
@@ -13,18 +12,25 @@ def factlecturas_extended(
         fetch_factlecturas_from: str) -> Optional[DataFrame]:
     spark = spark_res.get_spark()
 
-    dbtable = (
-        "(SELECT * "
-        " FROM dwh.FactLecturas "
-        f" WHERE TimeSpan > '{fetch_factlecturas_from}') AS src"
-    )
-
-    dwh_factlecturas_df =(
-        spark.read.format("jdbc")
-        .option("dbtable", dbtable)
-        .options(**sqlserver.get_basic_options())
-        .load()
-    )
+    if fetch_factlecturas_from is None:
+        dwh_factlecturas_df = (
+            spark.read.format("jdbc")
+            .option("dbtable", "dwh.FactLecturas")
+            .options(**sqlserver.get_basic_options())
+            .load()
+        )
+    else:
+        dbtable = (
+            "(SELECT * "
+            " FROM dwh.FactLecturas "
+            f" WHERE LocalTimeSpan >= '{fetch_factlecturas_from}') AS src"
+        )
+        dwh_factlecturas_df =(
+            spark.read.format("jdbc")
+            .option("dbtable", dbtable)
+            .options(**sqlserver.get_basic_options())
+            .load()
+        )
 
     dwh_factlecturas_extended_df = (
         dwh_factlecturas_df

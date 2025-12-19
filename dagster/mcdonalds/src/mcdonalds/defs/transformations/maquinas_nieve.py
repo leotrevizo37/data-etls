@@ -24,8 +24,7 @@ from pyspark.sql.window import Window
 
 THRESHOLD_MIN_ROWS = 20
 def maquinas_nieve(
-        factlecturas_extended_df: DataFrame,
-        context: AssetExecutionContext) -> Optional[DataFrame]:
+        factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
         .filter(
@@ -95,7 +94,7 @@ def maquinas_nieve(
 
     per_min5_max_df = (
         base
-        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId")
+        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId")
         .agg(
             spark_max("Value").alias("Value_phase_max")
         )
@@ -108,7 +107,7 @@ def maquinas_nieve(
 
     valor_df = (
         per5max_df
-        .groupBy("DeviceId", "HourStart", "LocationId")
+        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId")
         .agg(
             avg("Value_phase_max").alias("Valor"),
             count("*").alias("total_sensors"),
@@ -117,7 +116,7 @@ def maquinas_nieve(
 
     agg_20 = (
         base
-        .groupBy("DeviceId", "LocationId", "HourStart", "20MinuteStart")
+        .groupBy("DeviceId", "LocationId", "HourStart", "20MinuteStart", "SensorTyId")
         .agg(
             count("*").alias("row_count"),
             spark_sum(col("is_zero").cast("int")).alias("zero_count"),
@@ -126,7 +125,7 @@ def maquinas_nieve(
 
     device_span = (
         base
-        .groupBy("DeviceId", "LocationId")
+        .groupBy("DeviceId", "LocationId", "SensorTyId")
         .agg(
             spark_min("20MinuteStart").alias("min_win"),
             spark_max("20MinuteStart").alias("max_win"),
@@ -138,6 +137,7 @@ def maquinas_nieve(
         .select(
             "DeviceId",
             "LocationId",
+            "SensorTyId",
             explode(
                 sequence("min_win", "max_win", expr("INTERVAL 20 MINUTES"))
             ).alias("20MinuteStart"),
@@ -148,7 +148,7 @@ def maquinas_nieve(
         all_windows
         .join(
             agg_20,
-            on=["DeviceId", "LocationId", "20MinuteStart"],
+            on=["DeviceId", "LocationId", "20MinuteStart", "SensorTyId"],
             how="left",
         )
         .withColumn("row_count", coalesce(col("row_count"), lit(0)))
@@ -175,7 +175,7 @@ def maquinas_nieve(
 
     anomalies_df = (
         windows_with_anom
-        .groupBy("DeviceId", "LocationId", "HourStart")
+        .groupBy("DeviceId", "LocationId", "HourStart", "SensorTyId")
         .agg(
             spark_sum("Anomalia_20min").alias("Anomalias_raw"),
         )

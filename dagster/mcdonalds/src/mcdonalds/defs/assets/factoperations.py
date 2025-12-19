@@ -33,9 +33,27 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     max_op_ts = sqlserver.fetch_scalar(
         "SELECT MAX(LocalTimeSpan) FROM dwh.factOperaciones"
     )
-    fetch_from_ts = max_op_ts - timedelta(hours=4)
-    delete_from_ts = max_op_ts - timedelta(hours=2)
+    if max_op_ts is None:
+        context.log.info("Loading all factLecturas data")
+        fetch_from_ts = max_op_ts
+    else:
+        fetch_from_ts = max_op_ts - timedelta(hours=4)
+        delete_from_ts = max_op_ts - timedelta(hours=2)
+        context.log.info("Deleting last period from FactOperaciones.")
+        deleted_rows = sqlserver.execute_query(
+            "DELETE FROM dwh.factOperaciones WHERE LocalTimeSpan >= ?",
+            delete_from_ts,
+        )
+        if deleted_rows is None or deleted_rows == 0:
+            context.log.info("No new rows deleted from factOperaciones "
+                             "for this period.")
+        else:
+            context.log.info("Deleted" + str(deleted_rows) + "from FactOperaciones.")
 
+    if max_op_ts is None:
+        context.log.info("Loading factLecturas data from beginning")
+    else:
+        context.log.info("Loading factLecturas data from " + str(max_op_ts))
     raw_dims_df = raw_dimensions(spark_res, dim_sql)
     factlecturas_extended_df = factlecturas_extended(spark_res, sqlserver, raw_dims_df, fetch_from_ts)
 
@@ -43,19 +61,8 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
         context.log.info("No new rows detected in factLecturas; skipping write.")
         return None
 
-    context.log.info("Deleting las period rows from FactOperaciones.")
-    deleted_rows = sqlserver.execute_query(
-        "DELETE FROM dwh.factOperaciones WHERE LocalTimeSpan >= ?",
-        delete_from_ts,
-    )
-    if deleted_rows is None or deleted_rows == 0:
-        context.log.info("No new rows deleted from factOperaciones "
-                         "for this period; skipping write.")
-    else:
-        context.log.info("Deleted" + str(deleted_rows) + "from FactOperaciones.")
-
     context.log.info("Materializing maquinas de nieve ETL")
-    maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df, context)
+    maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df)
 
     if maquinas_nieve_df is None:
         context.log.info("No rows in maquinas nieve; skipping write.")
@@ -64,8 +71,9 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     maquinas_nieve_df = (
         maquinas_nieve_df
         .select(
-            col("SensorId"),
+            col("DeviceId"),
             col("LocationId"),
+            col("SensorTyId"),
             col("LocalTimeSpan"),
             col("Estatus"),
             col("Valor"),
@@ -74,7 +82,11 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
     )
 
     context.log.info("Writing " + str(maquinas_nieve_df.count()) + " rows into factOperaciones.")
-    inserted = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
+    try:
+        inserted = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
+    except Exception as e:
+        context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
+        return None
     context.log.info(str(inserted) + " rows correctly written into factOperaciones.")
 
     return MaterializeResult(
