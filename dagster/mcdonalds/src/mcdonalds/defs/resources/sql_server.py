@@ -150,8 +150,8 @@ def sqlserver_resource(_):
     database = os.getenv("APP_DB", "YourDatabaseName")
     user = os.getenv("MSSQL_USER", "app_ingestion_user")
     password = os.getenv("MSSQL_PASSWORD", "")
-    connect_timeout = int(os.getenv("MSSQL_CONNECT_TIMEOUT", "15"))
-    command_timeout = int(os.getenv("MSSQL_COMMAND_TIMEOUT", "600"))
+    connect_timeout = int(os.getenv("MSSQL_CONNECT_TIMEOUT", "300"))
+    command_timeout = int(os.getenv("MSSQL_COMMAND_TIMEOUT", "4500"))
     driver = os.getenv("MSSQL_DRIVER", "ODBC Driver 18 for SQL Server")
     return SqlServerResource(
         host=host,

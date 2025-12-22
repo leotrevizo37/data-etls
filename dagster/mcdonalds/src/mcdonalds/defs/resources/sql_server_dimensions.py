@@ -85,8 +85,8 @@ def dim_sqlserver_resource(_):
     database = os.getenv("DIM_DB", "YourDatabaseName")
     user = os.getenv("DIMSQL_USER", "app_ingestion_user")
     password = os.getenv("DIMSQL_PASSWORD", "")
-    connect_timeout = int(os.getenv("DIMSQL_CONNECT_TIMEOUT", "15"))
-    command_timeout = int(os.getenv("DIMSQL_COMMAND_TIMEOUT", "500"))
+    connect_timeout = int(os.getenv("DIMSQL_CONNECT_TIMEOUT", "300"))
+    command_timeout = int(os.getenv("DIMSQL_COMMAND_TIMEOUT", "4500"))
     driver = os.getenv("DIMSQL_DRIVER", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
     return SqlDimServerResource(
         host=host,
