@@ -8,7 +8,7 @@ from dagster import (asset,
                      AssetExecutionContext)
 
 from ..resources import SparkResource, SqlServerResource, SqlDimServerResource
-from ..transformations import raw_dimensions, factlecturas_extended, maquinas_nieve
+from ..transformations import raw_dimensions, factlecturas_extended, maquinas_nieve, maquinas_soda
 
 @asset(
     non_argument_deps={
@@ -48,12 +48,12 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
             context.log.info("No new rows deleted from factOperaciones "
                              "for this period.")
         else:
-            context.log.info("Deleted" + str(deleted_rows) + "from FactOperaciones.")
+            context.log.info("Deleted " + str(deleted_rows) + " rows from FactOperaciones.")
 
     if max_op_ts is None:
         context.log.info("Loading factLecturas data from beginning")
     else:
-        context.log.info("Loading factLecturas data from " + str(max_op_ts))
+        context.log.info("Loading factLecturas data from date:" + str(max_op_ts))
     raw_dims_df = raw_dimensions(spark_res, dim_sql)
     factlecturas_extended_df = factlecturas_extended(spark_res, sqlserver, raw_dims_df, fetch_from_ts)
 
@@ -83,12 +83,40 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
 
     context.log.info("Writing " + str(maquinas_nieve_df.count()) + " rows into factOperaciones.")
     try:
-        inserted = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
+        inserted_nieve = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
     except Exception as e:
         context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
         return None
-    context.log.info(str(inserted) + " rows correctly written into factOperaciones.")
+    context.log.info(str(inserted_nieve) + " rows correctly written into factOperaciones.")
+
+    context.log.info("Materializing maquinas de soda ETL")
+    maquinas_soda_df = maquinas_soda(factlecturas_extended_df)
+
+    if maquinas_nieve_df is None:
+        context.log.info("No rows in maquinas nieve; skipping write.")
+        return None
+
+    maquinas_soda_df = (
+        maquinas_soda_df
+        .select(
+            col("DeviceId"),
+            col("LocationId"),
+            col("SensorTyId"),
+            col("LocalTimeSpan"),
+            col("Estatus"),
+            col("Valor"),
+            col("Anomalias"),
+        )
+    )
+
+    context.log.info("Writing " + str(maquinas_soda_df.count()) + " rows into factOperaciones.")
+    try:
+        inserted_soda = spark_res.write_fact_operations_incremental(maquinas_soda_df)
+    except Exception as e:
+        context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
+        return None
+    context.log.info(str(inserted_soda) + " rows correctly written into factOperaciones.")
 
     return MaterializeResult(
-        metadata={"row_count": inserted},
+        metadata={"row_count": (inserted_nieve + inserted_soda)},
     )
