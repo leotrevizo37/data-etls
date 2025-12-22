@@ -83,7 +83,7 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
 
     context.log.info("Writing " + str(maquinas_nieve_df.count()) + " rows into factOperaciones.")
     try:
-        inserted_nieve = spark_res.write_fact_operations_incremental(maquinas_nieve_df)
+        inserted_nieve = spark_res.write_fact_operations(maquinas_nieve_df)
     except Exception as e:
         context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
         return None
@@ -111,7 +111,7 @@ def factoperations(context: AssetExecutionContext) -> MaterializeResult:
 
     context.log.info("Writing " + str(maquinas_soda_df.count()) + " rows into factOperaciones.")
     try:
-        inserted_soda = spark_res.write_fact_operations_incremental(maquinas_soda_df)
+        inserted_soda = spark_res.write_fact_operations(maquinas_soda_df)
     except Exception as e:
         context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
         return None

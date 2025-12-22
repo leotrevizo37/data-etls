@@ -216,7 +216,7 @@ class SparkResource:
 
         return row_count
 
-    def write_fact_operations_incremental(self, df: DataFrame) -> int:
+    def write_fact_operations(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
             return 0
 
