@@ -7,11 +7,13 @@ from .resources.sql_server_dimensions import dim_sqlserver_resource
 from .schedules.factlecturas_scheduler import fact_lecturas_sched_every_2h
 from .schedules.factoperations_scheduler import fact_operaciones_sched_every_4h
 from .assets.factoperations import factoperations
+
 from .assets.source_assets import (dbo_sensors,
                                    dbo_sensor_tys,
                                    dbo_devices,
                                    dbo_device_tys,
-                                   dbo_sublocations)
+                                   dbo_sublocations,
+                                   dwh_factlecturas)
 
 defs = Definitions(
     jobs=[
@@ -28,10 +30,12 @@ defs = Definitions(
         fact_operaciones_sched_every_4h
     ],
     assets=[
-        factoperations,
         dbo_sensors,
         dbo_sensor_tys,
         dbo_devices,
         dbo_device_tys,
-        dbo_sublocations],
+        dbo_sublocations,
+        factoperations,
+        dwh_factlecturas
+    ],
 )

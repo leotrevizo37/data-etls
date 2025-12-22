@@ -8,7 +8,8 @@ from .assets.source_assets import (dbo_sensors,
                                    dbo_sensor_tys,
                                    dbo_devices,
                                    dbo_device_tys,
-                                   dbo_sublocations)
+                                   dbo_sublocations,
+                                   dwh_factlecturas)
 
 defs = Definitions(
     jobs=[
@@ -25,5 +26,7 @@ defs = Definitions(
         dbo_sensor_tys,
         dbo_devices,
         dbo_device_tys,
-        dbo_sublocations],
+        dbo_sublocations,
+        dwh_factlecturas
+    ],
 )
