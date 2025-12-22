@@ -32,7 +32,8 @@ def maquinas_nieve(
             "LocalTimeSpan",
             "Estatus",
             "Valor",
-            "Anomalias"
+            "Anomalias",
+            "_sensor_type",
         )
     )
 

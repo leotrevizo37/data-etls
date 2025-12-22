@@ -229,11 +229,6 @@ class SparkResource:
                 + self.jdbc_database
                 + ";encrypt=true;trustServerCertificate=true"
         )
-        properties = {
-            "user": self.jdbc_user,
-            "password": self.jdbc_password,
-            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-        }
 
         df_write = df.coalesce(4)
         row_count = df_write.count()
@@ -241,6 +236,37 @@ class SparkResource:
         df_write.write.jdbc(
             url=url,
             table="dwh.FactOperaciones",
+            mode="append",
+            properties={
+                "user": self.jdbc_user,
+                "password": self.jdbc_password,
+                "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+                "batchsize": "4000",
+            },
+        )
+
+        return row_count
+
+    def write_fact_operations_device(self, df: DataFrame) -> int:
+        if df.rdd.isEmpty():
+            return 0
+
+        url = (
+                "jdbc:sqlserver://"
+                + self.jdbc_host
+                + ":"
+                + str(self.jdbc_port)
+                + ";databaseName="
+                + self.jdbc_database
+                + ";encrypt=true;trustServerCertificate=true"
+        )
+
+        df_write = df.coalesce(4)
+        row_count = df_write.count()
+
+        df_write.write.jdbc(
+            url=url,
+            table="dwh.FactOperacionesMaquina",
             mode="append",
             properties={
                 "user": self.jdbc_user,

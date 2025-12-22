@@ -26,11 +26,39 @@ def maquinas_soda(
 
 
     current_stats_df = (
-        stats_calculator_time_window(base, "Corriente", 1,None, 20)
+        stats_calculator_time_window(
+            base,
+            "Corriente",
+            1,
+            None,
+            20)
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "LocalTimeSpan",
+            "Estatus",
+            "Valor",
+            "Anomalias",
+            "_sensor_type",
+        )
     )
 
     pressure_stats_df = (
-        stats_calculator(base, "Presión", 20)
+        stats_calculator(
+            base,
+            "Presión",
+            20)
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "LocalTimeSpan",
+            "Estatus",
+            "Valor",
+            "Anomalias",
+            "_sensor_type",
+        )
     )
 
     maquinas_soda_df = (
@@ -42,7 +70,8 @@ def maquinas_soda(
             "LocalTimeSpan",
             "Estatus",
             "Valor",
-            "Anomalias"
+            "Anomalias",
+            "_sensor_type",
         )
     )
 

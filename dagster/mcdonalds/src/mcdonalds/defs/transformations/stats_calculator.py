@@ -7,7 +7,6 @@ from pyspark.sql.functions import (col,
                                    sum as spark_sum,
                                    count,
                                    when as spark_when,
-                                   max as spark_max,
                                    unix_timestamp,
                                    from_unixtime,
                                    floor)
@@ -15,8 +14,8 @@ from pyspark.sql.functions import (col,
 def stats_calculator(
         base: DataFrame,
         sensor_type: str = "Corriente",
-        min_expected_value: int = 0,
-        **kwargs) -> Optional[DataFrame]:
+        min_expected_value: int = 0
+) -> Optional[DataFrame]:
     base = (
         base
         .filter(
@@ -39,7 +38,7 @@ def stats_calculator(
 
     stats_df = (
         base
-        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId")
+        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
         .agg(
             avg("Value").alias("Valor_dummy"),
             spark_sum(
@@ -61,15 +60,6 @@ def stats_calculator(
         .withColumnRenamed("Valor_dummy", "Valor")
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias"
-        )
     )
 
     if stats_current_df.rdd.isEmpty():

@@ -26,8 +26,8 @@ def stats_calculator_time_window(
         sensor_type: str = "Corriente",
         min_expected_value: int = 0,
         max_expected_value: Optional[int] = None,
-        time_window: Optional[int] = 20,
-        **kwargs) -> Optional[DataFrame]:
+        time_window: Optional[int] = 20
+        ) -> Optional[DataFrame]:
     base = (
         base
         .filter(
@@ -94,7 +94,7 @@ def stats_calculator_time_window(
 
     per_min5_max_df = (
         base
-        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId")
+        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId", "_sensor_type")
         .agg(
             spark_max("Value").alias("Value_phase_max")
         )
@@ -107,7 +107,7 @@ def stats_calculator_time_window(
 
     valor_df = (
         per5max_df
-        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId")
+        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
         .agg(
             avg("Value_phase_max").alias("Valor"),
             count("*").alias("total_sensors"),
@@ -160,7 +160,7 @@ def stats_calculator_time_window(
         date_trunc("hour", col("xMinuteStart"))
     )
 
-    min_limit = kwargs.get("min_limit")
+    min_limit = min_expected_value
 
     anom_condition = (
             (col("row_count") == 0) |
@@ -205,15 +205,6 @@ def stats_calculator_time_window(
         .fillna({"Anomalias": 0})
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias"
-        )
     )
 
     if stats_current_df.rdd.isEmpty():
