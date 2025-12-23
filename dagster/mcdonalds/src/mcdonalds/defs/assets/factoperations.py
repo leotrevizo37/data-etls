@@ -13,7 +13,7 @@ from ..transformations import (raw_dimensions,
                                factlecturas_extended,
                                factoperaciones_device,
                                maquinas_nieve,
-                               maquinas_soda)
+                               maquinas_soda, termostatos)
 from ..transformations.cuartos_congelacion import cuartos_conservacion
 from ..transformations.cuartos_refrigeracion import cuartos_refrigeracion
 from ..transformations.luces import luces
@@ -176,8 +176,7 @@ def factoperations(
         context.log.info("Processing " + str(cuartos_conservacion_df.count()) + " rows from cuartos conserevacion.")
 
     context.log.info("Materializing luces ETL...")
-    luces_df = luces(factlecturas_extended_df, context)
-    context.log.info("1 - luminaaria devices:" + str(luces_df.count()) + "...")
+    luces_df = luces(factlecturas_extended_df)
 
     luces_df = (
         luces_df
@@ -199,12 +198,39 @@ def factoperations(
     else:
         context.log.info("Processing " + str(luces_df.count()) + " rows fromluces.")
 
+
+    context.log.info("Materializing termostatos ETL...")
+    termostatos_df = termostatos(factlecturas_extended_df, context)
+
+    termostatos_df = (
+        termostatos_df
+        .select(
+            col("DeviceId"),
+            col("LocationId"),
+            col("SensorTyId"),
+            col("LocalTimeSpan"),
+            col("Estatus"),
+            col("Valor"),
+            col("Anomalias"),
+            col("_sensor_type")
+        )
+    )
+
+    if termostatos_df is None:
+        context.log.info("No rows for termostatos; skipping write.")
+        return None
+    else:
+        context.log.info("Processing " + str(termostatos_df.count()) + " rows from termostatos.")
+
+
+
     factoperations_df = (
         maquinas_nieve_df
         .unionByName(maquinas_soda_df)
         .unionByName(cuartos_refrigeracion_df)
         .unionByName(cuartos_conservacion_df)
         .unionByName(luces_df)
+        .unionByName(termostatos_df)
         .select(
             col("DeviceId"),
             col("LocationId"),
@@ -235,6 +261,7 @@ def factoperations(
         .unionByName(cuartos_refrigeracion_df)
         .unionByName(cuartos_conservacion_df)
         .unionByName(luces_df)
+        .unionByName(termostatos_df)
     )
 
     if aggregated_df.rdd.isEmpty():
