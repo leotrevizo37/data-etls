@@ -4,6 +4,7 @@ from .maquinas_nieve import maquinas_nieve
 from .maquinas_soda import maquinas_soda
 from .factoperaciones_device import factoperaciones_device
 from .luces import luces
+from .termostatos import termostatos
 
 __all__ = [
     "factlecturas_extended",
@@ -11,5 +12,6 @@ __all__ = [
     "maquinas_nieve",
     "maquinas_soda",
     "luces",
-    "factoperaciones_device"
+    "factoperaciones_device",
+    "termostatos"
 ]
