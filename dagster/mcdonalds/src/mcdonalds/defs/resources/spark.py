@@ -20,6 +20,9 @@ class SparkResource:
     def __init__(
         self,
         master_url: str,
+        worker_mem: str,
+        executor_mem: str,
+        executor_cores: int,
         app_name: str,
         adls_account_name: str,
         adls_container_name: str,
@@ -34,6 +37,9 @@ class SparkResource:
     ) -> None:
         self.master_url = master_url
         self.app_name = app_name
+        self.worker_mem = worker_mem
+        self.executor_mem = executor_mem
+        self.executor_cores = executor_cores
         self.adls_account_name = adls_account_name
         self.adls_container_name = adls_container_name
         self.adls_base_path = adls_base_path
@@ -54,7 +60,7 @@ class SparkResource:
             SparkConf()
             .setAppName(self.app_name)
             .setMaster(self.master_url)
-            .set("spark.executor.memory", "3g")
+            .set("spark.executor.memory", self.executor_mem)
         )
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
@@ -293,6 +299,9 @@ class SparkResource:
 def spark_resource(_):
     master_url = os.getenv("SPARK_MASTER_URL", "spark://spark-master:7077")
     app_name = os.getenv("SPARK_APP_NAME", "FactLecturasIngestion")
+    worker_mem = os.getenv("SPARK_WORKER_MEM", "4G")
+    executor_mem = os.getenv("SPARK_EXECUTOR_MEM", "3G")
+    executor_cores = int(os.getenv("SPARK_WORKER_CORES", "2"))
     adls_account_name = os.getenv("ADLS_ACCOUNT_NAME", "")
     adls_container_name = os.getenv("ADLS_CONTAINER_NAME", "")
     adls_base_path = os.getenv("ADLS_BASE_PATH", "")
@@ -306,6 +315,9 @@ def spark_resource(_):
     spark_res = SparkResource(
         master_url=master_url,
         app_name=app_name,
+        worker_mem=worker_mem,
+        executor_mem=executor_mem,
+        executor_cores=executor_cores,
         adls_account_name=adls_account_name,
         adls_container_name=adls_container_name,
         adls_base_path=adls_base_path,
