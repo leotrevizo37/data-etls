@@ -1,9 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import (col,
-                                   when as spark_when,
-                                   lit)
+from pyspark.sql.functions import col,lit
 from dagster import (
     AssetExecutionContext,
 )
