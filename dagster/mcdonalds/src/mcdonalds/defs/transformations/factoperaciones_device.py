@@ -91,6 +91,34 @@ def factoperaciones_device(
                 & col("estatus_encendido").isNull(),
                 lit(2),
             )
+            .when(
+                (col("estatus_corriente") == 1)
+                & (col("estatus_presion").isNull())
+                & (col("estatus_temperatura") == 0)
+                & col("estatus_encendido").isNull(),
+                lit(4),
+            )
+            .when(
+                (col("estatus_corriente") == 1)
+                & (col("estatus_presion").isNull())
+                & (col("estatus_temperatura") == 1)
+                & col("estatus_encendido").isNull(),
+                lit(1),
+            )
+            .when(
+                (col("estatus_corriente").isNull())
+                & (col("estatus_presion").isNull())
+                & (col("estatus_temperatura") == 1)
+                & col("estatus_encendido").isNull(),
+                lit(1),
+            )
+            .when(
+                (col("estatus_corriente").isNull())
+                & (col("estatus_presion").isNull())
+                & (col("estatus_temperatura") == 0)
+                & col("estatus_encendido").isNull(),
+                lit(4),
+            )
             .otherwise(lit(3))
         )
         .select(

@@ -14,45 +14,89 @@ from pyspark.sql.functions import (col,
 def stats_calculator(
         base: DataFrame,
         sensor_type: str = "Corriente",
-        min_expected_value: int = 0
+        min_expected_value: int = 0,
+        max_expected_value: Optional[int] = None
 ) -> Optional[DataFrame]:
-    base = (
-        base
-        .filter(
-            (col("_sensor_type") == sensor_type)
-        )
-        .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
-        .withColumn(
-            "5MinuteStart",
-            from_unixtime(
-                floor(unix_timestamp(col("LocalTimeSpan")) / 300) * 300
-            ).cast("timestamp")
-        )
-        .withColumn(
-            "is_anomaly",
-            spark_when(
-                col("Value") < min_expected_value, 1
-            ).otherwise(0)
-        )
-    )
 
-    stats_df = (
-        base
-        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
-        .agg(
-            avg("Value").alias("Valor_dummy"),
-            spark_sum(
-                spark_when(col("Value") >= min_expected_value, 1).otherwise(0)
-            ).alias("is_okay"),
-            count("*").alias("total_readings"),
-            spark_sum("is_anomaly").alias("Anomalias_raw"),
+    if max_expected_value is None:
+        base = (
+            base
+            .filter(
+                (col("_sensor_type") == sensor_type)
+            )
+            .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
+            .withColumn(
+                "5MinuteStart",
+                from_unixtime(
+                    floor(unix_timestamp(col("LocalTimeSpan")) / 300) * 300
+                ).cast("timestamp")
+            )
+            .withColumn(
+                "is_anomaly",
+                spark_when(
+                    col("Value") < min_expected_value, 1
+                ).otherwise(0)
+            )
         )
-        .withColumn(
-            "Estatus",
-            spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
+
+        stats_df = (
+            base
+            .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
+            .agg(
+                avg("Value").alias("Valor_dummy"),
+                spark_sum(
+                    spark_when(col("Value") >= min_expected_value, 1).otherwise(0)
+                ).alias("is_okay"),
+                count("*").alias("total_readings"),
+                spark_sum("is_anomaly").alias("Anomalias_raw"),
+            )
+            .withColumn(
+                "Estatus",
+                spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
+            )
+            .withColumnRenamed("Anomalias_raw", "Anomalias")
         )
-        .withColumnRenamed("Anomalias_raw", "Anomalias")
-    )
+    else:
+        base = (
+            base
+            .filter(
+                (col("_sensor_type") == sensor_type)
+            )
+            .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
+            .withColumn(
+                "5MinuteStart",
+                from_unixtime(
+                    floor(unix_timestamp(col("LocalTimeSpan")) / 300) * 300
+                ).cast("timestamp")
+            )
+            .withColumn(
+                "is_anomaly",
+                spark_when(
+                    (col("Value") < min_expected_value) |
+                    (col("Value") > max_expected_value), 1
+                ).otherwise(0)
+            )
+        )
+
+        stats_df = (
+            base
+            .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
+            .agg(
+                avg("Value").alias("Valor_dummy"),
+                spark_sum(
+                    spark_when(
+                        (col("Value") >= min_expected_value) &
+                        (col("Value") <= max_expected_value), 1).otherwise(0)
+                ).alias("is_okay"),
+                count("*").alias("total_readings"),
+                spark_sum("is_anomaly").alias("Anomalias_raw"),
+            )
+            .withColumn(
+                "Estatus",
+                spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
+            )
+            .withColumnRenamed("Anomalias_raw", "Anomalias")
+        )
 
     stats_current_df = (
         stats_df

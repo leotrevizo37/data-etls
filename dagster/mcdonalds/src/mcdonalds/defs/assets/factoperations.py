@@ -14,6 +14,9 @@ from ..transformations import (raw_dimensions,
                                factoperaciones_device,
                                maquinas_nieve,
                                maquinas_soda)
+from ..transformations.cuartos_congelacion import cuartos_conservacion
+from ..transformations.cuartos_refrigeracion import cuartos_refrigeracion
+
 
 @asset(
     non_argument_deps={
@@ -41,7 +44,7 @@ def factoperations(
         "SELECT MAX(LocalTimeSpan) FROM dwh.factOperaciones"
     )
     if max_op_ts is None:
-        context.log.info("Loading all factLecturas data")
+        context.log.info("Loading all factLecturas data...")
         fetch_from_ts = max_op_ts
     else:
         fetch_from_ts = max_op_ts - timedelta(hours=4)
@@ -62,16 +65,16 @@ def factoperations(
             )
 
     if max_op_ts is None:
-        context.log.info("Loading factLecturas data from beginning")
+        context.log.info("Loading factLecturas data from beginning...")
     else:
-        context.log.info("Loading factLecturas data from date:" + str(max_op_ts))
+        context.log.info("Loading factLecturas data from date:" + str(max_op_ts) + "...")
 
     raw_dims_df = raw_dimensions(spark_res, dim_sql)
     factlecturas_extended_df = factlecturas_extended(
         spark_res, sqlserver, raw_dims_df, fetch_from_ts
     )
 
-    context.log.info("Materializing maquinas de nieve ETL")
+    context.log.info("Materializing maquinas de nieve ETL...")
     maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df)
 
     maquinas_nieve_df = (
@@ -94,7 +97,7 @@ def factoperations(
     else:
         context.log.info("Processing " + str(maquinas_nieve_df.count()) + " rows from maquinas nieve.")
 
-    context.log.info("Materializing maquinas de soda ETL")
+    context.log.info("Materializing maquinas de soda ETL...")
     maquinas_soda_df = maquinas_soda(factlecturas_extended_df)
 
     maquinas_soda_df = (
@@ -117,8 +120,57 @@ def factoperations(
     else:
         context.log.info("Processing " + str(maquinas_soda_df.count()) + " rows from maquinas soda.")
 
+    context.log.info("Materializing cuartos refrigeracion ETL...")
+    cuartos_refrigeracion_df = cuartos_refrigeracion(factlecturas_extended_df)
+
+    cuartos_refrigeracion_df = (
+        cuartos_refrigeracion_df
+        .select(
+            col("DeviceId"),
+            col("LocationId"),
+            col("SensorTyId"),
+            col("LocalTimeSpan"),
+            col("Estatus"),
+            col("Valor"),
+            col("Anomalias"),
+            col("_sensor_type")
+        )
+    )
+
+    if cuartos_refrigeracion_df is None:
+        context.log.info("No rows for cuartos refrigeracion; skipping write.")
+        return None
+    else:
+        context.log.info("Processing " + str(cuartos_refrigeracion_df.count()) + " rows from cuartos refrigeracion.")
+
+    context.log.info("Materializing cuartos refrigeracion ETL...")
+    cuartos_conservacion_df = cuartos_conservacion(factlecturas_extended_df)
+
+    cuartos_conservacion_df = (
+        cuartos_conservacion_df
+        .select(
+            col("DeviceId"),
+            col("LocationId"),
+            col("SensorTyId"),
+            col("LocalTimeSpan"),
+            col("Estatus"),
+            col("Valor"),
+            col("Anomalias"),
+            col("_sensor_type")
+        )
+    )
+
+    if cuartos_conservacion_df is None:
+        context.log.info("No rows for cuartos conservacion; skipping write.")
+        return None
+    else:
+        context.log.info("Processing " + str(cuartos_conservacion_df.count()) + " rows from cuartos conserevacion.")
+
     factoperations_df = (
-        maquinas_nieve_df.unionByName(maquinas_soda_df)
+        maquinas_nieve_df
+        .unionByName(maquinas_soda_df)
+        .unionByName(cuartos_refrigeracion_df)
+        .unionByName(cuartos_conservacion_df)
         .select(
             col("DeviceId"),
             col("LocationId"),
@@ -143,7 +195,12 @@ def factoperations(
     )
 
     context.log.info("Aggregating factoperations_df to device-level view...")
-    aggregated_df = factoperaciones_device(maquinas_nieve_df.unionByName(maquinas_soda_df))
+    aggregated_df = factoperaciones_device(
+        maquinas_nieve_df
+        .unionByName(maquinas_soda_df)
+        .unionByName(cuartos_refrigeracion_df)
+        .unionByName(cuartos_conservacion_df)
+    )
 
     if aggregated_df.rdd.isEmpty():
         context.log.info("Aggregated device-level dataframe is empty; skipping write.")
