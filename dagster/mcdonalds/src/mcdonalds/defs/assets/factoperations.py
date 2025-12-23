@@ -200,7 +200,7 @@ def factoperations(
 
 
     context.log.info("Materializing termostatos ETL...")
-    termostatos_df = termostatos(factlecturas_extended_df, context)
+    termostatos_df = termostatos(factlecturas_extended_df)
 
     termostatos_df = (
         termostatos_df

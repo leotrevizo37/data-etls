@@ -8,7 +8,7 @@ from dagster import (
 from .stats_calculator import stats_calculator
 
 def termostatos(
-        factlecturas_extended_df: DataFrame, context: AssetExecutionContext) -> Optional[DataFrame]:
+        factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
         .filter(
@@ -19,8 +19,6 @@ def termostatos(
             )
         )
     )
-
-    context.log.info("termostatos len:  " + str(base.count()))
 
     state_stats_df = (
         stats_calculator(
@@ -40,8 +38,6 @@ def termostatos(
         .withColumn("Estatus", lit(1))
     )
 
-    context.log.info("termostatos len:  " + str(state_stats_df.count()))
-
     temperature_stats_df = (
         stats_calculator(
             base,
@@ -59,8 +55,6 @@ def termostatos(
         .withColumnRenamed("Promedio", "Valor")
         .withColumn("Anomalias", lit(None))
     )
-
-    context.log.info("termostatos len:  " + str(temperature_stats_df.count()))
 
     termostatos_df = (
         state_stats_df.unionByName(temperature_stats_df)
