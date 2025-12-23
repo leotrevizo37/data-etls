@@ -16,6 +16,7 @@ from ..transformations import (raw_dimensions,
                                maquinas_soda)
 from ..transformations.cuartos_congelacion import cuartos_conservacion
 from ..transformations.cuartos_refrigeracion import cuartos_refrigeracion
+from ..transformations.luces import luces
 
 
 @asset(
@@ -54,6 +55,11 @@ def factoperations(
             "DELETE FROM dwh.factOperaciones WHERE LocalTimeSpan >= ?",
             delete_from_ts,
         )
+        context.log.info("Deleting last period from FactOperacionesMaquina.")
+        deleted_rows_maq = sqlserver.execute_query(
+            "DELETE FROM dwh.factOperacionesMaquina WHERE LocalTimeSpan >= ?",
+            delete_from_ts,
+        )
         if deleted_rows is None or deleted_rows == 0:
             context.log.info(
                 "No new rows deleted from factOperaciones "
@@ -62,6 +68,9 @@ def factoperations(
         else:
             context.log.info(
                 "Deleted " + str(deleted_rows) + " rows from FactOperaciones."
+            )
+            context.log.info(
+                "Deleted " + str(deleted_rows_maq) + " rows from FactOperacionesMaquina."
             )
 
     if max_op_ts is None:
@@ -166,11 +175,36 @@ def factoperations(
     else:
         context.log.info("Processing " + str(cuartos_conservacion_df.count()) + " rows from cuartos conserevacion.")
 
+    context.log.info("Materializing luces ETL...")
+    luces_df = luces(factlecturas_extended_df, context)
+    context.log.info("1 - luminaaria devices:" + str(luces_df.count()) + "...")
+
+    luces_df = (
+        luces_df
+        .select(
+            col("DeviceId"),
+            col("LocationId"),
+            col("SensorTyId"),
+            col("LocalTimeSpan"),
+            col("Estatus"),
+            col("Valor"),
+            col("Anomalias"),
+            col("_sensor_type")
+        )
+    )
+
+    if luces_df is None:
+        context.log.info("No rows for luces; skipping write.")
+        return None
+    else:
+        context.log.info("Processing " + str(luces_df.count()) + " rows fromluces.")
+
     factoperations_df = (
         maquinas_nieve_df
         .unionByName(maquinas_soda_df)
         .unionByName(cuartos_refrigeracion_df)
         .unionByName(cuartos_conservacion_df)
+        .unionByName(luces_df)
         .select(
             col("DeviceId"),
             col("LocationId"),
@@ -200,6 +234,7 @@ def factoperations(
         .unionByName(maquinas_soda_df)
         .unionByName(cuartos_refrigeracion_df)
         .unionByName(cuartos_conservacion_df)
+        .unionByName(luces_df)
     )
 
     if aggregated_df.rdd.isEmpty():

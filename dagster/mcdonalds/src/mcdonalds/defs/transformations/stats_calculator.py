@@ -54,6 +54,7 @@ def stats_calculator(
                 "Estatus",
                 spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
             )
+            .withColumn("Promedio", col("is_okay") / col("total_readings"))
             .withColumnRenamed("Anomalias_raw", "Anomalias")
         )
     else:
@@ -95,6 +96,7 @@ def stats_calculator(
                 "Estatus",
                 spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
             )
+            .withColumn("Promedio", col("is_okay") / col("total_readings"))
             .withColumnRenamed("Anomalias_raw", "Anomalias")
         )
 
