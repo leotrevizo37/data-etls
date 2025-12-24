@@ -7,7 +7,7 @@ CREATE TABLE dwh.factLecturas
     Value DECIMAL(19, 9) NOT NULL,
     CONSTRAINT PK_FactLecturas
     PRIMARY KEY CLUSTERED (ReadId)
-    WITH (IGNORE_DUP_KEY = ON);
+    WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
 );
 GO
 
