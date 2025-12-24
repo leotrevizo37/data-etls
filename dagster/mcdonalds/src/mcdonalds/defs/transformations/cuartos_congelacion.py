@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit
 
 from .stats_calculator import stats_calculator
 
@@ -30,8 +30,25 @@ def cuartos_conservacion(
         )
     )
 
+    current_stats_df = (
+        stats_calculator(
+            base,
+            "Corriente",
+            1)
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "LocalTimeSpan",
+            "Estatus",
+            "Valor",
+            "_sensor_type",
+        )
+        .withColumn("Anomalias", lit(None))
+    )
+
     cuartos_conservacion_df = (
-        temperature_stats_df
+        temperature_stats_df.unionByName(current_stats_df)
         .select(
             "DeviceId",
             "LocationId",
