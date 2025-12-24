@@ -5,7 +5,9 @@ CREATE TABLE dwh.factLecturas
     TimeSpan DATETIME2(0) NOT NULL,
     LocalTimeSpan DATETIME2(0) NULL,
     Value DECIMAL(19, 9) NOT NULL,
-    CONSTRAINT pk_factlecturas PRIMARY KEY CLUSTERED (ReadId)
+    CONSTRAINT PK_FactLecturas
+    PRIMARY KEY CLUSTERED (ReadId)
+    WITH (IGNORE_DUP_KEY = ON);
 );
 GO
 
