@@ -13,5 +13,8 @@ CREATE INDEX ix_factOperacionesMaquinas_sensor_time_span
     ON dwh.factOperacionesMaquina (DeviceId, LocalTimeSpan);
 CREATE INDEX ix_factOperacionesMaquinas_time_span_deviceid
     ON dwh.factOperacionesMaquina (LocalTimeSpan, DeviceId);
+CREATE UNIQUE INDEX UX_factOperacionesMaquina_Device_Sensor_Time
+    ON mcdonalds.dwh.factOperacionesMaquina (DeviceId, SensorTyId, LocalTimeSpan)
+    WITH (IGNORE_DUP_KEY = ON);
 
 GO
