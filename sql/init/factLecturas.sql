@@ -13,4 +13,6 @@ GO
 
 CREATE INDEX ix_factlecturas_sensor_time_span
     ON dwh.factlecturas (SensorId, TimeSpan);
+CREATE NONCLUSTERED INDEX ix_factLecturas_localTimeSpan_desc
+    ON dwh.factLecturas (LocalTimeSpan DESC);
 GO
