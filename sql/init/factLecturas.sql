@@ -5,7 +5,7 @@ IF
         WHERE name = N'dwh'
     )
     BEGIN
-        EXEC('CREATE SCHEMA dwh');
+        EXEC ('CREATE SCHEMA dwh');
     END;
 GO
 
@@ -19,8 +19,8 @@ IF OBJECT_ID(N'dwh.factLecturas', N'U') IS NULL
             LocalTimeSpan DATETIME2(0) NULL,
             Value DECIMAL(19, 9) NOT NULL,
             CONSTRAINT PK_FactLecturas
-                PRIMARY KEY CLUSTERED (ReadId)
-                WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
+            PRIMARY KEY CLUSTERED (ReadId)
+            WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
         );
     END;
 GO

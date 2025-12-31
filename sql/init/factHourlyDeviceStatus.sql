@@ -9,7 +9,7 @@ IF
         WHERE name = N'dwh'
     )
     BEGIN
-        EXEC('CREATE SCHEMA dwh');
+        EXEC ('CREATE SCHEMA dwh');
     END;
 GO
 
@@ -24,12 +24,12 @@ IF OBJECT_ID(N'dwh.factHourlyDeviceStatus', N'U') IS NULL
             Anomalies INT NULL,
             LastModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_factHourlyDeviceStatus_LastModifiedAt
-                DEFAULT (SYSUTCDATETIME()),
+            DEFAULT (SYSUTCDATETIME()),
             Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
             Hora  AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
             CONSTRAINT PK_FactOperacionesMaquina
-                PRIMARY KEY CLUSTERED (OperationId)
-                WITH (IGNORE_DUP_KEY = ON)
+            PRIMARY KEY CLUSTERED (OperationId)
+            WITH (IGNORE_DUP_KEY = ON)
         );
     END;
 GO

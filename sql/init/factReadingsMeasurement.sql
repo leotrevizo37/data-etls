@@ -5,7 +5,7 @@ IF
         WHERE name = N'dwh'
     )
     BEGIN
-        EXEC('CREATE SCHEMA dwh');
+        EXEC ('CREATE SCHEMA dwh');
     END;
 GO
 
@@ -20,13 +20,13 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             Anomalies INT NULL,
             LastModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_factReadingsMeasurement_LastModifiedAt
-                DEFAULT (SYSUTCDATETIME()),
+            DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factReadingsMeasurement
-                PRIMARY KEY CLUSTERED (OperationId, SensorTyId)
-                WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
+            PRIMARY KEY CLUSTERED (OperationId, SensorTyId)
+            WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
             CONSTRAINT FK_factReadingsMeasurement_factHourlyDeviceStatus
-                FOREIGN KEY (OperationId)
-                REFERENCES dwh.factHourlyDeviceStatus(OperationId)
+            FOREIGN KEY (OperationId)
+            REFERENCES dwh.factHourlyDeviceStatus (OperationId)
         );
     END;
 GO
@@ -38,8 +38,8 @@ IF
         JOIN sys.objects o ON o.object_id = i.object_id
         JOIN sys.schemas s ON s.schema_id = o.schema_id
         WHERE s.name = N'dwh'
-          AND o.name = N'factReadingsMeasurement'
-          AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
+            AND o.name = N'factReadingsMeasurement'
+            AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
     )
     BEGIN
         CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorTyId
