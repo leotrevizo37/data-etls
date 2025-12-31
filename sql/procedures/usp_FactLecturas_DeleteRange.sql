@@ -1,6 +1,3 @@
-USE mcdonalds;
-GO
-
 IF OBJECT_ID(N'dwh.usp_FactLecturas_DeleteRange', N'P') IS NOT NULL
     DROP PROCEDURE dwh.usp_FactLecturas_DeleteRange;
 GO
@@ -17,8 +14,7 @@ BEGIN
     IF @FromUtc IS NULL OR @ToUtc IS NULL
         BEGIN
             RAISERROR (
-                'usp_FactLecturas_DeleteRange: @FromUtc and @ToUtc '
-                + 'must not be NULL.',
+                'usp_FactLecturas_DeleteRange: @FromUtc and @ToUtc must not be NULL.',
                 16,
                 1
             );
@@ -28,8 +24,7 @@ BEGIN
     IF @FromUtc > @ToUtc
         BEGIN
             RAISERROR (
-                'usp_FactLecturas_DeleteRange: @FromUtc and @ToUtc '
-                + 'must not be NULL.',
+                'usp_FactLecturas_DeleteRange: @FromUtc and @ToUtc must not be NULL.',
                 16,
                 1
             );

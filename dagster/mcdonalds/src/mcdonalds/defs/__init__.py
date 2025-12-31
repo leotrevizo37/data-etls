@@ -6,7 +6,7 @@ from .resources.spark import spark_resource
 from .resources.sql_server_dimensions import dim_sqlserver_resource
 from .schedules.factlecturas_scheduler import fact_lecturas_sched_every_2h
 from .schedules.factoperations_scheduler import fact_operaciones_sched_every_4h
-from .assets.factoperations import factoperations
+from .assets.dwh_factReadingsMeasurement import dwh_factReadingsMeasurement
 
 from .assets.source_assets import (dbo_sensors,
                                    dbo_sensor_tys,
@@ -35,7 +35,7 @@ defs = Definitions(
         dbo_devices,
         dbo_device_tys,
         dbo_sublocations,
-        factoperations,
+        dwh_factReadingsMeasurement,
         dwh_factlecturas
     ],
 )

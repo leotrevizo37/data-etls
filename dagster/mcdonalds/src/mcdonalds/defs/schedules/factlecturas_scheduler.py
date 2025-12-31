@@ -22,3 +22,11 @@ fact_lecturas_sched_every_6h = ScheduleDefinition(
     cron_schedule="0 */3 * * *",
     default_status=DefaultScheduleStatus.STOPPED,
 )
+
+fact_lecturas_sched_every_1h = ScheduleDefinition(
+    name="ingest_fact_lecturas_every_1h",
+    job=fact_lecturas_ingestion_job,
+    cron_schedule="0 */1 * * *",
+    execution_timezone="America/Ciudad_Juarez",
+    default_status=DefaultScheduleStatus.STOPPED,
+)

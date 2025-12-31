@@ -1,3 +1,9 @@
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'dwh')
+BEGIN
+    EXEC('CREATE SCHEMA dwh');
+END;
+GO
+
 IF OBJECT_ID(N'dwh.ctlIngestionFactLecturas', N'U') IS NULL
     BEGIN
         CREATE TABLE dwh.ctlIngestionFactLecturas

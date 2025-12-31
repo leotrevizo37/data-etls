@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, expr
 
 from .stats_calculator_time_window import stats_calculator_time_window
 from .stats_calculator import stats_calculator
@@ -78,4 +78,16 @@ def maquinas_soda(
     if maquinas_soda_df.rdd.isEmpty():
         return None
 
-    return maquinas_soda_df
+    group_ids_df = (
+        maquinas_soda_df
+        .select("DeviceId", "LocalTimeSpan")
+        .distinct()
+        .withColumn("OperationId", expr("uuid()"))
+    )
+
+    group_with_guid_df = (
+        maquinas_soda_df
+        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+    )
+
+    return group_with_guid_df

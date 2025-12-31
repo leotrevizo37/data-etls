@@ -1,6 +1,3 @@
-USE mcdonalds;
-GO
-
 IF OBJECT_ID(N'dwh.usp_FactLecturas_GetWatermark', N'P') IS NOT NULL
     DROP PROCEDURE dwh.usp_FactLecturas_GetWatermark;
 GO
@@ -32,8 +29,7 @@ BEGIN
     IF @@ROWCOUNT = 0
         BEGIN
             RAISERROR (
-                'ctlIngestionFactLecturas: no active row found for '
-                + 'IngestionName = %s.',
+                'ctlIngestionFactLecturas: no active row found for IngestionName = %s.',
                 16,
                 1,
                 @IngestionName

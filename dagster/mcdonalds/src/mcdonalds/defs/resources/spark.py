@@ -190,7 +190,7 @@ class SparkResource:
         try:
             max_df = self._spark.read.jdbc(
                 url=url,
-                table="(SELECT MAX(LocalTimeSpan) AS max_ts FROM dwh.FactOperaciones) AS t",
+                table="(SELECT MAX(LocalTimeSpan) AS max_ts FROM dwh.factReadingsMeasurement) AS t",
                 properties=properties,
             )
             row = max_df.collect()[0]
@@ -210,7 +210,7 @@ class SparkResource:
 
         df_write.write.jdbc(
             url=url,
-            table="dwh.FactOperaciones",
+            table="dwh.factReadingsMeasurement",
             mode="append",
             properties={
                 "user": self.jdbc_user,
@@ -241,7 +241,7 @@ class SparkResource:
 
         df_write.write.jdbc(
             url=url,
-            table="dwh.FactOperaciones",
+            table="dwh.factReadingsMeasurement",
             mode="append",
             properties={
                 "user": self.jdbc_user,
@@ -272,7 +272,7 @@ class SparkResource:
 
         df_write.write.jdbc(
             url=url,
-            table="dwh.FactOperacionesMaquina",
+            table="dwh.factHourlyDeviceStatus",
             mode="append",
             properties={
                 "user": self.jdbc_user,

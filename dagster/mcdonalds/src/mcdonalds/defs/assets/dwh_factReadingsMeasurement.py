@@ -11,7 +11,7 @@ from pyspark.sql.functions import col
 from ..resources import SparkResource, SqlServerResource, SqlDimServerResource
 from ..transformations import (raw_dimensions,
                                factlecturas_extended,
-                               factoperaciones_device,
+                               factReadingsMeasurement_device,
                                maquinas_nieve,
                                maquinas_soda, termostatos)
 from ..transformations.cuartos_congelacion import cuartos_conservacion
@@ -35,42 +35,42 @@ from ..transformations.luces import luces
         "dim_sqlserver",
     },
 )
-def factoperations(
+def dwh_factReadingsMeasurement(
     context: AssetExecutionContext) -> MaterializeResult:
     spark_res: SparkResource = context.resources.spark
     dim_sql: SqlDimServerResource = context.resources.dim_sqlserver
     sqlserver: SqlServerResource = context.resources.sqlserver
 
     max_op_ts = sqlserver.fetch_scalar(
-        "SELECT MAX(LocalTimeSpan) FROM dwh.factOperaciones"
+        "SELECT MAX(LocalTimeSpan) FROM dwh.factReadingsMeasurement"
     )
     if max_op_ts is None:
-        context.log.info("Loading all factLecturas data...")
+        context.log.info("Loading facLecturas data...")
         fetch_from_ts = max_op_ts
     else:
         fetch_from_ts = max_op_ts - timedelta(hours=4)
         delete_from_ts = max_op_ts - timedelta(hours=2)
-        context.log.info("Deleting last period from FactOperaciones.")
+        context.log.info("Deleting last period from factReadingsMeasurement.")
         deleted_rows = sqlserver.execute_query(
-            "DELETE FROM dwh.factOperaciones WHERE LocalTimeSpan >= ?",
+            "DELETE FROM dwh.factReadingsMeasurement WHERE LocalTimeSpan >= ?",
             delete_from_ts,
         )
-        context.log.info("Deleting last period from FactOperacionesMaquina.")
+        context.log.info("Deleting last period from factHourlyDeviceStatus.")
         deleted_rows_maq = sqlserver.execute_query(
-            "DELETE FROM dwh.factOperacionesMaquina WHERE LocalTimeSpan >= ?",
+            "DELETE FROM dwh.factHourlyDeviceStatus WHERE LocalTimeSpan >= ?",
             delete_from_ts,
         )
         if deleted_rows is None or deleted_rows == 0:
             context.log.info(
-                "No new rows deleted from factOperaciones "
+                "No new rows deleted from factReadingsMeasurement "
                 "for this period."
             )
         else:
             context.log.info(
-                "Deleted " + str(deleted_rows) + " rows from FactOperaciones."
+                "Deleted " + str(deleted_rows) + " rows from factReadingsMeasurement."
             )
             context.log.info(
-                "Deleted " + str(deleted_rows_maq) + " rows from FactOperacionesMaquina."
+                "Deleted " + str(deleted_rows_maq) + " rows from factHourlyDeviceStatus."
             )
 
     if max_op_ts is None:
@@ -83,19 +83,17 @@ def factoperations(
         spark_res, sqlserver, raw_dims_df, fetch_from_ts
     )
 
-    context.log.info("Materializing maquinas de nieve ETL...")
+    context.log.info("Materializing maquinas de nieve dataframe...")
     maquinas_nieve_df = maquinas_nieve(factlecturas_extended_df)
 
     maquinas_nieve_df = (
         maquinas_nieve_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -106,19 +104,17 @@ def factoperations(
     else:
         context.log.info("Processing " + str(maquinas_nieve_df.count()) + " rows from maquinas nieve.")
 
-    context.log.info("Materializing maquinas de soda ETL...")
+    context.log.info("Materializing maquinas de soda dataframe...")
     maquinas_soda_df = maquinas_soda(factlecturas_extended_df)
 
     maquinas_soda_df = (
         maquinas_soda_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -129,19 +125,17 @@ def factoperations(
     else:
         context.log.info("Processing " + str(maquinas_soda_df.count()) + " rows from maquinas soda.")
 
-    context.log.info("Materializing cuartos refrigeracion ETL...")
+    context.log.info("Materializing cuartos refrigeracion dataframe...")
     cuartos_refrigeracion_df = cuartos_refrigeracion(factlecturas_extended_df)
 
     cuartos_refrigeracion_df = (
         cuartos_refrigeracion_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -152,19 +146,17 @@ def factoperations(
     else:
         context.log.info("Processing " + str(cuartos_refrigeracion_df.count()) + " rows from cuartos refrigeracion.")
 
-    context.log.info("Materializing cuartos refrigeracion ETL...")
+    context.log.info("Materializing cuartos refrigeracion dataframe...")
     cuartos_conservacion_df = cuartos_conservacion(factlecturas_extended_df)
 
     cuartos_conservacion_df = (
         cuartos_conservacion_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -175,19 +167,17 @@ def factoperations(
     else:
         context.log.info("Processing " + str(cuartos_conservacion_df.count()) + " rows from cuartos conserevacion.")
 
-    context.log.info("Materializing luces ETL...")
+    context.log.info("Materializing luces dataframe...")
     luces_df = luces(factlecturas_extended_df)
 
     luces_df = (
         luces_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -199,19 +189,17 @@ def factoperations(
         context.log.info("Processing " + str(luces_df.count()) + " rows fromluces.")
 
 
-    context.log.info("Materializing termostatos ETL...")
+    context.log.info("Materializing termostatos dataframe...")
     termostatos_df = termostatos(factlecturas_extended_df)
 
     termostatos_df = (
         termostatos_df
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
             col("_sensor_type")
         )
     )
@@ -232,30 +220,28 @@ def factoperations(
         .unionByName(luces_df)
         .unionByName(termostatos_df)
         .select(
-            col("DeviceId"),
-            col("LocationId"),
+            col("OperationId"),
             col("SensorTyId"),
-            col("LocalTimeSpan"),
-            col("Estatus"),
-            col("Valor"),
-            col("Anomalias"),
+            col("StatusCode"),
+            col("MeasurementValue"),
+            col("Anomalies"),
         )
     )
 
     context.log.info(
-        "Writing " + str(factoperations_df.count()) + " rows into factOperaciones."
+        "Writing " + str(factoperations_df.count()) + " rows into factReadingsMeasurement."
     )
     try:
         inserted_ = spark_res.write_fact_operations(factoperations_df)
     except Exception as e:
-        context.log.error("Couldn´t merge data into factOperaciones: " + str(e))
+        context.log.error("Couldn´t merge data into factReadingsMeasurement: " + str(e))
         return None
     context.log.info(
-        str(inserted_) + " rows correctly written into factOperaciones."
+        str(inserted_) + " rows correctly written into factReadingsMeasurement."
     )
 
-    context.log.info("Aggregating factoperations_df to device-level view...")
-    aggregated_df = factoperaciones_device(
+    context.log.info("Aggregating factReadingsMeasurement dataframe to device-level view...")
+    aggregated_df = factReadingsMeasurement_device(
         maquinas_nieve_df
         .unionByName(maquinas_soda_df)
         .unionByName(cuartos_refrigeracion_df)
@@ -270,13 +256,13 @@ def factoperations(
 
     row_count = aggregated_df.count()
     context.log.info(
-        "Writing " + str(row_count) + " rows into dwh.factOperacionesMaquinas."
+        "Writing " + str(row_count) + " rows into dwh.factHourlyDeviceStatuss."
     )
 
     try:
         inserted_ = spark_res.write_fact_operations_device(aggregated_df)
     except Exception as e:
-        context.log.error("Couldn´t write data into dwh.factOperacionesMaquina: " + str(e))
+        context.log.error("Couldn´t write data into dwh.factHourlyDeviceStatus: " + str(e))
         return MaterializeResult(
             metadata={
                 "row_count": 0,
@@ -285,7 +271,7 @@ def factoperations(
         )
 
     context.log.info(
-        str(inserted_) + " rows correctly written into dwh.factOperacionesMaquina."
+        str(inserted_) + " rows correctly written into dwh.factHourlyDeviceStatus."
     )
 
     return MaterializeResult(
