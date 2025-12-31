@@ -34,9 +34,11 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
         WHERE s.name = N'dwh'
             AND o.name = N'factReadingsMeasurement'
             AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'

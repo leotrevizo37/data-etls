@@ -28,11 +28,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factLecturas'
-          AND i.name = N'ix_factlecturas_sensor_time_span'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factLecturas'
+            AND i.name = N'ix_factlecturas_sensor_time_span'
     )
     BEGIN
         CREATE INDEX ix_factlecturas_sensor_time_span
@@ -43,11 +46,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factLecturas'
-          AND i.name = N'ix_factLecturas_localTimeSpan_desc'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factLecturas'
+            AND i.name = N'ix_factLecturas_localTimeSpan_desc'
     )
     BEGIN
         CREATE NONCLUSTERED INDEX ix_factLecturas_localTimeSpan_desc

@@ -26,7 +26,7 @@ IF OBJECT_ID(N'dwh.factHourlyDeviceStatus', N'U') IS NULL
             CONSTRAINT DF_factHourlyDeviceStatus_LastModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
-            Hora  AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
+            Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
             CONSTRAINT PK_FactOperacionesMaquina
             PRIMARY KEY CLUSTERED (OperationId)
             WITH (IGNORE_DUP_KEY = ON)
@@ -37,11 +37,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factHourlyDeviceStatus'
-          AND i.name = N'ix_factDeviceStatusEvent_OperationId_DeviceId'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_OperationId_DeviceId'
     )
     BEGIN
         CREATE INDEX ix_factDeviceStatusEvent_OperationId_DeviceId
@@ -52,11 +55,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factHourlyDeviceStatus'
-          AND i.name = N'ix_factDeviceStatusEvent_OperationId_LocalTimeSpan'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_OperationId_LocalTimeSpan'
     )
     BEGIN
         CREATE INDEX ix_factDeviceStatusEvent_OperationId_LocalTimeSpan
@@ -67,11 +73,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factHourlyDeviceStatus'
-          AND i.name = N'ix_factDeviceStatusEvent_sensor_time_span'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_sensor_time_span'
     )
     BEGIN
         CREATE INDEX ix_factDeviceStatusEvent_sensor_time_span
@@ -82,11 +91,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factHourlyDeviceStatus'
-          AND i.name = N'ix_factDeviceStatusEvent_time_span_deviceid'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_time_span_deviceid'
     )
     BEGIN
         CREATE INDEX ix_factDeviceStatusEvent_time_span_deviceid
@@ -97,11 +109,14 @@ GO
 IF
     NOT EXISTS (
         SELECT 1
-        FROM sys.indexes i
-        JOIN sys.objects o ON o.object_id = i.object_id
-        JOIN sys.schemas s ON s.schema_id = o.schema_id
-        WHERE s.name = N'dwh' AND o.name = N'factHourlyDeviceStatus'
-          AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON o.object_id = i.object_id
+        INNER JOIN sys.schemas AS s
+            ON s.schema_id = o.schema_id
+        WHERE s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'
     )
     BEGIN
         CREATE NONCLUSTERED INDEX ix_factDeviceStatusEvent_localTimeSpan_desc
