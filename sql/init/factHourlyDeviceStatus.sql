@@ -39,9 +39,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_OperationId_DeviceId'
@@ -57,9 +57,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_OperationId_LocalTimeSpan'
@@ -75,9 +75,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_sensor_time_span'
@@ -93,9 +93,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_time_span_deviceid'
@@ -111,9 +111,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'

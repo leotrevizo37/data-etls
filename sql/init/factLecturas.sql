@@ -30,9 +30,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factLecturas'
             AND i.name = N'ix_factlecturas_sensor_time_span'
@@ -48,9 +48,9 @@ IF
         SELECT 1
         FROM sys.indexes AS i
         INNER JOIN sys.objects AS o
-            ON o.object_id = i.object_id
+            ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
-            ON s.schema_id = o.schema_id
+            ON o.schema_id = s.schema_iD
         WHERE s.name = N'dwh'
             AND o.name = N'factLecturas'
             AND i.name = N'ix_factLecturas_localTimeSpan_desc'
