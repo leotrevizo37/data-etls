@@ -1,5 +1,4 @@
-from .dwh_factReadingsMeasurement import dwh_factReadingsMeasurement
-
+from .dwh_factHourlyDeviceStatus import dwh_factHourlyDeviceStatus
 from .source_assets import (dbo_sensors,
                             dbo_sensor_tys,
                             dbo_devices,
@@ -9,7 +8,7 @@ from .source_assets import (dbo_sensors,
                             dwh_factlecturas)
 
 __all__ = [
-    "dwh_factReadingsMeasurement",
+    "dwh_factHourlyDeviceStatus",
     "dbo_sensors",
     "dbo_sensor_tys",
     "dbo_devices",

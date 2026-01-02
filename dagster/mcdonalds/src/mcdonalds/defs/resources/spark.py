@@ -241,7 +241,7 @@ class SparkResource:
 
         df_write.write.jdbc(
             url=url,
-            table="dwh.factReadingsMeasurement",
+            table="stg.factReadingsMeasurement",
             mode="append",
             properties={
                 "user": self.jdbc_user,

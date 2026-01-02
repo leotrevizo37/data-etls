@@ -1,6 +1,7 @@
 from .sql_server import sqlserver_resource, SqlServerResource
 from .spark import spark_resource, SparkResource
 from .sql_server_dimensions import dim_sqlserver_resource, SqlDimServerResource
+from .transformation_ops import transformation_ops, TransformationOps
 
 __all__ = [
     "sqlserver_resource",
@@ -9,4 +10,6 @@ __all__ = [
     "SparkResource",
     "dim_sqlserver_resource",
     "SqlDimServerResource",
+    "transformation_ops",
+    "TransformationOps"
 ]

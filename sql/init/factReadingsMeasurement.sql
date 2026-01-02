@@ -2,16 +2,16 @@ IF
     NOT EXISTS (
         SELECT 1
         FROM sys.schemas
-        WHERE name = N'dwh'
+        WHERE name = N'stg'
     )
     BEGIN
-        EXEC ('CREATE SCHEMA dwh');
+        EXEC ('CREATE SCHEMA stg');
     END;
 GO
 
-IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
+IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
     BEGIN
-        CREATE TABLE dwh.factReadingsMeasurement
+        CREATE TABLE stg.factReadingsMeasurement
         (
             OperationId UNIQUEIDENTIFIER NOT NULL,
             SensorTyId UNIQUEIDENTIFIER NOT NULL,
@@ -27,6 +27,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             CONSTRAINT FK_factReadingsMeasurement_factHourlyDeviceStatus
             FOREIGN KEY (OperationId)
             REFERENCES dwh.factHourlyDeviceStatus (OperationId)
+            ON DELETE CASCADE
         );
     END;
 GO
@@ -39,12 +40,13 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'stg'
             AND o.name = N'factReadingsMeasurement'
             AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
     )
     BEGIN
         CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorTyId
-            ON dwh.factReadingsMeasurement (OperationId, SensorTyId);
+            ON stg.factReadingsMeasurement (OperationId, SensorTyId);
     END;
 GO

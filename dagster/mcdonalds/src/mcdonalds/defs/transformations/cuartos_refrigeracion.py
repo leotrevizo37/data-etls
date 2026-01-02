@@ -23,9 +23,9 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -40,11 +40,11 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
+            "StatusCode",
+            "MeasurementValue",
             "_sensor_type",
         )
-        .withColumn("Anomalias", lit(None))
+        .withColumn("Anomalies", lit(None))
     )
 
     cuartos_refrigeracion_df = (
@@ -54,9 +54,9 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )

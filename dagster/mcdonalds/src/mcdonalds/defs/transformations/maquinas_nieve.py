@@ -30,9 +30,9 @@ def maquinas_nieve(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )

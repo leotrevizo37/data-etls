@@ -27,7 +27,7 @@ IF OBJECT_ID(N'dwh.factHourlyDeviceStatus', N'U') IS NULL
             DEFAULT (SYSUTCDATETIME()),
             Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
             Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,
-            CONSTRAINT PK_FactOperacionesMaquina
+            CONSTRAINT PK_FactHourlyDeviceStatus
             PRIMARY KEY CLUSTERED (OperationId)
             WITH (IGNORE_DUP_KEY = ON)
         );
@@ -42,7 +42,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_OperationId_DeviceId'
     )
@@ -60,7 +61,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_OperationId_LocalTimeSpan'
     )
@@ -78,7 +80,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_sensor_time_span'
     )
@@ -96,7 +99,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_time_span_deviceid'
     )
@@ -114,7 +118,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'
     )

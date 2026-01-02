@@ -31,9 +31,9 @@ def termostatos(
             "Promedio",
             "_sensor_type",
         )
-        .withColumnRenamed("Promedio", "Valor")
-        .withColumn("Anomalias", lit(None))
-        .withColumn("Estatus", lit(1))
+        .withColumnRenamed("Promedio", "MeasurementValue")
+        .withColumn("Anomalies", lit(None))
+        .withColumn("StatusCode", lit(1))
     )
 
     temperature_stats_df = (
@@ -45,13 +45,13 @@ def termostatos(
             "DeviceId",
             "LocationId",
             "SensorTyId",
-            "Estatus",
+            "StatusCode",
             "LocalTimeSpan",
             "Promedio",
             "_sensor_type",
         )
-        .withColumnRenamed("Promedio", "Valor")
-        .withColumn("Anomalias", lit(None))
+        .withColumnRenamed("Promedio", "MeasurementValue")
+        .withColumn("Anomalies", lit(None))
     )
 
     termostatos_df = (
@@ -61,9 +61,9 @@ def termostatos(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )

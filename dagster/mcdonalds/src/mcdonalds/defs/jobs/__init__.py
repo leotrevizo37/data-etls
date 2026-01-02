@@ -1,7 +1,7 @@
-from .factlecturas_ingestion import fact_lecturas_ingestion_job
-from .factoperations_ingestion import fact_operaciones_ingestion_job
+from .factLecturas_ingestion import fact_lecturas_ingestion_job
+from .factHourlyDeviceStatus_ingestion import facthourlydevicestatus_ingestion
 
 __all__ = [
     "fact_lecturas_ingestion_job",
-    "fact_operaciones_ingestion_job"
+    "facthourlydevicestatus_ingestion"
 ]

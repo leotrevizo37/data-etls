@@ -33,7 +33,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factLecturas'
             AND i.name = N'ix_factlecturas_sensor_time_span'
     )
@@ -51,7 +52,8 @@ IF
             ON i.object_id = o.object_id
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
-        WHERE s.name = N'dwh'
+        WHERE
+            s.name = N'dwh'
             AND o.name = N'factLecturas'
             AND i.name = N'ix_factLecturas_localTimeSpan_desc'
     )

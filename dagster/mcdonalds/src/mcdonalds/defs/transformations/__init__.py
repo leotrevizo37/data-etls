@@ -5,6 +5,8 @@ from .maquinas_soda import maquinas_soda
 from .factReadingsMeasurement_device import factReadingsMeasurement_device
 from .luces import luces
 from .termostatos import termostatos
+from .cuartos_refrigeracion import cuartos_refrigeracion
+from .cuartos_congelacion import cuartos_congelacion
 
 __all__ = [
     "factlecturas_extended",
@@ -13,5 +15,7 @@ __all__ = [
     "maquinas_soda",
     "luces",
     "factReadingsMeasurement_device",
-    "termostatos"
+    "termostatos",
+    "cuartos_congelacion",
+    "cuartos_refrigeracion",
 ]

@@ -5,7 +5,7 @@ from pyspark.sql.functions import col, lit, expr
 
 from .stats_calculator import stats_calculator
 
-def cuartos_conservacion(
+def cuartos_congelacion(
         factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
@@ -23,9 +23,9 @@ def cuartos_conservacion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -40,11 +40,11 @@ def cuartos_conservacion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
+            "StatusCode",
+            "MeasurementValue",
             "_sensor_type",
         )
-        .withColumn("Anomalias", lit(None))
+        .withColumn("Anomalies", lit(None))
     )
 
     cuartos_conservacion_df = (
@@ -54,9 +54,9 @@ def cuartos_conservacion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )

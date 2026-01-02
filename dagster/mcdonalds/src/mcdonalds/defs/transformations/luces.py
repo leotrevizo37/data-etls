@@ -20,13 +20,13 @@ def luces(
             "DeviceId",
             "LocationId",
             "SensorTyId",
-            "Estatus",
+            "StatusCode",
             "LocalTimeSpan",
             "Promedio",
             "_sensor_type",
         )
-        .withColumnRenamed("Promedio", "Valor")
-        .withColumn("Anomalias", lit(None))
+        .withColumnRenamed("Promedio", "MeasurementValue")
+        .withColumn("Anomalies", lit(None))
     )
 
     luces_df = (
@@ -36,9 +36,9 @@ def luces(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
