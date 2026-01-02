@@ -1,11 +1,11 @@
 CREATE OR ALTER PROCEDURE ctl.usp_IngestionControl_DeleteRange
-(
-    @SchemaName SYSNAME,
-    @TableName SYSNAME,
-    @TimeColumn SYSNAME,
-    @FromUtc DATETIME2(0),
-    @ToUtc DATETIME2(0)
-)
+    (
+        @SchemaName SYSNAME,
+        @TableName SYSNAME,
+        @TimeColumn SYSNAME,
+        @FromUtc DATETIME2(0),
+        @ToUtc DATETIME2(0)
+    )
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -40,8 +40,10 @@ BEGIN
             RETURN;
         END;
 
-    DECLARE @obj_id INT =
-        OBJECT_ID(QUOTENAME(@SchemaName) + N'.' + QUOTENAME(@TableName), N'U');
+    DECLARE
+        @obj_id INT
+        = OBJECT_ID(QUOTENAME(@SchemaName)
+        + N'.' + QUOTENAME(@TableName), N'U');
 
     IF @obj_id IS NULL
         BEGIN
@@ -69,10 +71,20 @@ BEGIN
             RETURN;
         END;
 
-    DECLARE @sql NVARCHAR(MAX) =
-        N'DELETE FROM ' + QUOTENAME(@SchemaName) + N'.' + QUOTENAME(@TableName) + N' WITH (ROWLOCK) ' +
-        N'WHERE ' + QUOTENAME(@TimeColumn) + N' >= @FromUtc AND ' + QUOTENAME(@TimeColumn) + N' < @ToUtc;' +
-        N'SELECT CAST(@@ROWCOUNT AS INT) AS DeletedRowCount;';
+    DECLARE
+        @sql NVARCHAR(MAX)
+            = N'DELETE FROM '
+            + QUOTENAME(@SchemaName)
+            + N'.' + QUOTENAME(@TableName)
+            + N' WITH (ROWLOCK) '
+            +
+            N'WHERE '
+            + QUOTENAME(@TimeColumn)
+            + N' >= @FromUtc AND '
+            + QUOTENAME(@TimeColumn)
+            + N' < @ToUtc;'
+            +
+            N'SELECT CAST(@@ROWCOUNT AS INT) AS DeletedRowCount;';
 
     EXEC sp_executesql
         @sql,

@@ -128,3 +128,23 @@ IF
             ON dwh.factHourlyDeviceStatus (LocalTimeSpan DESC);
     END;
 GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON i.object_id = o.object_id
+        INNER JOIN sys.schemas AS s
+            ON o.schema_id = s.schema_iD
+        WHERE
+            s.name = N'dwh'
+            AND o.name = N'factHourlyDeviceStatus'
+            AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'
+    )
+    BEGIN
+        CREATE UNIQUE INDEX UX_factHourlyDeviceStatus_Device_Time
+            ON mcdonalds.dwh.factHourlyDeviceStatus (DeviceId, LocalTimeSpan)
+            WITH (IGNORE_DUP_KEY = ON);
+    END;
+GO
