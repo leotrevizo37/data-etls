@@ -45,63 +45,6 @@ IF
         WHERE
             s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
-            AND i.name = N'ix_factDeviceStatusEvent_OperationId_DeviceId'
-    )
-    BEGIN
-        CREATE INDEX ix_factDeviceStatusEvent_OperationId_DeviceId
-            ON dwh.factHourlyDeviceStatus (OperationId, DeviceId);
-    END;
-GO
-
-IF
-    NOT EXISTS (
-        SELECT 1
-        FROM sys.indexes AS i
-        INNER JOIN sys.objects AS o
-            ON i.object_id = o.object_id
-        INNER JOIN sys.schemas AS s
-            ON o.schema_id = s.schema_iD
-        WHERE
-            s.name = N'dwh'
-            AND o.name = N'factHourlyDeviceStatus'
-            AND i.name = N'ix_factDeviceStatusEvent_OperationId_LocalTimeSpan'
-    )
-    BEGIN
-        CREATE INDEX ix_factDeviceStatusEvent_OperationId_LocalTimeSpan
-            ON dwh.factHourlyDeviceStatus (OperationId, LocalTimeSpan);
-    END;
-GO
-
-IF
-    NOT EXISTS (
-        SELECT 1
-        FROM sys.indexes AS i
-        INNER JOIN sys.objects AS o
-            ON i.object_id = o.object_id
-        INNER JOIN sys.schemas AS s
-            ON o.schema_id = s.schema_iD
-        WHERE
-            s.name = N'dwh'
-            AND o.name = N'factHourlyDeviceStatus'
-            AND i.name = N'ix_factDeviceStatusEvent_sensor_time_span'
-    )
-    BEGIN
-        CREATE INDEX ix_factDeviceStatusEvent_sensor_time_span
-            ON dwh.factHourlyDeviceStatus (DeviceId, LocalTimeSpan);
-    END;
-GO
-
-IF
-    NOT EXISTS (
-        SELECT 1
-        FROM sys.indexes AS i
-        INNER JOIN sys.objects AS o
-            ON i.object_id = o.object_id
-        INNER JOIN sys.schemas AS s
-            ON o.schema_id = s.schema_iD
-        WHERE
-            s.name = N'dwh'
-            AND o.name = N'factHourlyDeviceStatus'
             AND i.name = N'ix_factDeviceStatusEvent_time_span_deviceid'
     )
     BEGIN
@@ -140,7 +83,7 @@ IF
         WHERE
             s.name = N'dwh'
             AND o.name = N'factHourlyDeviceStatus'
-            AND i.name = N'ix_factDeviceStatusEvent_localTimeSpan_desc'
+            AND i.name = N'UX_factHourlyDeviceStatus_Device_Time'
     )
     BEGIN
         CREATE UNIQUE INDEX UX_factHourlyDeviceStatus_Device_Time
