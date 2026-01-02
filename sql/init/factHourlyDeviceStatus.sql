@@ -87,7 +87,7 @@ IF
     )
     BEGIN
         CREATE UNIQUE INDEX UX_factHourlyDeviceStatus_Device_Time
-            ON mcdonalds.dwh.factHourlyDeviceStatus (DeviceId, LocalTimeSpan)
+            ON dwh.factHourlyDeviceStatus (DeviceId, LocalTimeSpan)
             WITH (IGNORE_DUP_KEY = ON);
     END;
 GO
