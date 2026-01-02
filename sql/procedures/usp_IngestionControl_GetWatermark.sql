@@ -26,7 +26,7 @@ BEGIN
         IngestionName = @IngestionName
         AND IsActive = 1;
 
-IF @@ROWCOUNT = 0
+    IF @@ROWCOUNT = 0
         BEGIN
             DECLARE @now DATETIME2(3) = SYSUTCDATETIME();
 
