@@ -42,8 +42,10 @@ BEGIN
 
     DECLARE
         @obj_id INT
-        = OBJECT_ID(QUOTENAME(@SchemaName)
-        + N'.' + QUOTENAME(@TableName), N'U');
+        = OBJECT_ID(
+            QUOTENAME(@SchemaName)
+            + N'.' + QUOTENAME(@TableName), N'U'
+        );
 
     IF @obj_id IS NULL
         BEGIN
@@ -73,18 +75,18 @@ BEGIN
 
     DECLARE
         @sql NVARCHAR(MAX)
-            = N'DELETE FROM '
-            + QUOTENAME(@SchemaName)
-            + N'.' + QUOTENAME(@TableName)
-            + N' WITH (ROWLOCK) '
-            +
-            N'WHERE '
-            + QUOTENAME(@TimeColumn)
-            + N' >= @FromUtc AND '
-            + QUOTENAME(@TimeColumn)
-            + N' < @ToUtc;'
-            +
-            N'SELECT CAST(@@ROWCOUNT AS INT) AS DeletedRowCount;';
+        = N'DELETE FROM '
+        + QUOTENAME(@SchemaName)
+        + N'.' + QUOTENAME(@TableName)
+        + N' WITH (ROWLOCK) '
+        +
+        N'WHERE '
+        + QUOTENAME(@TimeColumn)
+        + N' >= @FromUtc AND '
+        + QUOTENAME(@TimeColumn)
+        + N' < @ToUtc;'
+        +
+        N'SELECT CAST(@@ROWCOUNT AS INT) AS DeletedRowCount;';
 
     EXEC sp_executesql
         @sql,
