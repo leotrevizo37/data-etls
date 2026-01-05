@@ -11,8 +11,7 @@ def maquinas_nieve(
         factlecturas_extended_df
         .filter(
             (
-                    (col("_device_name") == "Máquinas de nieve") |
-                    (col("_device_name") == "Máquina de nieve")
+                    (col("_device_type") == "Máquina de nieve")
             )
         )
     )
