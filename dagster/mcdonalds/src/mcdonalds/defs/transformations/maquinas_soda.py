@@ -12,14 +12,7 @@ def maquinas_soda(
         factlecturas_extended_df
         .filter(
             (
-                    (col("_device_name") == "Máquina de Sodas") |
-                    (col("_device_name") == "Máquina de sodas") |
-                    (col("_device_name") == "Máquinas de Sodas") |
-                    (col("_device_name") == "Máquinas de sodas") |
-                    (col("_device_name") == "Máquinas de Soda") |
-                    (col("_device_name") == "Máquinas de soda") |
-                    (col("_device_name") == "Máquina de Soda") |
-                    (col("_device_name") == "Máquina de soda")
+                    (col("_device_type") == "Máquina de sodas")
             )
         )
     )
