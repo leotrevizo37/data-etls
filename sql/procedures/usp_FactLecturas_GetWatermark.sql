@@ -24,7 +24,7 @@ BEGIN
         IsActive,
         CreatedAt,
         UpdatedAt
-    FROM dwh.ctlIngestionLecturas WITH (READCOMMITTED)
+    FROM dwh.ctlIngestionFactLecturas WITH (READCOMMITTED)
     WHERE
         IngestionName = @IngestionName
         AND IsActive = 1;
@@ -32,7 +32,7 @@ BEGIN
     IF @@ROWCOUNT = 0
         BEGIN
             RAISERROR (
-                'ctlIngestionLecturas: no active row found for '
+                'ctlIngestionFactLecturas: no active row found for '
                 + 'IngestionName = %s.',
                 16,
                 1,

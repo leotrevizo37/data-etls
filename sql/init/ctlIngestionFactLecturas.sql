@@ -1,6 +1,6 @@
-IF OBJECT_ID(N'dwh.ctlIngestionLecturas', N'U') IS NULL
+IF OBJECT_ID(N'dwh.ctlIngestionFactLecturas', N'U') IS NULL
     BEGIN
-        CREATE TABLE dwh.ctlIngestionLecturas
+        CREATE TABLE dwh.ctlIngestionFactLecturas
         (
             ControlIngestionId INT IDENTITY (1, 1) NOT NULL
             CONSTRAINT PK_ctlIngestionLecturas PRIMARY KEY,

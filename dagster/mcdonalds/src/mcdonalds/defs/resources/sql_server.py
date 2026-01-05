@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import os
 import pyodbc
@@ -71,6 +71,23 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def execute_query(self, query: str, *args) -> Optional[int]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(query, *args)
+                    conn.commit()
+                    return cursor.rowcount
+                except pyodbc.Error as e:
+                    return e
+
+    def fetch_scalar(self, query: str, *args):
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, *args)
+                row = cursor.fetchone()
+                return row[0] if row is not None else None
+
     def delete_range(self, from_utc: datetime, to_utc: datetime) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
@@ -107,6 +124,24 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def get_basic_options(self) -> Dict[str, Any]:
+        url = (
+                "jdbc:sqlserver://"
+                + self.host
+                + ":"
+                + str(self.port)
+                + ";databaseName="
+                + self.database
+                + ";encrypt=true;trustServerCertificate=true"
+                + ";Connection Timeout="
+                + str(self.connect_timeout)
+        )
+        return {
+            "url": url,
+            "user": self.user,
+            "password": self.password,
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+        }
 
 @resource
 def sqlserver_resource(_):
@@ -115,8 +150,8 @@ def sqlserver_resource(_):
     database = os.getenv("APP_DB", "YourDatabaseName")
     user = os.getenv("MSSQL_USER", "app_ingestion_user")
     password = os.getenv("MSSQL_PASSWORD", "")
-    connect_timeout = int(os.getenv("MSSQL_CONNECT_TIMEOUT", "15"))
-    command_timeout = int(os.getenv("MSSQL_COMMAND_TIMEOUT", "600"))
+    connect_timeout = int(os.getenv("MSSQL_CONNECT_TIMEOUT", "300"))
+    command_timeout = int(os.getenv("MSSQL_COMMAND_TIMEOUT", "4500"))
     driver = os.getenv("MSSQL_DRIVER", "ODBC Driver 18 for SQL Server")
     return SqlServerResource(
         host=host,

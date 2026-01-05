@@ -7,10 +7,12 @@ CREATE TABLE dwh.factLecturas
     Value DECIMAL(19, 9) NOT NULL,
     CONSTRAINT PK_FactLecturas
     PRIMARY KEY CLUSTERED (ReadId)
-    WITH (IGNORE_DUP_KEY = ON);
+    WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
 );
 GO
 
 CREATE INDEX ix_factlecturas_sensor_time_span
     ON dwh.factlecturas (SensorId, TimeSpan);
+CREATE NONCLUSTERED INDEX ix_factLecturas_localTimeSpan_desc
+    ON dwh.factLecturas (LocalTimeSpan DESC);
 GO
