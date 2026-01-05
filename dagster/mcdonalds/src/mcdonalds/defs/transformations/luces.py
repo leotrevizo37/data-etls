@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col,lit
+from pyspark.sql.functions import col,lit, expr
 
 from .stats_calculator import stats_calculator
 
@@ -20,13 +20,13 @@ def luces(
             "DeviceId",
             "LocationId",
             "SensorTyId",
-            "Estatus",
+            "StatusCode",
             "LocalTimeSpan",
             "Promedio",
             "_sensor_type",
         )
-        .withColumnRenamed("Promedio", "Valor")
-        .withColumn("Anomalias", lit(None))
+        .withColumnRenamed("Promedio", "MeasurementValue")
+        .withColumn("Anomalies", lit(None))
     )
 
     luces_df = (
@@ -36,9 +36,9 @@ def luces(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -46,4 +46,16 @@ def luces(
     if luces_df.rdd.isEmpty():
         return None
 
-    return luces_df
+    group_ids_df = (
+        luces_df
+        .select("DeviceId", "LocalTimeSpan")
+        .distinct()
+        .withColumn("OperationId", expr("uuid()"))
+    )
+
+    group_with_guid_df = (
+        luces_df
+        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+    )
+
+    return group_with_guid_df

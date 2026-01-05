@@ -12,7 +12,9 @@ def factlecturas_extended(
         fetch_factlecturas_from: str) -> Optional[DataFrame]:
     spark = spark_res.get_spark()
 
-    if fetch_factlecturas_from is None:
+    if (fetch_factlecturas_from is None
+            or fetch_factlecturas_from == ""
+            or fetch_factlecturas_from == "None"):
         dwh_factlecturas_df = (
             spark.read.format("jdbc")
             .option("dbtable", "dwh.FactLecturas")

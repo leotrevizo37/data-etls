@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, expr
 
 from .stats_calculator_time_window import (stats_calculator_time_window)
 
@@ -30,9 +30,9 @@ def maquinas_nieve(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -40,4 +40,16 @@ def maquinas_nieve(
     if maquinas_nieve_df.rdd.isEmpty():
         return None
 
-    return maquinas_nieve_df
+    group_ids_df = (
+        maquinas_nieve_df
+        .select("DeviceId", "LocalTimeSpan")
+        .distinct()
+        .withColumn("OperationId", expr("uuid()"))
+    )
+
+    group_with_guid_df = (
+        maquinas_nieve_df
+        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+    )
+
+    return group_with_guid_df

@@ -1,10 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 import os
 import pyodbc
 from dagster import resource
-
 
 class SqlServerResource:
     def __init__(
@@ -52,7 +51,7 @@ class SqlServerResource:
             with conn.cursor() as cursor:
                 try:
                     cursor.execute(
-                        "EXEC dwh.usp_FactLecturas_GetWatermark @IngestionName = ?",
+                        "EXEC ctl.usp_IngestionControl_GetWatermark @IngestionName = ?",
                         ingestion_name,
                     )
                     row = cursor.fetchone()
@@ -66,7 +65,7 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "EXEC dwh.usp_FactLecturas_MarkRunStarted @IngestionName = ?",
+                    "EXEC ctl.usp_IngestionControl_MarkRunStarted @IngestionName = ?",
                     ingestion_name,
                 )
                 conn.commit()
@@ -88,11 +87,26 @@ class SqlServerResource:
                 row = cursor.fetchone()
                 return row[0] if row is not None else None
 
-    def delete_range(self, from_utc: datetime, to_utc: datetime) -> int:
+    def delete_range(self,
+                     schema_name: str,
+                     table_name: str,
+                     time_column: str,
+                     from_utc: datetime,
+                     to_utc: Optional[datetime] = None) -> int:
+        if to_utc is None:
+            to_utc = datetime.now(timezone.utc)
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "EXEC dwh.usp_FactLecturas_DeleteRange @FromUtc = ?, @ToUtc = ?",
+                    "EXEC ctl.usp_IngestionControl_DeleteRange "
+                    "@SchemaName = ?, "
+                    "@TableName = ?, "
+                    "@TimeColumn = ?, "
+                    "@FromUtc = ?, "
+                    "@ToUtc = ?",
+                    schema_name,
+                    table_name,
+                    time_column,
                     from_utc,
                     to_utc,
                 )
@@ -115,7 +129,7 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "EXEC dwh.usp_FactLecturas_MarkRunCompleted "
+                    "EXEC ctl.usp_IngestionControl_MarkRunCompleted "
                     "@IngestionName = ?, @NewLastLoadedAt = ?, @Succeeded = ?, @ErrorMessage = ?",
                     ingestion_name,
                     new_last_loaded_at,

@@ -79,7 +79,7 @@ def stats_calculator_time_window(
         base
         .groupBy("DeviceId", "HourStart")
         .agg(
-            avg("Value").alias("Valor_dummy"),
+            avg("Value").alias("Val_dummy"),
             spark_sum(
                 spark_when(col("Value") >= min_expected_value, 1).otherwise(0)
             ).alias("is_okay"),
@@ -87,7 +87,7 @@ def stats_calculator_time_window(
             spark_max("zero_run_len").alias("max_zero_run_len"),
         )
         .withColumn(
-            "Estatus",
+            "StatusCode",
             spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
         )
     )
@@ -109,7 +109,7 @@ def stats_calculator_time_window(
         per5max_df
         .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
         .agg(
-            avg("Value_phase_max").alias("Valor"),
+            avg("Value_phase_max").alias("MeasurementValue"),
             count("*").alias("total_sensors"),
         )
     )
@@ -189,20 +189,20 @@ def stats_calculator_time_window(
         windows_with_anom
         .groupBy("DeviceId", "HourStart", "SensorTyId")
         .agg(
-            spark_sum("Anomalia_x_min").alias("Anomalias_raw"),
+            spark_sum("Anomalia_x_min").alias("Anomalies_raw"),
         )
         .withColumn(
-            "Anomalias",
-            spark_when(col("Anomalias_raw") > 3, lit(3)).otherwise(col("Anomalias_raw"))
+            "Anomalies",
+            spark_when(col("Anomalies_raw") > 3, lit(3)).otherwise(col("Anomalies_raw"))
         )
-        .select("HourStart", "Anomalias", "DeviceId", )
+        .select("HourStart", "Anomalies", "DeviceId", )
     )
 
     stats_current_df = (
         valor_df
-        .join(stats_df.drop("Valor_dummy"), on=["HourStart", "DeviceId"], how="inner")
+        .join(stats_df.drop("Val_dummy"), on=["HourStart", "DeviceId"], how="inner")
         .join(anomalies_df, on=["HourStart", "DeviceId"], how="left")
-        .fillna({"Anomalias": 0})
+        .fillna({"Anomalies": 0})
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
     )

@@ -1,11 +1,8 @@
-USE mcdonalds;
+IF OBJECT_ID(N'ctl.usp_IngestionControl_MarkRunCompleted', N'P') IS NOT NULL
+    DROP PROCEDURE ctl.usp_IngestionControl_MarkRunCompleted;
 GO
 
-IF OBJECT_ID(N'dwh.usp_FactLecturas_MarkRunCompleted', N'P') IS NOT NULL
-    DROP PROCEDURE dwh.usp_FactLecturas_MarkRunCompleted;
-GO
-
-CREATE PROCEDURE dwh.usp_FactLecturas_MarkRunCompleted
+CREATE PROCEDURE ctl.usp_IngestionControl_MarkRunCompleted
     (
         @IngestionName SYSNAME,
         @NewLastLoadedAt DATETIME2(3),
@@ -24,7 +21,7 @@ BEGIN
             ELSE 'FAILED'
         END;
 
-    UPDATE dwh.ctlIngestionFactLecturas WITH (ROWLOCK, UPDLOCK)
+    UPDATE ctl.IngestionControl WITH (ROWLOCK, UPDLOCK)
     SET
         LastLoadedAt =
         CASE
@@ -42,8 +39,7 @@ BEGIN
     IF @@ROWCOUNT = 0
         BEGIN
             RAISERROR (
-                'ctlIngestionFactLecturas: no row found for '
-                + 'IngestionName = %s or it is inactive.',
+                'IngestionControl: no row found for IngestionName = %s or it is inactive.',
                 16,
                 1,
                 @IngestionName

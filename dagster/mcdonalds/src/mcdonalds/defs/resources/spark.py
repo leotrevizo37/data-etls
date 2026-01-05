@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 import os
 from pyspark.sql import DataFrame, SparkSession
@@ -109,6 +109,24 @@ class SparkResource:
             + self.adls_base_path
         )
 
+    def _build_wh_path(self) -> Dict[str, Any]:
+        url = (
+                "jdbc:sqlserver://"
+                + self.jdbc_host
+                + ":"
+                + str(self.jdbc_port)
+                + ";databaseName="
+                + self.jdbc_database
+                + ";encrypt=true;trustServerCertificate=true"
+        )
+        properties = {
+            "user": self.jdbc_user,
+            "password": self.jdbc_password,
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+            "batchsize": "4000",
+        }
+        return {"url": url, "properties": properties}
+
     def read_lecturas_range(self, from_utc: datetime, to_utc: datetime) -> DataFrame:
         spark = self.get_spark()
         base = self._build_adls_path()
@@ -145,53 +163,27 @@ class SparkResource:
         df_dedup = df.dropDuplicates(["ReadId"])
         if df_dedup.rdd.isEmpty():
             return
-        url = (
-            "jdbc:sqlserver://"
-            + self.jdbc_host
-            + ":"
-            + str(self.jdbc_port)
-            + ";databaseName="
-            + self.jdbc_database
-            + ";encrypt=true;trustServerCertificate=true"
-        )
-        properties = {
-            "user": self.jdbc_user,
-            "password": self.jdbc_password,
-            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-            "batchsize": "4000",
-        }
 
         target_partitions = 4
         df_write = df_dedup.coalesce(target_partitions)
 
         df_write.write \
             .mode("append") \
-            .jdbc(url=url, table="dwh.factLecturas", properties=properties)
+            .jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.factLecturas",
+            properties=self._build_wh_path()["properties"]
+        )
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
             return 0
 
-        url = (
-                "jdbc:sqlserver://"
-                + self.jdbc_host
-                + ":"
-                + str(self.jdbc_port)
-                + ";databaseName="
-                + self.jdbc_database
-                + ";encrypt=true;trustServerCertificate=true"
-        )
-        properties = {
-            "user": self.jdbc_user,
-            "password": self.jdbc_password,
-            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-        }
-
         try:
             max_df = self._spark.read.jdbc(
-                url=url,
-                table="(SELECT MAX(LocalTimeSpan) AS max_ts FROM dwh.FactOperaciones) AS t",
-                properties=properties,
+                url=self._build_wh_path()["url"],
+                table="(SELECT MAX(LocalTimeSpan) AS max_ts FROM dwh.factReadingsMeasurement) AS t",
+                properties=self._build_wh_path()["properties"],
             )
             row = max_df.collect()[0]
             max_ts = row.max_ts
@@ -209,8 +201,8 @@ class SparkResource:
         row_count = df_write.count()
 
         df_write.write.jdbc(
-            url=url,
-            table="dwh.FactOperaciones",
+            url=self._build_wh_path()["url"],
+            table="dwh.factReadingsMeasurement",
             mode="append",
             properties={
                 "user": self.jdbc_user,
@@ -226,29 +218,14 @@ class SparkResource:
         if df.rdd.isEmpty():
             return 0
 
-        url = (
-                "jdbc:sqlserver://"
-                + self.jdbc_host
-                + ":"
-                + str(self.jdbc_port)
-                + ";databaseName="
-                + self.jdbc_database
-                + ";encrypt=true;trustServerCertificate=true"
-        )
-
         df_write = df.coalesce(4)
         row_count = df_write.count()
 
         df_write.write.jdbc(
-            url=url,
-            table="dwh.FactOperaciones",
+            url=self._build_wh_path()["url"],
+            table="dwh.factReadingsMeasurement",
             mode="append",
-            properties={
-                "user": self.jdbc_user,
-                "password": self.jdbc_password,
-                "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                "batchsize": "4000",
-            },
+            properties=self._build_wh_path()["properties"],
         )
 
         return row_count
@@ -257,43 +234,59 @@ class SparkResource:
         if df.rdd.isEmpty():
             return 0
 
-        url = (
-                "jdbc:sqlserver://"
-                + self.jdbc_host
-                + ":"
-                + str(self.jdbc_port)
-                + ";databaseName="
-                + self.jdbc_database
-                + ";encrypt=true;trustServerCertificate=true"
-        )
-
         df_write = df.coalesce(4)
         row_count = df_write.count()
 
         df_write.write.jdbc(
-            url=url,
-            table="dwh.FactOperacionesMaquina",
+            url=self._build_wh_path()["url"],
+            table="dwh.factHourlyDeviceStatus",
             mode="append",
-            properties={
-                "user": self.jdbc_user,
-                "password": self.jdbc_password,
-                "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                "batchsize": "4000",
-            },
+            properties=self._build_wh_path()["properties"],
         )
 
         return row_count
 
-
-    def get_max_timespan(self, df: DataFrame) -> Optional[datetime]:
+    def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
         if df.rdd.isEmpty():
             return None
-        row = df.agg(spark_max("TimeSpan").alias("max_ts")).collect()[0]
+        row = df.agg(spark_max(time_span_type).alias("max_ts")).collect()[0]
         max_ts = row.max_ts
         if max_ts is None:
             return None
         return max_ts
 
+    def write_dim_prod_dimensions(self, df: DataFrame) -> Optional[int]:
+        if df.rdd.isEmpty():
+            return None
+        df_dedup = df.dropDuplicates(["SensorId"])
+        if df_dedup.rdd.isEmpty():
+            return 0
+
+        target_partitions = 2
+        df_write = df_dedup.coalesce(target_partitions)
+
+        df_write.write \
+            .mode("append") \
+            .jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSidonProdDimensions",
+            properties=self._build_wh_path()["properties"]
+        )
+
+        return df_write.count()
+
+    def read_dim_prod_dimensions(self) -> DataFrame:
+        spark = self.get_spark()
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSidonProdDimensions",
+            properties=self._build_wh_path()["properties"]
+        )
+
+    def create_emptiness_dataframe(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.createDataFrame([(True,)], ["is_empty"])
 
 @resource
 def spark_resource(_):

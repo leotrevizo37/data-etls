@@ -9,6 +9,7 @@ x-dagster-common: &dagster_common
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
+    - spark-data:/data
   networks:
     - mcdonalds-dagster
   restart: unless-stopped
@@ -19,6 +20,51 @@ x-dagster-common: &dagster_common
       max-file: "3"
 
 services:
+  sql-init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: mcdonalds-sql-init
+    env_file:
+      - .env
+    networks:
+      - mcdonalds-dagster
+    volumes:
+      - ../sql/init:/sql/init:ro
+      - ../sql/procedures:/sql/procedures:ro
+    command: >
+      sh -c '
+        set -eu;
+
+        echo "Waiting for SQL Server at ${MSSQL_HOST}:${MSSQL_PORT:-1433}...";
+        until /opt/mssql-tools/bin/sqlcmd \
+                  -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
+                  -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
+                  -Q "SELECT 1" >/dev/null 2>&1; do
+          echo "SQL Server not ready, retrying in 5s...";
+          sleep 5;
+        done;
+        echo "Running SQL init scripts from /sql/init and /sql/procedures...";
+        for f in /sql/init/*.sql; do
+          [ -e "$$f" ] || continue;
+          echo "==> $$f";
+          /opt/mssql-tools/bin/sqlcmd \
+              -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
+              -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
+              -d "${APP_DB}" \
+              -b -i "$$f";
+        done;
+        for f in /sql/procedures/*.sql; do
+          [ -e "$$f" ] || continue;
+          echo "==> $$f";
+          /opt/mssql-tools/bin/sqlcmd \
+              -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
+              -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
+              -d "${APP_DB}" \
+              -b -i "$$f";
+        done;
+        echo "SQL init completed.";
+      '
+    restart: "no"
+
   dagster-postgres:
     image: postgres:16
     container_name: mcdonalds-dagster-postgres
@@ -32,6 +78,9 @@ services:
       - dagster_postgres_data:/var/lib/postgresql/data
     networks:
       - mcdonalds-dagster
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DAGSTER_PG_USER} -d ${DAGSTER_PG_DB}" ]
@@ -46,6 +95,9 @@ services:
       dockerfile: dagster/Dockerfile
     container_name: mcdonalds-dagster-user-code
     <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
       PYTHONPATH: /opt/dagster/app/mcdonalds/src
@@ -84,6 +136,8 @@ services:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
     ports:
       - "${DAGSTER_WEB_PORT:-3000}:3000"
     command: [
@@ -110,10 +164,14 @@ services:
     ]
 
   spark-master:
+    user: "0:0"
     build:
       context: ..
       dockerfile: spark/Dockerfile
     container_name: mcdonalds-spark-master
+    depends_on:
+      spark-data-init:
+        condition: service_completed_successfully
     command: [
       "/opt/spark/bin/spark-class",
       "org.apache.spark.deploy.master.Master"
@@ -137,12 +195,15 @@ services:
       start_period: 20s
 
   spark-worker:
+    user: "0:0"
     build:
       context: ..
       dockerfile: spark/Dockerfile
     depends_on:
       spark-master:
         condition: service_started
+      spark-data-init:
+        condition: service_completed_successfully
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
@@ -157,6 +218,17 @@ services:
     networks:
       - mcdonalds-dagster
     restart: unless-stopped
+
+  spark-data-init:
+    image: alpine:3.20
+    user: "0:0"
+    container_name: mcdonalds-spark-data-init
+    volumes:
+      - spark-data:/data
+    command: ["sh", "-c", "mkdir -p /data/dagster_io/spark_dfs && chmod -R 777 /data"]
+    restart: "no"
+    networks:
+      - mcdonalds-dagster
 
 volumes:
   spark-data:

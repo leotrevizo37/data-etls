@@ -50,7 +50,13 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
     to_utc: datetime = window["to_utc"]
     original_last_loaded_at: datetime = window["original_last_loaded_at"]
 
-    sql.delete_range(from_utc, to_utc)
+    sql.delete_range(
+        schema_name="dwh",
+        table_name="FactLecturas",
+        time_column="TimeSpan",
+        from_utc=from_utc,
+        to_utc=to_utc
+    )
 
     succeeded = False
     error_message: Optional[str] = None
@@ -63,7 +69,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
             succeeded = True
         else:
             spark_res.write_fact_lecturas_to_sql(df)
-            max_time_span = spark_res.get_max_timespan(df)
+            max_time_span = spark_res.get_max_time_span(df, "TimeSpan")
             context.log.info("Window loaded into dwh.factLecturas. Max TimeSpan " + str(max_time_span))
             succeeded = True
     except Exception as ex:
