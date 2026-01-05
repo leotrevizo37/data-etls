@@ -9,7 +9,7 @@ def cuartos_congelacion(
         factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
-        .filter((col("_device_name") == "Cuarto de congelación"))
+        .filter((col("_device_type") == "Cuarto de congelación"))
     )
 
     temperature_stats_df = (
