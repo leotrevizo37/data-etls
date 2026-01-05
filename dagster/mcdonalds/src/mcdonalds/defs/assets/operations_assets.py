@@ -128,7 +128,7 @@ def load_raw_dimensions_op(
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
 )
 def load_factlecturas_extended_op(
-    context: OpExecutionContext,
+        context: OpExecutionContext,
         raw_dims_df: DataFrame,
         window: Dict[str, Any]) -> DataFrame:
     spark_res: SparkResource = context.resources.spark
@@ -141,6 +141,16 @@ def load_factlecturas_extended_op(
         raw_dimensions=raw_dims_df,
         fetch_factlecturas_from=window["fetch_from"],
     )
+
+    if factlecturas_extended_df is None:
+        _df: DataFrame = spark_res.create_emptiness_dataframe()
+        context.log.warning("FactLecturas table is empty.")
+        return _df
+    elif factlecturas_extended_df.rdd.isEmpty():
+        _df: DataFrame = spark_res.create_emptiness_dataframe()
+        context.log.warning("FactLecturas table is empty.")
+        return _df
+
     return factlecturas_extended_df
 
 @op(
@@ -148,16 +158,20 @@ def load_factlecturas_extended_op(
         "transformation_ops"
     },
     ins={
-        "factlecturas_extended_df": In(DataFrame)
+        "factlecturas_extended_df": In(Optional[DataFrame])
     },
-    out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
 )
 def build_devices_df_op(
         context: OpExecutionContext,
-        factlecturas_extended_df: DataFrame) -> DataFrame:
+        factlecturas_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
     union_df: Optional[DataFrame] = None
+    if len(factlecturas_extended_df.columns) <= 1:
+        context.log.warning("Factlecturas_extended_df is empty.")
+        return factlecturas_extended_df
+
     methods = [
         "maquinas_nieve",
         "maquinas_soda",
@@ -235,7 +249,7 @@ def write_factreadingsmeasurement_op(
     error_message: Optional[str] = None
 
     try:
-        if devices_df.rdd.isEmpty():
+        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
             succeeded = True
         else:
             inserted_ = spark_res.write_fact_operations(
@@ -250,6 +264,7 @@ def write_factreadingsmeasurement_op(
             )
             max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
             succeeded = True
+            context.log.info(str(inserted_) + "rows inserted.")
     except Exception as ex:
         error_message = str(ex)
         succeeded = False
@@ -289,7 +304,8 @@ def write_facthourlydevicestatus_op(
     error_message: Optional[str] = None
 
     try:
-        if devices_df.rdd.isEmpty():
+        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
+            context.log.info("FactLecturas window was empty")
             succeeded = True
         else:
             aggregated_df = factReadingsMeasurement_device(devices_df)

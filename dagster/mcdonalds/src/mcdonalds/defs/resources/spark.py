@@ -284,6 +284,10 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def create_emptiness_dataframe(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.createDataFrame([(True,)], ["is_empty"])
+
 @resource
 def spark_resource(_):
     master_url = os.getenv("SPARK_MASTER_URL", "spark://spark-master:7077")

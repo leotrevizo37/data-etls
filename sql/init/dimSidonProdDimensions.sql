@@ -13,22 +13,22 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NULL
     BEGIN
         CREATE TABLE dwh.dimSidonProdDimensions
         (
-            SensorId           UNIQUEIDENTIFIER NOT NULL,
-            SensorTyId         UNIQUEIDENTIFIER NOT NULL,
-            DeviceId           UNIQUEIDENTIFIER NOT NULL,
-            _sensor_name       NVARCHAR(255)    NULL,
-            _sensor_type       NVARCHAR(255)    NULL,
-            DeviceTyId         UNIQUEIDENTIFIER NOT NULL,
-            SubLocationId      UNIQUEIDENTIFIER NOT NULL,
-            _device_name       NVARCHAR(255)    NULL,
-            _device_type       NVARCHAR(255)    NULL,
-            SubLocationTyId    UNIQUEIDENTIFIER NOT NULL,
-            _sublocation_name  NVARCHAR(255)    NULL,
-            LocationId         UNIQUEIDENTIFIER NOT NULL,
-            _sublocation_type  NVARCHAR(255)    NULL,
-            ModifiedAt     DATETIME2(0)     NOT NULL
-                CONSTRAINT DF_dimSidonProdDimensions_ModifiedAt
-                DEFAULT (SYSUTCDATETIME())
+            SensorId UNIQUEIDENTIFIER NOT NULL,
+            SensorTyId UNIQUEIDENTIFIER NOT NULL,
+            DeviceId UNIQUEIDENTIFIER NOT NULL,
+            _sensor_name NVARCHAR(255) NULL,
+            _sensor_type NVARCHAR(255) NULL,
+            DeviceTyId UNIQUEIDENTIFIER NOT NULL,
+            SubLocationId UNIQUEIDENTIFIER NOT NULL,
+            _device_name NVARCHAR(255) NULL,
+            _device_type NVARCHAR(255) NULL,
+            SubLocationTyId UNIQUEIDENTIFIER NOT NULL,
+            _sublocation_name NVARCHAR(255) NULL,
+            LocationId UNIQUEIDENTIFIER NOT NULL,
+            _sublocation_type NVARCHAR(255) NULL,
+            ModifiedAt DATETIME2(0)  NOT NULL
+            CONSTRAINT DF_dimSidonProdDimensions_ModifiedAt
+            DEFAULT (SYSUTCDATETIME())
         );
     END;
 GO

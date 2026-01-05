@@ -21,7 +21,6 @@ class SparkDataFrameParquetIOManager(IOManager):
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-        spark = context.resources.spark.get_spark()
         obj.write.mode("overwrite").parquet(path)
 
         context.add_output_metadata({"parquet_path": path})

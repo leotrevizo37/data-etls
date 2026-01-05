@@ -80,18 +80,33 @@ class SqlDimServerResource:
         }
 
     def get_watermark(self) -> Optional[datetime]:
-        with self._get_connection() as conn:
+        conn_str = (
+                "DRIVER={ODBC Driver 18 for SQL Server}"
+                + ";SERVER="
+                + self.host
+                + ","
+                + str(self.port)
+                + ";DATABASE="
+                + self.database
+                + ";UID="
+                + self.user
+                + ";PWD="
+                + self.password
+                + ";TrustServerCertificate=yes"
+                + ";Connection Timeout="
+                + str(self.connect_timeout)
+        )
+        conn = pyodbc.connect(conn_str)
+        with conn:
             with conn.cursor() as cursor:
                 try:
-                    cursor.execute(
-                        "SELECT MAX(ModifiedAt) FROM dbo.sensors;"
-                    )
+                    cursor.execute("SELECT MAX(ModifiedAt) FROM dbo.sensors;")
                     row = cursor.fetchone()
                 except pyodbc.Error:
                     return None
-                if row is None:
+                if row is None or row[0] is None:
                     return None
-                return row.ModifiedAt
+                return row[0]
 
 @resource
 def dim_sqlserver_resource(_):

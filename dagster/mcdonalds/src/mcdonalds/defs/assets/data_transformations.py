@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any
 
-from dagster import asset, AssetKey, Nothing
+from dagster import asset, AssetKey
 
 @asset(
     name="data_transformations",
