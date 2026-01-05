@@ -43,19 +43,19 @@ def stats_calculator(
             base
             .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
             .agg(
-                avg("Value").alias("Valor_dummy"),
+                avg("Value").alias("Val_dummy"),
                 spark_sum(
                     spark_when(col("Value") >= min_expected_value, 1).otherwise(0)
                 ).alias("is_okay"),
                 count("*").alias("total_readings"),
-                spark_sum("is_anomaly").alias("Anomalias_raw"),
+                spark_sum("is_anomaly").alias("Anomalies_raw"),
             )
             .withColumn(
-                "Estatus",
+                "StatusCode",
                 spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
             )
             .withColumn("Promedio", col("is_okay") / col("total_readings"))
-            .withColumnRenamed("Anomalias_raw", "Anomalias")
+            .withColumnRenamed("Anomalies_raw", "Anomalies")
         )
     else:
         base = (
@@ -83,27 +83,27 @@ def stats_calculator(
             base
             .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
             .agg(
-                avg("Value").alias("Valor_dummy"),
+                avg("Value").alias("Val_dummy"),
                 spark_sum(
                     spark_when(
                         (col("Value") >= min_expected_value) &
                         (col("Value") <= max_expected_value), 1).otherwise(0)
                 ).alias("is_okay"),
                 count("*").alias("total_readings"),
-                spark_sum("is_anomaly").alias("Anomalias_raw"),
+                spark_sum("is_anomaly").alias("Anomalies_raw"),
             )
             .withColumn(
-                "Estatus",
+                "StatusCode",
                 spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
             )
             .withColumn("Promedio", col("is_okay") / col("total_readings"))
-            .withColumnRenamed("Anomalias_raw", "Anomalias")
+            .withColumnRenamed("Anomalies_raw", "Anomalies")
         )
 
     stats_current_df = (
         stats_df
-        .fillna({"Anomalias": 0})
-        .withColumnRenamed("Valor_dummy", "Valor")
+        .fillna({"Anomalies": 0})
+        .withColumnRenamed("Val_dummy", "MeasurementValue")
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
     )

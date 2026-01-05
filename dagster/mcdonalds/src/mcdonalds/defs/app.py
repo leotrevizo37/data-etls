@@ -1,32 +1,41 @@
 from dagster import Definitions
-from .jobs.factlecturas_ingestion import fact_lecturas_ingestion_job
-from .jobs.factoperations_ingestion import fact_operaciones_ingestion_job
-from .schedules.factlecturas_scheduler import fact_lecturas_sched_every_2h
-from .schedules.factoperations_scheduler import fact_operaciones_sched_every_4h
-from .assets.factoperations import factoperations
-from .assets.source_assets import (dbo_sensors,
-                                   dbo_sensor_tys,
-                                   dbo_devices,
-                                   dbo_device_tys,
-                                   dbo_sublocations,
-                                   dwh_factlecturas)
+
+from .assets import (dbo_sensors,
+                     dbo_sensor_tys,
+                     dbo_devices,
+                     dbo_device_tys,
+                     dbo_sublocations,
+                     dwh_factlecturas,
+                     operations_assets,
+                     dwh_dimsidonproddimensions)
+from .schedules import (fact_lecturas_sched_every_2h,
+                        operations_sched_every_4h)
+from .jobs import (fact_lecturas_ingestion_job,
+                   fact_operations_tables_job,
+                   refresh_dimensions_job)
+from .sensors import dwh_dimsidonproddimensions_sensor
 
 defs = Definitions(
     jobs=[
         fact_lecturas_ingestion_job,
-        fact_operaciones_ingestion_job
+        fact_operations_tables_job,
+        refresh_dimensions_job
     ],
     schedules=[
         fact_lecturas_sched_every_2h,
-        fact_operaciones_sched_every_4h,
+        operations_sched_every_4h,
+    ],
+    sensors=[
+        dwh_dimsidonproddimensions_sensor
     ],
     assets=[
-        factoperations,
         dbo_sensors,
         dbo_sensor_tys,
         dbo_devices,
         dbo_device_tys,
         dbo_sublocations,
-        dwh_factlecturas
+        dwh_factlecturas,
+        operations_assets,
+        dwh_dimsidonproddimensions
     ],
 )

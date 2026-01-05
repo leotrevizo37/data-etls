@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lit
+from pyspark.sql.functions import col, lit, expr
 
 from .stats_calculator import stats_calculator
 
@@ -23,9 +23,9 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -40,11 +40,11 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
+            "StatusCode",
+            "MeasurementValue",
             "_sensor_type",
         )
-        .withColumn("Anomalias", lit(None))
+        .withColumn("Anomalies", lit(None))
     )
 
     cuartos_refrigeracion_df = (
@@ -54,9 +54,9 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "LocalTimeSpan",
-            "Estatus",
-            "Valor",
-            "Anomalias",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
             "_sensor_type",
         )
     )
@@ -64,4 +64,16 @@ def cuartos_refrigeracion(
     if cuartos_refrigeracion_df.rdd.isEmpty():
         return None
 
-    return cuartos_refrigeracion_df
+    group_ids_df = (
+        cuartos_refrigeracion_df
+        .select("DeviceId", "LocalTimeSpan")
+        .distinct()
+        .withColumn("OperationId", expr("uuid()"))
+    )
+
+    group_with_guid_df = (
+        cuartos_refrigeracion_df
+        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+    )
+
+    return group_with_guid_df

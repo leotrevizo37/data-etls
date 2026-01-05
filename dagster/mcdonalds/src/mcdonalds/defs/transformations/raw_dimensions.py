@@ -5,7 +5,9 @@ from pyspark.sql.functions import col
 
 from ..resources import SparkResource, SqlDimServerResource
 
-def raw_dimensions(spark_res: SparkResource, dim_sqlserver: SqlDimServerResource) -> Optional[DataFrame]:
+def raw_dimensions(
+        spark_res: SparkResource,
+        dim_sqlserver: SqlDimServerResource) -> Optional[DataFrame]:
     spark = spark_res.get_spark()
 
     dbo_sensors_df =(
