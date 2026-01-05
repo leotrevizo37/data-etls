@@ -26,7 +26,7 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NULL
             _sublocation_name NVARCHAR(255) NULL,
             LocationId UNIQUEIDENTIFIER NOT NULL,
             _sublocation_type NVARCHAR(255) NULL,
-            ModifiedAt DATETIME2(0)  NOT NULL
+            ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_dimSidonProdDimensions_ModifiedAt
             DEFAULT (SYSUTCDATETIME())
         );
