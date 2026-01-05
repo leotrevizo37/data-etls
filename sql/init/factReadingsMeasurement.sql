@@ -2,24 +2,24 @@ IF
     NOT EXISTS (
         SELECT 1
         FROM sys.schemas
-        WHERE name = N'stg'
+        WHERE name = N'dwh'
     )
     BEGIN
-        EXEC ('CREATE SCHEMA stg');
+        EXEC ('CREATE SCHEMA dwh');
     END;
 GO
 
-IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
+IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
     BEGIN
-        CREATE TABLE stg.factReadingsMeasurement
+        CREATE TABLE dwh.factReadingsMeasurement
         (
             OperationId UNIQUEIDENTIFIER NOT NULL,
             SensorTyId UNIQUEIDENTIFIER NOT NULL,
             StatusCode SMALLINT NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
-            LastModifiedAt DATETIME2(0) NOT NULL
-            CONSTRAINT DF_factReadingsMeasurement_LastModifiedAt
+            ModifiedAt DATETIME2(0) NOT NULL
+            CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factReadingsMeasurement
             PRIMARY KEY CLUSTERED (OperationId, SensorTyId)
@@ -41,12 +41,12 @@ IF
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_iD
         WHERE
-            s.name = N'stg'
+            s.name = N'dwh'
             AND o.name = N'factReadingsMeasurement'
             AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
     )
     BEGIN
         CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorTyId
-            ON stg.factReadingsMeasurement (OperationId, SensorTyId);
+            ON dwh.factReadingsMeasurement (OperationId, SensorTyId);
     END;
 GO

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 import os
 import pyodbc
@@ -77,6 +78,20 @@ class SqlDimServerResource:
             "password": self.password,
             "driver": self.driver,
         }
+
+    def get_watermark(self) -> Optional[datetime]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(
+                        "SELECT MAX(ModifiedAt) FROM dbo.sensors;"
+                    )
+                    row = cursor.fetchone()
+                except pyodbc.Error:
+                    return None
+                if row is None:
+                    return None
+                return row.ModifiedAt
 
 @resource
 def dim_sqlserver_resource(_):

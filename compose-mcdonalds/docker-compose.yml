@@ -9,6 +9,7 @@ x-dagster-common: &dagster_common
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
+    - spark-data:/data
   networks:
     - mcdonalds-dagster
   restart: unless-stopped
@@ -163,10 +164,14 @@ services:
     ]
 
   spark-master:
+    user: "0:0"
     build:
       context: ..
       dockerfile: spark/Dockerfile
     container_name: mcdonalds-spark-master
+    depends_on:
+      spark-data-init:
+        condition: service_completed_successfully
     command: [
       "/opt/spark/bin/spark-class",
       "org.apache.spark.deploy.master.Master"
@@ -190,12 +195,15 @@ services:
       start_period: 20s
 
   spark-worker:
+    user: "0:0"
     build:
       context: ..
       dockerfile: spark/Dockerfile
     depends_on:
       spark-master:
         condition: service_started
+      spark-data-init:
+        condition: service_completed_successfully
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
@@ -210,6 +218,17 @@ services:
     networks:
       - mcdonalds-dagster
     restart: unless-stopped
+
+  spark-data-init:
+    image: alpine:3.20
+    user: "0:0"
+    container_name: mcdonalds-spark-data-init
+    volumes:
+      - spark-data:/data
+    command: ["sh", "-c", "mkdir -p /data/dagster_io/spark_dfs && chmod -R 777 /data"]
+    restart: "no"
+    networks:
+      - mcdonalds-dagster
 
 volumes:
   spark-data:

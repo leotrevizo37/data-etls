@@ -1,7 +1,9 @@
 from .factLecturas_ingestion import fact_lecturas_ingestion_job
-from .factHourlyDeviceStatus_ingestion import facthourlydevicestatus_ingestion
+from .fact_operations_tables_job import fact_operations_tables_job
+from .refresh_dimensions_job import refresh_dimensions_job
 
 __all__ = [
     "fact_lecturas_ingestion_job",
-    "facthourlydevicestatus_ingestion"
+    "fact_operations_tables_job",
+    "refresh_dimensions_job"
 ]

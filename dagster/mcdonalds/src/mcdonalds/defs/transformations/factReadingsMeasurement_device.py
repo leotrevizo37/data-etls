@@ -12,7 +12,7 @@ def factReadingsMeasurement_device(
 
     grouped = (
         factoperations_df
-        .groupBy("DeviceId", "LocationId", "LocalTimeSpan", "OperationId")
+        .groupBy("OperationId", "DeviceId", "LocationId", "LocalTimeSpan")
         .agg(
             spark_sum("Anomalies").alias("Anomalies"),
 

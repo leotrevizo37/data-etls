@@ -1,3 +1,7 @@
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
 CREATE OR ALTER PROCEDURE ctl.usp_IngestionControl_DeleteRange
     (
         @SchemaName SYSNAME,

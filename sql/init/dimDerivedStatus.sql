@@ -16,8 +16,8 @@ IF OBJECT_ID(N'dwh.dimDerivedStatus', N'U') IS NULL
             StatusId UNIQUEIDENTIFIER NOT NULL,
             StatusCode SMALLINT IDENTITY (1, 1) PRIMARY KEY,
             Description NVARCHAR(20) NOT NULL,
-            LastModifiedAt DATETIME2(0) NOT NULL
-            CONSTRAINT DF_dimDerivedStatus_LastModifiedAt
+            ModifiedAt DATETIME2(0) NOT NULL
+            CONSTRAINT DF_dimDerivedStatus_ModifiedAt
             DEFAULT (SYSUTCDATETIME())
         );
 

@@ -22,8 +22,8 @@ IF OBJECT_ID(N'dwh.factHourlyDeviceStatus', N'U') IS NULL
             LocalTimeSpan DATETIME2(0) NOT NULL,
             StatusCode SMALLINT NOT NULL,
             Anomalies INT NULL,
-            LastModifiedAt DATETIME2(0) NOT NULL
-            CONSTRAINT DF_factHourlyDeviceStatus_LastModifiedAt
+            ModifiedAt DATETIME2(0) NOT NULL
+            CONSTRAINT DF_factHourlyDeviceStatus_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             Fecha AS CONVERT(DATE, LocalTimeSpan) PERSISTED,
             Hora AS CONVERT(TIME(0), LocalTimeSpan) PERSISTED,

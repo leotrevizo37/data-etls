@@ -5,7 +5,6 @@ import os
 import pyodbc
 from dagster import resource
 
-
 class SqlServerResource:
     def __init__(
         self,
@@ -95,7 +94,7 @@ class SqlServerResource:
                      from_utc: datetime,
                      to_utc: Optional[datetime] = None) -> int:
         if to_utc is None:
-            datetime.now(timezone.utc)
+            to_utc = datetime.now(timezone.utc)
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
