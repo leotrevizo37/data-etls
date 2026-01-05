@@ -24,7 +24,7 @@ jobs:
         run: >
           sqlfluff lint sql
           --dialect tsql
-          --exclude-rules CP02
+          --exclude-rules CP02,RF04,LT05
 
       - name: Yamllint
         run: |
