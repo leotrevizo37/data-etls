@@ -12,8 +12,8 @@ def termostatos(
         .filter(
             (
                     (col("_device_type") == "A/C de Cocina") |
-                    (col("_device_name") == "A/C de Comedor") |
-                    (col("_device_name") == "Ambiente playland")
+                    (col("_device_type") == "A/C de Comedor") |
+                    (col("_device_type") == "Ambiente playland")
             )
         )
     )
@@ -47,10 +47,9 @@ def termostatos(
             "SensorTyId",
             "StatusCode",
             "LocalTimeSpan",
-            "Promedio",
+            "MeasurementValue",
             "_sensor_type",
         )
-        .withColumnRenamed("Promedio", "MeasurementValue")
         .withColumn("Anomalies", lit(None))
     )
 
