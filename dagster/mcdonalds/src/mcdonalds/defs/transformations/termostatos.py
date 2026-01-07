@@ -27,13 +27,13 @@ def termostatos(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "StatusCode",
             "LocalTimeSpan",
             "Promedio",
             "_sensor_type",
         )
         .withColumnRenamed("Promedio", "MeasurementValue")
         .withColumn("Anomalies", lit(None))
-        .withColumn("StatusCode", lit(1))
     )
 
     temperature_stats_df = (
