@@ -75,23 +75,6 @@ def stats_calculator_time_window(
         spark_sum("is_zero").over(w_group)
     )
 
-    stats_df = (
-        base
-        .groupBy("DeviceId", "HourStart")
-        .agg(
-            avg("Value").alias("Val_dummy"),
-            spark_sum(
-                spark_when(col("Value") >= min_expected_value, 1).otherwise(0)
-            ).alias("is_okay"),
-            count("*").alias("total_readings"),
-            spark_max("zero_run_len").alias("max_zero_run_len"),
-        )
-        .withColumn(
-            "StatusCode",
-            spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
-        )
-    )
-
     per_min5_max_df = (
         base
         .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId", "_sensor_type")
@@ -103,6 +86,33 @@ def stats_calculator_time_window(
     per5max_df = per_min5_max_df.withColumn(
         "HourStart",
         date_trunc("hour", col("5MinuteStart"))
+    )
+
+    per5_device_max_df = (
+        per5max_df
+        .groupBy("DeviceId", "HourStart", "5MinuteStart", "LocationId", "SensorTyId", "_sensor_type")
+        .agg(
+            spark_max("Value_phase_max").alias("Value_5m_max")
+        )
+    )
+
+    stats_df = (
+        per5_device_max_df
+        .groupBy("DeviceId", "HourStart")
+        .agg(
+            avg("Value_5m_max").alias("Val_dummy"),
+            spark_sum(
+                spark_when(col("Value_5m_max") > lit(min_expected_value), 1).otherwise(0)
+            ).alias("is_okay"),
+        )
+        .withColumn("total_readings", lit(12))
+        .withColumn(
+            "StatusCode",
+            spark_when(
+                col("is_okay") / col("total_readings") >= lit(0.50),
+                lit(1)
+            ).otherwise(lit(3))
+        )
     )
 
     valor_df = (
