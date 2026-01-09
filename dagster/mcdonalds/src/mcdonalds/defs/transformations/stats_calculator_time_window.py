@@ -109,7 +109,7 @@ def stats_calculator_time_window(
         .withColumn(
             "StatusCode",
             spark_when(
-                col("is_okay") / col("total_readings") >= lit(0.50),
+                col("is_okay") / col("total_readings") >= lit(0.40),
                 lit(1)
             ).otherwise(lit(3))
         )
