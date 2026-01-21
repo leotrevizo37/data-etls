@@ -27,7 +27,7 @@ def cuartos_congelacion(
             "Temperatura",
             -10,
             0,
-            180
+            240
         )
         .select(
             "DeviceId",
