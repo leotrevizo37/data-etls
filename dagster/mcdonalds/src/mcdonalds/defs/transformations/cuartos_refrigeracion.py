@@ -4,20 +4,29 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, expr
 
 from .stats_calculator import stats_calculator
+from .stats_calculator_time_window import stats_calculator_time_window
 
 def cuartos_refrigeracion(
         factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
-        .filter((col("_device_type") == "Cuarto de conservación"))
+        .filter(
+            col("_device_type").isin([
+                "Cuarto de conservación",
+                "Ambiente conservacion",
+                "Compresor conservación"
+            ])
+        )
     )
 
     temperature_stats_df = (
-        stats_calculator(
+        stats_calculator_time_window(
             base,
             "Temperatura",
             34,
-            40)
+            40,
+            120
+        )
         .select(
             "DeviceId",
             "LocationId",
