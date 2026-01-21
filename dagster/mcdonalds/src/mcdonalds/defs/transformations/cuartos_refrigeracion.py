@@ -25,7 +25,7 @@ def cuartos_refrigeracion(
             "Temperatura",
             34,
             40,
-            120
+            240
         )
         .select(
             "DeviceId",
