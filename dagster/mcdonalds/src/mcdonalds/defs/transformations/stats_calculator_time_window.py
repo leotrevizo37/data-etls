@@ -1,38 +1,38 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import (col,
-                                   date_trunc,
-                                   avg,
-                                   sum as spark_sum,
-                                   count,
-                                   lag,
-                                   lit,
-                                   when as spark_when,
-                                   max as spark_max,
-                                   unix_timestamp,
-                                   from_unixtime,
-                                   floor,
-                                   min as spark_min,
-                                   explode,
-                                   sequence,
-                                   expr,
-                                   coalesce)
+from pyspark.sql.functions import (
+    col,
+    date_trunc,
+    avg,
+    sum as spark_sum,
+    count,
+    lag,
+    lit,
+    when as spark_when,
+    max as spark_max,
+    unix_timestamp,
+    from_unixtime,
+    floor,
+    min as spark_min,
+    explode,
+    sequence,
+    expr,
+    coalesce)
 
 from pyspark.sql.window import Window
 
+
 def stats_calculator_time_window(
-        base: DataFrame,
-        sensor_type: str = "Corriente",
-        min_expected_value: int = 0,
-        max_expected_value: Optional[int] = None,
-        time_window: Optional[int] = 20
-        ) -> Optional[DataFrame]:
+    base: DataFrame,
+    sensor_type: str = "Corriente",
+    min_expected_value: int = 0,
+    max_expected_value: Optional[int] = None,
+    time_window: Optional[int] = 20
+) -> Optional[DataFrame]:
     base = (
         base
-        .filter(
-            (col("_sensor_type") == sensor_type)
-        )
+        .filter(col("_sensor_type") == sensor_type)
         .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
         .withColumn(
             "5MinuteStart",
@@ -48,12 +48,13 @@ def stats_calculator_time_window(
         )
     )
 
-
     w = Window.partitionBy("HourStart").orderBy("LocalTimeSpan")
-    base = base.withColumn(
-        "is_zero",
-        (col("Value") <= min_expected_value).cast("int")
-    )
+
+    is_bad = col("Value") <= lit(min_expected_value)
+    if max_expected_value is not None:
+        is_bad = is_bad | (col("Value") > lit(max_expected_value))
+
+    base = base.withColumn("is_zero", is_bad.cast("int"))
 
     prev_is_zero = lag("is_zero", 1).over(w)
     base = base.withColumn(
@@ -69,6 +70,7 @@ def stats_calculator_time_window(
         "zero_group",
         spark_sum("zero_run_start").over(w)
     )
+
     w_group = Window.partitionBy("HourStart", "zero_group")
     base = base.withColumn(
         "zero_run_len",
@@ -96,13 +98,17 @@ def stats_calculator_time_window(
         )
     )
 
+    ok_cond = col("Value_5m_max") > lit(min_expected_value)
+    if max_expected_value is not None:
+        ok_cond = ok_cond & (col("Value_5m_max") <= lit(max_expected_value))
+
     stats_df = (
         per5_device_max_df
         .groupBy("DeviceId", "HourStart")
         .agg(
             avg("Value_5m_max").alias("Val_dummy"),
             spark_sum(
-                spark_when(col("Value_5m_max") > lit(min_expected_value), 1).otherwise(0)
+                spark_when(ok_cond, 1).otherwise(0)
             ).alias("is_okay"),
         )
         .withColumn("total_readings", lit(12))
@@ -149,7 +155,7 @@ def stats_calculator_time_window(
             "LocationId",
             "SensorTyId",
             explode(
-                sequence("min_win", "max_win", expr("INTERVAL 20 MINUTES"))
+                sequence("min_win", "max_win", expr("INTERVAL " + str(time_window) + " MINUTES"))
             ).alias("xMinuteStart"),
         )
     )
@@ -173,13 +179,13 @@ def stats_calculator_time_window(
     min_limit = min_expected_value
 
     anom_condition = (
-            (col("row_count") == 0) |
-            ((col("row_count") > 0) & (col("zero_count") == col("row_count")))
+        (col("row_count") == 0) |
+        ((col("row_count") > 0) & (col("zero_count") == col("row_count")))
     )
 
     if min_limit is not None:
         anom_condition = anom_condition | (
-                (col("row_count") < lit(min_limit)) & (col("zero_count") > 0)
+            (col("row_count") < lit(min_limit)) & (col("zero_count") > 0)
         )
     else:
         anom_condition = anom_condition | (col("zero_count") > 0)
@@ -195,6 +201,9 @@ def stats_calculator_time_window(
         )
     )
 
+    time_window_mins = int(time_window) if time_window is not None else 20
+    hours_in_window = int(time_window_mins / 60)
+
     anomalies_df = (
         windows_with_anom
         .groupBy("DeviceId", "HourStart", "SensorTyId")
@@ -203,9 +212,14 @@ def stats_calculator_time_window(
         )
         .withColumn(
             "Anomalies",
-            spark_when(col("Anomalies_raw") > 3, lit(3)).otherwise(col("Anomalies_raw"))
+            spark_when(
+                lit(hours_in_window) > lit(1),
+                spark_when(col("Anomalies_raw") == lit(hours_in_window), lit(1)).otherwise(lit(0))
+            ).otherwise(
+                spark_when(col("Anomalies_raw") > lit(3), lit(3)).otherwise(col("Anomalies_raw"))
+            )
         )
-        .select("HourStart", "Anomalies", "DeviceId", )
+        .select("HourStart", "Anomalies", "DeviceId")
     )
 
     stats_current_df = (
