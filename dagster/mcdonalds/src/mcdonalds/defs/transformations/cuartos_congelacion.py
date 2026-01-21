@@ -4,20 +4,31 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, expr
 
 from .stats_calculator import stats_calculator
+from .stats_calculator_time_window import stats_calculator_time_window
 
 def cuartos_congelacion(
         factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
-        .filter((col("_device_type") == "Cuarto de congelación"))
+        .filter(
+            col("_device_type").isin([
+                "Cuarto de congelación",
+                "Ambiente congelacion",
+                "Compresor congelación",
+                "Resitencia de deshielo",
+                "Resistencia de deshielo"
+            ])
+        )
     )
 
     temperature_stats_df = (
-        stats_calculator(
+        stats_calculator_time_window(
             base,
             "Temperatura",
             -10,
-            0)
+            0,
+            180
+        )
         .select(
             "DeviceId",
             "LocationId",
@@ -32,7 +43,12 @@ def cuartos_congelacion(
 
     current_stats_df = (
         stats_calculator(
-            base,
+            base
+            .filter(
+                (col("_sensor_name") != "Resistencia de deshielo") &
+                (col("_device_type") != "Resitencia de deshielo") &
+                (col("_device_type") != "Resistencia de deshielo")
+            ),
             "Corriente",
             1)
         .select(
