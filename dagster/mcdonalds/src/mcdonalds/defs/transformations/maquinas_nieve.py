@@ -3,7 +3,7 @@ from typing import Optional
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, expr
 
-from .stats_calculator_time_window import (stats_calculator_time_window)
+from .stats_calculator_no_window import (stats_calculator_no_window)
 
 def maquinas_nieve(
         factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
@@ -17,12 +17,12 @@ def maquinas_nieve(
     )
 
     maquinas_nieve_df = (
-        stats_calculator_time_window(
+        stats_calculator_no_window(
             base,
             "Corriente",
-            1,
+            0.4,
             None,
-            20
+            180
         )
         .select(
             "DeviceId",
