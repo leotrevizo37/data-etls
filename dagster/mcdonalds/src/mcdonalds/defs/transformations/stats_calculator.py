@@ -15,7 +15,8 @@ def stats_calculator(
         base: DataFrame,
         sensor_type: str = "Corriente",
         min_expected_value: int = 0,
-        max_expected_value: Optional[int] = None
+        max_expected_value: Optional[int] = None,
+        ok_ratio: Optional[float] = 0.5
 ) -> Optional[DataFrame]:
 
     if max_expected_value is None:
@@ -52,7 +53,7 @@ def stats_calculator(
             )
             .withColumn(
                 "StatusCode",
-                spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
+                spark_when(col("is_okay") / col("total_readings") >= ok_ratio, 1).otherwise(3)
             )
             .withColumn("Promedio", col("is_okay") / col("total_readings"))
             .withColumnRenamed("Anomalies_raw", "Anomalies")
@@ -94,7 +95,7 @@ def stats_calculator(
             )
             .withColumn(
                 "StatusCode",
-                spark_when(col("is_okay") / col("total_readings") >= 0.50, 1).otherwise(3)
+                spark_when(col("is_okay") / col("total_readings") >= ok_ratio, 1).otherwise(3)
             )
             .withColumn("Promedio", col("is_okay") / col("total_readings"))
             .withColumnRenamed("Anomalies_raw", "Anomalies")

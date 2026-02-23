@@ -23,12 +23,13 @@ from pyspark.sql.functions import (
 from pyspark.sql.window import Window
 
 
-def stats_calculator_no_window(
+def stats_calculator_anomalies(
     base: DataFrame,
     sensor_type: str = "Corriente",
     min_expected_value: float = 0,
     max_expected_value: Optional[int] = None,
-    time_window: Optional[int] = 20
+    time_window: Optional[int] = 20,
+    ok_ratio: Optional[float] = 0.5
 ) -> Optional[DataFrame]:
     base = (
         base
@@ -90,14 +91,6 @@ def stats_calculator_no_window(
         date_trunc("hour", col("5MinuteStart"))
     )
 
-    per5_device_max_df = (
-        per5max_df
-        .groupBy("DeviceId", "HourStart", "5MinuteStart", "LocationId", "SensorTyId", "_sensor_type")
-        .agg(
-            spark_max("Value_phase_max").alias("Value_5m_max")
-        )
-    )
-
     ok_cond = col("Value") > lit(min_expected_value)
     if max_expected_value is not None:
         ok_cond = ok_cond & (col("Value") <= lit(max_expected_value))
@@ -106,6 +99,7 @@ def stats_calculator_no_window(
         base
         .groupBy("DeviceId", "HourStart")
         .agg(
+            avg("Value").alias("Val_dummy"),
             spark_sum(
                 spark_when(ok_cond, 1).otherwise(0)
             ).alias("is_okay"),
@@ -114,10 +108,10 @@ def stats_calculator_no_window(
         .withColumn(
             "StatusCode",
             spark_when(
-                col("is_okay") / col("total_readings") >= lit(0.35),
-                lit(1)
-            ).otherwise(lit(3))
+                col("is_okay") / col("total_readings") >= ok_ratio,
+            lit(1)).otherwise(lit(3))
         )
+        .withColumnRenamed("total_readings", "ReadingsCount")
     )
 
     valor_df = (

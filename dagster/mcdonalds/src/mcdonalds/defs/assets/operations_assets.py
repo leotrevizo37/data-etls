@@ -18,6 +18,30 @@ from dagster import (
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
 
+
+
+from pyspark.sql.functions import (
+    col,
+    date_trunc,
+    avg,
+    sum as spark_sum,
+    count,
+    lag,
+    lit,
+    when as spark_when,
+    max as spark_max,
+    unix_timestamp,
+    from_unixtime,
+    floor,
+    min as spark_min,
+    explode,
+    sequence,
+    expr,
+    coalesce)
+
+
+
+
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
 
@@ -158,12 +182,14 @@ def load_factlecturas_extended_op(
         "transformation_ops"
     },
     ins={
+        "window": In(Dict[str, Any]),
         "factlecturas_extended_df": In(Optional[DataFrame])
     },
     out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
 )
 def build_devices_df_op(
         context: OpExecutionContext,
+        window: Dict[str, Any],
         factlecturas_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
@@ -174,17 +200,12 @@ def build_devices_df_op(
 
     methods = [
         "maquinas_nieve",
-        "maquinas_soda",
-        "cuartos_refrigeracion",
-        "cuartos_congelacion",
-        "luces",
-        "termostatos",
     ]
 
     for method in methods:
         context.log.info("Materializing dataframe for method: " + method)
         fn = getattr(transformation_ops, method)
-        df = fn(factlecturas_extended_df).select(
+        df = fn(factlecturas_extended_df, window["fetch_from"], window["to_utc"]).select(
             col("OperationId"),
             col("DeviceId"),
             col("LocationId"),
@@ -247,6 +268,8 @@ def write_factreadingsmeasurement_op(
     max_time_span: Optional[datetime] = None
     succeeded = False
     error_message: Optional[str] = None
+    context.log.info(devices_df.select("*").first)
+    context.log.info(devices_df.select("*").filter(col("SensorTyId").isNull()).first())
 
     try:
         if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
@@ -420,7 +443,9 @@ def operations_assets(data_transformations):
         raw_dims_df=raw_dims_df,
         window=fetch_from_ts
     )
-    devices_df = build_devices_df_op(factlecturas_extended_df)
+    devices_df = build_devices_df_op(
+        window= fetch_from_ts,
+        factlecturas_extended_df=factlecturas_extended_df)
     hourly_status_out = write_facthourlydevicestatus_op(
         devices_df=devices_df,
         window=fetch_from_ts

@@ -37,8 +37,8 @@ class TransformationOps:
         return factReadingsMeasurement_device(df)
     def luces(self, df:DataFrame) -> Optional[DataFrame]:
         return luces(df)
-    def maquinas_nieve(self, df:DataFrame) -> Optional[DataFrame]:
-        return maquinas_nieve(df)
+    def maquinas_nieve(self, df:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return maquinas_nieve(df, min_hour, max_hour)
     def maquinas_soda(self, df:DataFrame) -> Optional[DataFrame]:
         return maquinas_soda(df)
     def raw_dimensions(
