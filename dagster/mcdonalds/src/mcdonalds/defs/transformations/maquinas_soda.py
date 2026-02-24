@@ -26,7 +26,6 @@ def maquinas_soda(
         )
     )
 
-
     current_stats_df = (
         stats_calculator_anomalies(
             base,
@@ -88,7 +87,7 @@ def maquinas_soda(
 
     scaffold_df = (
         lecturas_time_hours(
-            dimensions_df.filter(col("_device_type") == "Máquina de nieve"),
+            dimensions_df.filter(col("_device_type") == "Máquina de sodas"),
             min_hour,
             max_hour
         )

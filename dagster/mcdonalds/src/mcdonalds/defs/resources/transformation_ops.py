@@ -17,10 +17,10 @@ from pyspark.sql import DataFrame
 from dagster import resource
 
 class TransformationOps:
-    def cuartos_congelacion(self, df:DataFrame) -> Optional[DataFrame]:
-        return cuartos_congelacion(df)
-    def cuartos_refrigeracion(self, df:DataFrame) -> Optional[DataFrame]:
-        return cuartos_refrigeracion(df)
+    def cuartos_congelacion(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return cuartos_congelacion(df, dims, min_hour, max_hour)
+    def cuartos_refrigeracion(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return cuartos_refrigeracion(df, dims, min_hour, max_hour)
     def factlecturas_extended(
             self,
             spark_res: SparkResource,
@@ -35,19 +35,19 @@ class TransformationOps:
         )
     def factReadingsMeasurement_device(self, df:DataFrame) -> Optional[DataFrame]:
         return factReadingsMeasurement_device(df)
-    def luces(self, df:DataFrame) -> Optional[DataFrame]:
-        return luces(df)
+    def luces(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return luces(df, dims, min_hour, max_hour)
     def maquinas_nieve(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return maquinas_nieve(df, dims, min_hour, max_hour)
-    def maquinas_soda(self, df:DataFrame) -> Optional[DataFrame]:
-        return maquinas_soda(df)
+    def maquinas_soda(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return maquinas_soda(df, dims, min_hour, max_hour)
     def raw_dimensions(
             self,
             spark_res: SparkResource,
             dim_sqlserver: SqlDimServerResource) -> Optional[DataFrame]:
         return raw_dimensions(spark_res, dim_sqlserver)
-    def termostatos(self, df:DataFrame) -> Optional[DataFrame]:
-        return termostatos(df)
+    def termostatos(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
+        return termostatos(df, dims, min_hour, max_hour)
 
 @resource
 def transformation_ops():

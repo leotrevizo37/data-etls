@@ -29,8 +29,7 @@ def stats_calculator_anomalies(
     min_expected_value: float = 0,
     max_expected_value: Optional[int] = None,
     time_window: Optional[int] = 20,
-    ok_ratio: Optional[float] = 0.5
-) -> Optional[DataFrame]:
+    ok_ratio: Optional[float] = 0.5) -> Optional[DataFrame]:
     base = (
         base
         .filter(col("_sensor_type") == sensor_type)

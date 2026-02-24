@@ -179,6 +179,11 @@ def build_devices_df_op(
 
     methods = [
         "maquinas_nieve",
+        "maquinas_soda",
+        "cuartos_refrigeracion",
+        "cuartos_congelacion",
+        "luces",
+        "termostatos",
     ]
 
     for method in methods:
@@ -308,7 +313,6 @@ def write_facthourlydevicestatus_op(
             context.log.info("FactLecturas window was empty")
             succeeded = True
         else:
-            context.log.info("entrando a proceso que toma las readings y las procesa de sensor_id a device_id")
             aggregated_df = factReadingsMeasurement_device(devices_df)
             inserted_ = spark_res.write_fact_operations_device(aggregated_df)
             max_time_span = spark_res.get_max_time_span(aggregated_df, "LocalTimeSpan")

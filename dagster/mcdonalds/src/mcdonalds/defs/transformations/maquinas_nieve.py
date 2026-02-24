@@ -61,7 +61,6 @@ def maquinas_nieve(
         )
     )
 
-
     scaffold_enriched = (
         scaffold_df
         .fillna({"ReadingsCount": 0, "StatusCode": 3})
