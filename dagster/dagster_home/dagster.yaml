@@ -53,3 +53,12 @@ schedule_storage:
         env: DAGSTER_PG_DB
       port:
         env: DAGSTER_PG_PORT
+
+retention:
+  schedule:
+    purge_after_days: 14
+  sensor:
+    purge_after_days:
+      skipped: 1
+      success: 7
+      failure: 14
