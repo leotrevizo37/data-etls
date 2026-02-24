@@ -208,7 +208,7 @@ class SparkResource:
                 "user": self.jdbc_user,
                 "password": self.jdbc_password,
                 "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                "batchsize": "4000",
+                "batchsize": "500",
             },
         )
 
@@ -218,7 +218,7 @@ class SparkResource:
         if df.rdd.isEmpty():
             return 0
 
-        df_write = df.coalesce(4)
+        df_write = df.coalesce(1)
         row_count = df_write.count()
 
         df_write.write.jdbc(
@@ -234,7 +234,7 @@ class SparkResource:
         if df.rdd.isEmpty():
             return 0
 
-        df_write = df.coalesce(4)
+        df_write = df.coalesce(1)
         row_count = df_write.count()
 
         df_write.write.jdbc(
