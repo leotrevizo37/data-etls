@@ -13,5 +13,5 @@ cleanup_schedule = ScheduleDefinition(
         }
     },
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
