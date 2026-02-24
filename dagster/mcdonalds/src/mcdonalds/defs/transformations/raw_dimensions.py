@@ -54,7 +54,7 @@ def raw_dimensions(
 
     sensors_devices_locations_df = (
         dbo_sensors_df.alias("s")
-        .filter(col("s.Active") == True)
+        .filter(col("s.Active"))
         .join(dbo_sensor_tys_df.alias("sty"), on="SensorTyId", how="left")
         .select(
             col("s.SensorId"),

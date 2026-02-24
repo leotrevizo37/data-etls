@@ -8,6 +8,7 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 from .stats_calculator_anomalies import (stats_calculator_anomalies)
 
+
 def cuartos_refrigeracion(
         factlecturas_extended_df: DataFrame,
         dimensions_df: DataFrame,
