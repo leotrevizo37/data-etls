@@ -56,9 +56,9 @@ schedule_storage:
 
 retention:
   schedule:
-    purge_after_days: 14
+    purge_after_days: 10
   sensor:
     purge_after_days:
       skipped: 1
       success: 7
-      failure: 14
+      failure: 10

@@ -37,7 +37,7 @@ operations_sched_every_1h = ScheduleDefinition(
 operations_sched_every_w = ScheduleDefinition(
     name="operations_sched_every_w",
     job=fact_operations_tables_job,
-    cron_schedule="0 5-16 * * 1-5",
+    cron_schedule="30 5-16 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.STOPPED,
 )
