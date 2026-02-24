@@ -111,12 +111,11 @@ def stats_calculator_anomalies(
                 col("is_okay") / col("total_readings") >= ok_ratio,
             lit(1)).otherwise(lit(3))
         )
-        .withColumnRenamed("total_readings", "ReadingsCount")
     )
 
     valor_df = (
         per5max_df
-        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "_sensor_type")
+        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "SensorId", "_sensor_type")
         .agg(
             avg("Value_phase_max").alias("MeasurementValue"),
             count("*").alias("total_sensors"),
@@ -125,7 +124,7 @@ def stats_calculator_anomalies(
 
     agg_20 = (
         base
-        .groupBy("DeviceId", "LocationId", "HourStart", "xMinuteStart", "SensorTyId")
+        .groupBy("DeviceId", "LocationId", "HourStart", "xMinuteStart", "SensorTyId", "SensorId")
         .agg(
             count("*").alias("row_count"),
             spark_sum(col("is_zero").cast("int")).alias("zero_count"),
@@ -134,7 +133,7 @@ def stats_calculator_anomalies(
 
     device_span = (
         base
-        .groupBy("DeviceId", "LocationId", "SensorTyId")
+        .groupBy("DeviceId", "LocationId", "SensorTyId", "SensorId")
         .agg(
             spark_min("xMinuteStart").alias("min_win"),
             spark_max("xMinuteStart").alias("max_win"),
@@ -147,6 +146,7 @@ def stats_calculator_anomalies(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "SensorId",
             explode(
                 sequence("min_win", "max_win", expr("INTERVAL " + str(time_window) + " MINUTES"))
             ).alias("xMinuteStart"),
@@ -157,7 +157,7 @@ def stats_calculator_anomalies(
         all_windows
         .join(
             agg_20,
-            on=["DeviceId", "LocationId", "xMinuteStart", "SensorTyId"],
+            on=["DeviceId", "LocationId", "xMinuteStart", "SensorTyId", "SensorId"],
             how="left",
         )
         .withColumn("row_count", coalesce(col("row_count"), lit(0)))
@@ -199,7 +199,7 @@ def stats_calculator_anomalies(
 
     anomalies_df = (
         windows_with_anom
-        .groupBy("DeviceId", "HourStart", "SensorTyId")
+        .groupBy("DeviceId", "HourStart", "SensorId")
         .agg(
             spark_sum("Anomalia_x_min").alias("Anomalies_raw"),
         )
@@ -212,16 +212,17 @@ def stats_calculator_anomalies(
                 spark_when(col("Anomalies_raw") > lit(3), lit(3)).otherwise(col("Anomalies_raw"))
             )
         )
-        .select("HourStart", "Anomalies", "DeviceId")
+        .select("HourStart", "Anomalies", "DeviceId", "SensorId")
     )
 
     stats_current_df = (
         valor_df
         .join(stats_df.drop("Val_dummy"), on=["HourStart", "DeviceId"], how="inner")
-        .join(anomalies_df, on=["HourStart", "DeviceId"], how="left")
+        .join(anomalies_df, on=["HourStart", "DeviceId", "SensorId"], how="left")
         .fillna({"Anomalies": 0})
         .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
         .withColumnRenamed("HourStart", "LocalTimeSpan")
+        .withColumnRenamed("total_sensors", "ReadingsCount")
     )
 
     if stats_current_df.rdd.isEmpty():
