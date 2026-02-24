@@ -44,6 +44,7 @@ def cuartos_refrigeracion(
             "MeasurementValue",
             "Anomalies",
             "_sensor_type",
+            "ReadingsCount",
         )
     )
 
@@ -61,6 +62,7 @@ def cuartos_refrigeracion(
             "StatusCode",
             "MeasurementValue",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )
@@ -77,6 +79,26 @@ def cuartos_refrigeracion(
             "MeasurementValue",
             "Anomalies",
             "_sensor_type",
+            "ReadingsCount",
+        )
+    )
+
+    scaffold_df = (
+        lecturas_time_hours(
+            dimensions_df.filter(
+                col("_device_type").isin([
+                    "Cuarto de conservación",
+                    "Ambiente conservacion",
+                    "Compresor conservación"
+                ])
+            ),
+            min_hour,
+            max_hour
+        )
+        .join(
+            cuartos_refrigeracion_df,
+            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            how="left"
         )
     )
 

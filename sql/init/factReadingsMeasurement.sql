@@ -18,6 +18,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             StatusCode SMALLINT NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
+            ReadingsCount INT NULL,
             ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),

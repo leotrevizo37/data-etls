@@ -45,6 +45,7 @@ def cuartos_congelacion(
             "MeasurementValue",
             "Anomalies",
             "_sensor_type",
+            "ReadingsCount",
         )
     )
 
@@ -67,6 +68,7 @@ def cuartos_congelacion(
             "StatusCode",
             "MeasurementValue",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )
@@ -83,6 +85,7 @@ def cuartos_congelacion(
             "MeasurementValue",
             "Anomalies",
             "_sensor_type",
+            "ReadingsCount",
         )
     )
 

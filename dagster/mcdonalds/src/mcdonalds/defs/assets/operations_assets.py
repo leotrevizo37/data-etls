@@ -264,6 +264,7 @@ def write_factreadingsmeasurement_op(
                     "SensorId",
                     "StatusCode",
                     "MeasurementValue",
+                    "ReadingsCount",
                     "Anomalies"
                 )
             )
