@@ -1,13 +1,18 @@
 from typing import Optional
 
+from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, expr
 
+from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
-from .stats_calculator_time_window import stats_calculator_time_window
+from .stats_calculator_anomalies import (stats_calculator_anomalies)
 
 def cuartos_congelacion(
-        factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
+        factlecturas_extended_df: DataFrame,
+        dimensions_df: DataFrame,
+        min_hour: str,
+        max_hour: str) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
         .filter(
@@ -22,17 +27,19 @@ def cuartos_congelacion(
     )
 
     temperature_stats_df = (
-        stats_calculator_time_window(
+        stats_calculator_anomalies(
             base,
             "Temperatura",
             -10,
             0,
-            240
+            240,
+            0.25
         )
         .select(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "SensorId",
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
@@ -55,6 +62,7 @@ def cuartos_congelacion(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "SensorId",
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
@@ -69,6 +77,7 @@ def cuartos_congelacion(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "SensorId",
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
@@ -77,18 +86,47 @@ def cuartos_congelacion(
         )
     )
 
-    if cuartos_conservacion_df.rdd.isEmpty():
+    scaffold_df = (
+        lecturas_time_hours(
+            dimensions_df.filter(
+                col("_device_type").isin([
+                    "Cuarto de congelación",
+                    "Ambiente congelacion",
+                    "Compresor congelación",
+                    "Resitencia de deshielo",
+                    "Resistencia de deshielo"
+                ])
+            ),
+            min_hour,
+            max_hour
+        )
+        .join(
+            cuartos_conservacion_df,
+            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            how="left"
+        )
+    )
+
+    scaffold_enriched = (
+        scaffold_df
+        .fillna({"ReadingsCount": 0, "StatusCode": 3})
+    )
+
+    if scaffold_enriched.rdd.isEmpty():
         return None
 
     group_ids_df = (
-        cuartos_conservacion_df
+        scaffold_enriched
         .select("DeviceId", "LocalTimeSpan")
         .distinct()
         .withColumn("OperationId", expr("uuid()"))
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
+    _ = group_ids_df.count()
+
     group_with_guid_df = (
-        cuartos_conservacion_df
+        scaffold_enriched
         .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
     )
 
