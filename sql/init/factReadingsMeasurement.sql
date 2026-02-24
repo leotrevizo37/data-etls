@@ -14,7 +14,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
         CREATE TABLE dwh.factReadingsMeasurement
         (
             OperationId UNIQUEIDENTIFIER NOT NULL,
-            SensorTyId UNIQUEIDENTIFIER NOT NULL,
+            SensorId UNIQUEIDENTIFIER NOT NULL,
             StatusCode SMALLINT NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
@@ -22,7 +22,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factReadingsMeasurement
-            PRIMARY KEY CLUSTERED (OperationId, SensorTyId)
+            PRIMARY KEY CLUSTERED (OperationId, SensorId)
             WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
             CONSTRAINT FK_factReadingsMeasurement_factHourlyDeviceStatus
             FOREIGN KEY (OperationId)
@@ -43,10 +43,10 @@ IF
         WHERE
             s.name = N'dwh'
             AND o.name = N'factReadingsMeasurement'
-            AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
+            AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorId'
     )
     BEGIN
-        CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorTyId
-            ON dwh.factReadingsMeasurement (OperationId, SensorTyId);
+        CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorId
+            ON dwh.factReadingsMeasurement (OperationId, SensorId);
     END;
 GO

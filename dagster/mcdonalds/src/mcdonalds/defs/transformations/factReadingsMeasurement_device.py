@@ -2,6 +2,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col,
     sum as spark_sum,
+    min as spark_min,
     max as spark_max,
     when,
     lit,
@@ -10,8 +11,19 @@ from pyspark.sql.functions import (
 def factReadingsMeasurement_device(
         factoperations_df: DataFrame) -> DataFrame:
 
-    grouped = (
+    sensor_typed_df = (
         factoperations_df
+        .groupBy("OperationId", "DeviceId", "LocationId", "LocalTimeSpan", "SensorTyId", "_sensor_type")
+        .agg(
+            when(
+                spark_min(col("StatusCode")) == 1, 1
+            ).otherwise(3).alias("StatusCode"),
+            spark_sum("Anomalies").alias("Anomalies"),
+        )
+    )
+
+    grouped = (
+        sensor_typed_df
         .groupBy("OperationId", "DeviceId", "LocationId", "LocalTimeSpan")
         .agg(
             spark_sum("Anomalies").alias("Anomalies"),
@@ -129,14 +141,6 @@ def factReadingsMeasurement_device(
                 & col("current_status").isNull()
                 & col("termostatus").isNull(),
                 lit(1),
-            )
-            .when(
-                (col("amperage_status").isNull())
-                & (col("pressure_status").isNull())
-                & (col("temperature_status") == 0)
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(4),
             )
             .when(
                 (col("amperage_status").isNull())

@@ -18,6 +18,7 @@ from dagster import (
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
 
+
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
 
@@ -158,12 +159,16 @@ def load_factlecturas_extended_op(
         "transformation_ops"
     },
     ins={
+        "window": In(Dict[str, Any]),
+        "dims": In(Optional[DataFrame]),
         "factlecturas_extended_df": In(Optional[DataFrame])
     },
     out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
 )
 def build_devices_df_op(
         context: OpExecutionContext,
+        window: Dict[str, Any],
+        dims: Optional[DataFrame] = None,
         factlecturas_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
@@ -184,7 +189,7 @@ def build_devices_df_op(
     for method in methods:
         context.log.info("Materializing dataframe for method: " + method)
         fn = getattr(transformation_ops, method)
-        df = fn(factlecturas_extended_df).select(
+        df = fn(factlecturas_extended_df, dims, window["fetch_from"], window["to_utc"]).select(
             col("OperationId"),
             col("DeviceId"),
             col("LocationId"),
@@ -256,7 +261,7 @@ def write_factreadingsmeasurement_op(
                 devices_df
                 .select(
                     "OperationId",
-                    "SensorTyId",
+                    "SensorId",
                     "StatusCode",
                     "MeasurementValue",
                     "Anomalies"
@@ -316,6 +321,7 @@ def write_facthourlydevicestatus_op(
                 context.log.warning("written 0 rows to factHourlyDeviceStatus")
     except Exception as ex:
         error_message = str(ex)
+        context.log.warning(ex)
         succeeded = False
 
     return (
@@ -420,7 +426,10 @@ def operations_assets(data_transformations):
         raw_dims_df=raw_dims_df,
         window=fetch_from_ts
     )
-    devices_df = build_devices_df_op(factlecturas_extended_df)
+    devices_df = build_devices_df_op(
+        window= fetch_from_ts,
+        dims=raw_dims_df,
+        factlecturas_extended_df=factlecturas_extended_df)
     hourly_status_out = write_facthourlydevicestatus_op(
         devices_df=devices_df,
         window=fetch_from_ts
