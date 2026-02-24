@@ -31,6 +31,7 @@ def luces(
             "StatusCode",
             "MeasurementValue",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )

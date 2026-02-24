@@ -38,6 +38,7 @@ def termostatos(
             "StatusCode",
             "Promedio",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumnRenamed("Promedio", "MeasurementValue")
         .withColumn("Anomalies", lit(None))
@@ -57,6 +58,7 @@ def termostatos(
             "StatusCode",
             "MeasurementValue",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )
