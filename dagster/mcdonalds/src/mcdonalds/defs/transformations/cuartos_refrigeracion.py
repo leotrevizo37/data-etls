@@ -28,8 +28,8 @@ def cuartos_refrigeracion(
         stats_calculator_anomalies(
             base,
             "Temperatura",
-            -10,
-            0,
+            34,
+            40,
             240,
             0.25
         )
