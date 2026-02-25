@@ -193,9 +193,11 @@ def build_devices_df_op(
             col("LocationId"),
             col("SensorTyId"),
             col("StatusCode"),
+            col("SensorId"),
             col("MeasurementValue"),
             col("Anomalies"),
             col("LocalTimeSpan"),
+            col("ReadingsCount"),
             col("_sensor_type"),
         )
 
