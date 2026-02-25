@@ -62,3 +62,12 @@ retention:
       skipped: 1
       success: 7
       failure: 10
+
+concurrency:
+  runs:
+    max_concurrent_runs: 1
+    tag_concurrency_limits:
+      - key: "job_type"
+        limit: 1
+        value:
+          applyLimitPerUniqueValue: true
