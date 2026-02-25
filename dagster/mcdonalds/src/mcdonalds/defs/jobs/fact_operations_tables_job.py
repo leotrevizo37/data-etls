@@ -8,4 +8,5 @@ fact_operations_tables_job = define_asset_job(
         "dwh_factReadingsMeasurement",
         "ctl_IngestionControl"
     ),
+    tags={"job_type": "operaciones"},
 )

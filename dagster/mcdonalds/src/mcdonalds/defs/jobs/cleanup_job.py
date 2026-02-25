@@ -5,5 +5,5 @@ cleanup_job = define_asset_job(
     selection=AssetSelection.keys(
         "cleanup_old_runs",
     ),
-
+    tags={"job_type": "limpieza"},
 )
