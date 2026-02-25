@@ -1,12 +1,18 @@
 from typing import Optional
 
+from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col,lit, expr
 
+from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
+
 def termostatos(
-        factlecturas_extended_df: DataFrame) -> Optional[DataFrame]:
+    factlecturas_extended_df: DataFrame,
+    dimensions_df: DataFrame,
+    min_hour: str,
+    max_hour: str) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
         .filter(
@@ -27,10 +33,12 @@ def termostatos(
             "DeviceId",
             "LocationId",
             "SensorTyId",
-            "StatusCode",
+            "SensorId",
             "LocalTimeSpan",
+            "StatusCode",
             "Promedio",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumnRenamed("Promedio", "MeasurementValue")
         .withColumn("Anomalies", lit(None))
@@ -45,10 +53,12 @@ def termostatos(
             "DeviceId",
             "LocationId",
             "SensorTyId",
-            "StatusCode",
+            "SensorId",
             "LocalTimeSpan",
+            "StatusCode",
             "MeasurementValue",
             "_sensor_type",
+            "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )
@@ -59,26 +69,55 @@ def termostatos(
             "DeviceId",
             "LocationId",
             "SensorTyId",
+            "SensorId",
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
             "_sensor_type",
+            "ReadingsCount",
         )
     )
 
-    if termostatos_df.rdd.isEmpty():
+    scaffold_df = (
+        lecturas_time_hours(
+            dimensions_df.filter(
+                (
+                        (col("_device_type") == "A/C de Cocina") |
+                        (col("_device_type") == "A/C de Comedor") |
+                        (col("_device_type") == "Ambiente playland")
+                )
+            ),
+            min_hour,
+            max_hour
+        )
+        .join(
+            termostatos_df,
+            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            how="left"
+        )
+    )
+
+    scaffold_enriched = (
+        scaffold_df
+        .fillna({"ReadingsCount": 0, "StatusCode": 3})
+    )
+
+    if scaffold_enriched.rdd.isEmpty():
         return None
 
     group_ids_df = (
-        termostatos_df
+        scaffold_enriched
         .select("DeviceId", "LocalTimeSpan")
         .distinct()
         .withColumn("OperationId", expr("uuid()"))
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
 
+    _ = group_ids_df.count()
+
     group_with_guid_df = (
-        termostatos_df
+        scaffold_enriched
         .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
     )
 

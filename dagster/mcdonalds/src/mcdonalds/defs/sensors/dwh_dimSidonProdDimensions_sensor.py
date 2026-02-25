@@ -8,9 +8,10 @@ from dagster import (RunRequest,
 
 from ..jobs import refresh_dimensions_job
 
+
 @sensor(
     job=refresh_dimensions_job,
-    minimum_interval_seconds=60,
+    minimum_interval_seconds=3600,
     required_resource_keys={"dim_sqlserver"},
     name="dwh_dimsidonproddimensions_sensor",
     default_status=DefaultSensorStatus.RUNNING
