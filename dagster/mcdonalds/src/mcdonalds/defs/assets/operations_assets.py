@@ -197,6 +197,7 @@ def build_devices_df_op(
             col("MeasurementValue"),
             col("Anomalies"),
             col("LocalTimeSpan"),
+            col("ReadingsCount"),
             col("_sensor_type"),
         )
 
