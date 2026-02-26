@@ -268,7 +268,9 @@ def write_factreadingsmeasurement_op(
                     "Anomalies"
                 )
             )
-            max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
+            max_time_span = (spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
+                             .astimezone(ZoneInfo("America/Chihuahua"))
+                             .replace(minute=0, second=0, microsecond=0))
             succeeded = True
             context.log.info(str(inserted_) + "rows inserted.")
     except Exception as ex:
@@ -316,7 +318,9 @@ def write_facthourlydevicestatus_op(
         else:
             aggregated_df = factReadingsMeasurement_device(devices_df)
             inserted_ = spark_res.write_fact_operations_device(aggregated_df)
-            max_time_span = spark_res.get_max_time_span(aggregated_df, "LocalTimeSpan")
+            max_time_span = (spark_res.get_max_time_span(aggregated_df, "LocalTimeSpan")
+                             .astimezone(ZoneInfo("America/Chihuahua"))
+                             .replace(minute=0, second=0, microsecond=0))
             succeeded = True
             if inserted_ == 0:
                 context.log.warning("written 0 rows to factHourlyDeviceStatus")

@@ -25,6 +25,40 @@ def cuartos_refrigeracion(
         )
     )
 
+    if base.rdd.isEmpty():
+        empty_base_df = (
+            lecturas_time_hours(
+                dimensions_df.filter(
+                    col("_device_type").isin([
+                        "Cuarto de conservación",
+                        "Ambiente conservacion",
+                        "Compresor conservación"
+                    ])
+                ),
+                min_hour,
+                max_hour
+            )
+        )
+        group_ids_df = (
+            empty_base_df
+            .select("DeviceId", "LocalTimeSpan")
+            .distinct()
+            .withColumn("OperationId", expr("uuid()"))
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        _ = group_ids_df.count()
+
+        group_with_guid_df = (
+            empty_base_df
+            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .withColumn("ReadingsCount", lit(0))
+            .withColumn("Anomalies", lit(None))
+            .withColumn("StatusCode", lit(3))
+            .withColumn("MeasurementValue", lit(None))
+        )
+
+        return group_with_guid_df
+
     temperature_stats_df = (
         stats_calculator_anomalies(
             base,
