@@ -7,7 +7,7 @@ cleanup_schedule = ScheduleDefinition(
     cron_schedule="0 0 * * 1-5",
     run_config={
         "ops": {
-            "dagster_cleanup_old_runs": {
+            "cleanup_old_runs": {
                 "config": {"keep_days": 10, "batch_size": 200}
             }
         }
