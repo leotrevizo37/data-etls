@@ -15,6 +15,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
         (
             OperationId UNIQUEIDENTIFIER NOT NULL,
             SensorId UNIQUEIDENTIFIER NOT NULL,
+            SensorTyId UNIQUEIDENTIFIER NOT NULL,
             StatusCode SMALLINT NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
@@ -49,5 +50,24 @@ IF
     BEGIN
         CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorId
             ON dwh.factReadingsMeasurement (OperationId, SensorId);
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON i.object_id = o.object_id
+        INNER JOIN sys.schemas AS s
+            ON o.schema_id = s.schema_iD
+        WHERE
+            s.name = N'dwh'
+            AND o.name = N'factReadingsMeasurement'
+            AND i.name = N'ix_factReadingsMeasurement_OperationId_SensorTyId'
+    )
+    BEGIN
+        CREATE INDEX ix_factReadingsMeasurement_OperationId_SensorTyId
+            ON dwh.factReadingsMeasurement (OperationId, SensorTyId);
     END;
 GO

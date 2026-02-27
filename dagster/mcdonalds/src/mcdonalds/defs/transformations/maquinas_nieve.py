@@ -5,6 +5,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col,
     date_trunc,
+    lit,
     expr)
 
 from .lecturas_time_hours import lecturas_time_hours
@@ -23,6 +24,37 @@ def maquinas_nieve(
             )
         )
     )
+
+    if base.rdd.isEmpty():
+        empty_base_df = (
+            lecturas_time_hours(
+                dimensions_df.filter(
+                    (col("_device_type") == "Máquina de nieve") &
+                    (col("_sensor_type") == "Corriente")
+                ),
+                min_hour,
+                max_hour
+            )
+        )
+        group_ids_df = (
+            empty_base_df
+            .select("DeviceId", "LocalTimeSpan")
+            .distinct()
+            .withColumn("OperationId", expr("uuid()"))
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        _ = group_ids_df.count()
+
+        group_with_guid_df = (
+            empty_base_df
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
+            .withColumn("ReadingsCount", lit(0))
+            .withColumn("Anomalies", lit(None))
+            .withColumn("StatusCode", lit(3))
+            .withColumn("MeasurementValue", lit(None))
+        )
+
+        return group_with_guid_df
 
     maquinas_nieve_df = (
         stats_calculator_anomalies(
@@ -50,13 +82,16 @@ def maquinas_nieve(
 
     scaffold_df = (
         lecturas_time_hours(
-            dimensions_df.filter(col("_device_type") == "Máquina de nieve"),
+            dimensions_df.filter(
+                (col("_device_type") == "Máquina de nieve") &
+                (col("_sensor_type") == "Corriente")
+            ),
             min_hour,
             max_hour
         )
         .join(
             maquinas_nieve_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )

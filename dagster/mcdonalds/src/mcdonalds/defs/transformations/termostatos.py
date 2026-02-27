@@ -24,6 +24,49 @@ def termostatos(
         )
     )
 
+    if base.rdd.isEmpty():
+        empty_base_df = (
+            lecturas_time_hours(
+                dimensions_df.filter(
+                    (
+                        (col("_device_type") == "A/C de Cocina") |
+                        (col("_device_type") == "A/C de Comedor") |
+                        (col("_device_type") == "Ambiente playland")
+                    ) &
+                    (
+                        (col("_sensor_type") == "On/Off Termostato") |
+                        (col("_sensor_type") == "Temperatura")
+                    )
+                ),
+                min_hour,
+                max_hour
+            )
+        )
+
+        empty_base_df = (
+            empty_base_df.join(dimensions_df, on=["DeviceId", "SensorId"], how="left")
+        )
+
+        group_ids_df = (
+            empty_base_df
+            .select("DeviceId", "LocalTimeSpan")
+            .distinct()
+            .withColumn("OperationId", expr("uuid()"))
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        _ = group_ids_df.count()
+
+        group_with_guid_df = (
+            empty_base_df
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
+            .withColumn("ReadingsCount", lit(0))
+            .withColumn("Anomalies", lit(None))
+            .withColumn("StatusCode", lit(3))
+            .withColumn("MeasurementValue", lit(None))
+        )
+
+        return group_with_guid_df
+
     state_stats_df = (
         stats_calculator(
             base,
@@ -83,9 +126,13 @@ def termostatos(
         lecturas_time_hours(
             dimensions_df.filter(
                 (
-                        (col("_device_type") == "A/C de Cocina") |
-                        (col("_device_type") == "A/C de Comedor") |
-                        (col("_device_type") == "Ambiente playland")
+                    (col("_device_type") == "A/C de Cocina") |
+                    (col("_device_type") == "A/C de Comedor") |
+                    (col("_device_type") == "Ambiente playland")
+                ) &
+                (
+                    (col("_sensor_type") == "On/Off Termostato") |
+                    (col("_sensor_type") == "Temperatura")
                 )
             ),
             min_hour,
@@ -93,7 +140,7 @@ def termostatos(
         )
         .join(
             termostatos_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )
