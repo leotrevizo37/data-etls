@@ -31,9 +31,8 @@ def maquinas_soda(
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
-                    (
-                        col("_device_type") == "Máquina de sodas"
-                    )
+                    (col("_device_type") == "Máquina de sodas") &
+                    (col("_sensor_type") == "Corriente")
                 ),
                 min_hour,
                 max_hour
@@ -50,7 +49,7 @@ def maquinas_soda(
 
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -120,13 +119,16 @@ def maquinas_soda(
 
     scaffold_df = (
         lecturas_time_hours(
-            dimensions_df.filter(col("_device_type") == "Máquina de sodas"),
+            dimensions_df.filter(
+                (col("_device_type") == "Máquina de sodas")&
+                (col("_sensor_type") == "Corriente")
+            ),
             min_hour,
             max_hour
         )
         .join(
             maquinas_soda_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )

@@ -29,9 +29,8 @@ def maquinas_nieve(
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
-                    (
-                        col("_device_type") == "Máquina de nieve"
-                    )
+                    (col("_device_type") == "Máquina de nieve") &
+                    (col("_sensor_type") == "Corriente")
                 ),
                 min_hour,
                 max_hour
@@ -48,7 +47,7 @@ def maquinas_nieve(
 
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -83,13 +82,16 @@ def maquinas_nieve(
 
     scaffold_df = (
         lecturas_time_hours(
-            dimensions_df.filter(col("_device_type") == "Máquina de nieve"),
+            dimensions_df.filter(
+                (col("_device_type") == "Máquina de nieve") &
+                (col("_sensor_type") == "Corriente")
+            ),
             min_hour,
             max_hour
         )
         .join(
             maquinas_nieve_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )

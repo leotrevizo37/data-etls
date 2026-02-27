@@ -23,7 +23,8 @@ def luces(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (
-                        col("_device_type") == "Luminaria"
+                        (col("_device_type") == "Luminaria") &
+                        (col("_sensor_type") == "Encendido")
                     )
                 ),
                 min_hour,
@@ -41,7 +42,7 @@ def luces(
 
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -87,13 +88,16 @@ def luces(
 
     scaffold_df = (
         lecturas_time_hours(
-            dimensions_df.filter(col("_device_type") == "Luminaria"),
+            dimensions_df.filter(
+                (col("_device_type") == "Luminaria") &
+                (col("_sensor_type") == "Encendido")
+            ),
             min_hour,
             max_hour
         )
         .join(
             luces_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )

@@ -30,13 +30,26 @@ def cuartos_congelacion(
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
-                    col("_device_type").isin([
-                        "Cuarto de congelación",
-                        "Ambiente congelacion",
-                        "Compresor congelación",
-                        "Resitencia de deshielo",
-                        "Resistencia de deshielo"
-                    ])
+                    (
+                        (
+                            col("_device_type").isin([
+                                "Cuarto de congelación",
+                                "Ambiente congelacion",
+                                "Compresor congelación",
+                                "Resitencia de deshielo",
+                                "Resistencia de deshielo"]
+                            )
+                        )
+                    ) &
+                    (
+                        (col("_sensor_type") == "Corriente") |
+                        (col("_sensor_type") == "Temperatura")
+                    ) &
+                    (
+                        (col("_sensor_name") != "Resistencia de deshielo") &
+                        (col("_device_type") != "Resitencia de deshielo") &
+                        (col("_device_type") != "Resistencia de deshielo")
+                    )
                 ),
                 min_hour,
                 max_hour
@@ -53,7 +66,7 @@ def cuartos_congelacion(
 
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -128,20 +141,33 @@ def cuartos_congelacion(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                col("_device_type").isin([
-                    "Cuarto de congelación",
-                    "Ambiente congelacion",
-                    "Compresor congelación",
-                    "Resitencia de deshielo",
-                    "Resistencia de deshielo"
-                ])
+                (
+                    (
+                        col("_device_type").isin([
+                            "Cuarto de congelación",
+                            "Ambiente congelacion",
+                            "Compresor congelación",
+                            "Resitencia de deshielo",
+                            "Resistencia de deshielo"]
+                        )
+                    )
+                ) &
+                (
+                    (col("_sensor_type") == "Corriente") |
+                    (col("_sensor_type") == "Temperatura")
+                ) &
+                (
+                    (col("_sensor_name") != "Resistencia de deshielo") &
+                    (col("_device_type") != "Resitencia de deshielo") &
+                    (col("_device_type") != "Resistencia de deshielo")
+                )
             ),
             min_hour,
             max_hour
         )
         .join(
             cuartos_conservacion_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )

@@ -29,9 +29,13 @@ def termostatos(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (
-                            (col("_device_type") == "A/C de Cocina") |
-                            (col("_device_type") == "A/C de Comedor") |
-                            (col("_device_type") == "Ambiente playland")
+                        (col("_device_type") == "A/C de Cocina") |
+                        (col("_device_type") == "A/C de Comedor") |
+                        (col("_device_type") == "Ambiente playland")
+                    ) &
+                    (
+                        (col("_sensor_type") == "On/Off Termostato") |
+                        (col("_sensor_type") == "Temperatura")
                     )
                 ),
                 min_hour,
@@ -54,7 +58,7 @@ def termostatos(
 
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -122,9 +126,13 @@ def termostatos(
         lecturas_time_hours(
             dimensions_df.filter(
                 (
-                        (col("_device_type") == "A/C de Cocina") |
-                        (col("_device_type") == "A/C de Comedor") |
-                        (col("_device_type") == "Ambiente playland")
+                    (col("_device_type") == "A/C de Cocina") |
+                    (col("_device_type") == "A/C de Comedor") |
+                    (col("_device_type") == "Ambiente playland")
+                ) &
+                (
+                    (col("_sensor_type") == "On/Off Termostato") |
+                    (col("_sensor_type") == "Temperatura")
                 )
             ),
             min_hour,
@@ -132,7 +140,7 @@ def termostatos(
         )
         .join(
             termostatos_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan"],
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
             how="left"
         )
     )
