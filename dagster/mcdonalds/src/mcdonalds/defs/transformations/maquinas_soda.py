@@ -32,7 +32,10 @@ def maquinas_soda(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (col("_device_type") == "Máquina de sodas") &
-                    (col("_sensor_type") == "Corriente")
+                    (
+                        (col("_sensor_type") == "Corriente") |
+                        (col("_sensor_type") == "Presión")
+                    )
                 ),
                 min_hour,
                 max_hour
@@ -120,8 +123,11 @@ def maquinas_soda(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                (col("_device_type") == "Máquina de sodas")&
-                (col("_sensor_type") == "Corriente")
+                (col("_device_type") == "Máquina de sodas") &
+                (
+                    (col("_sensor_type") == "Corriente") |
+                    (col("_sensor_type") == "Presión")
+                )
             ),
             min_hour,
             max_hour
