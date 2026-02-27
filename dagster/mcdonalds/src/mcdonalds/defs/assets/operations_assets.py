@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from typing import Optional, Tuple, Dict, Any
 from zoneinfo import ZoneInfo
 
@@ -19,6 +19,9 @@ from dagster import (
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
 
+
+def _truncate_to_seconds(dt: datetime) -> datetime:
+    return dt.replace(microsecond=0)
 
 @op(
     required_resource_keys={
@@ -43,10 +46,10 @@ def start_operations_run_and_get_range_op(
         context.log.info("Operation tables are empty, "
                          "will load factLecturas from beginning.")
 
-    from_utc = last_loaded_at.replace(microsecond=0)
-    now_utc = datetime.now(ZoneInfo("America/Chihuahua")).replace(microsecond=0)
-    fetch_from = from_utc - timedelta(hours=5)
-    delete_from = from_utc - timedelta(hours=5)
+    from_utc = _truncate_to_seconds(last_loaded_at)
+    now_utc = _truncate_to_seconds(datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0))
+    fetch_from = (from_utc.replace(minute=0, second=0, microsecond=0)) - timedelta(hours=11)
+    delete_from = (from_utc.replace(minute=0, second=0, microsecond=0)) - timedelta(hours=11)
 
     sql.mark_run_started("HourlyDeviceStatus")
     context.log.info("HourlyDeviceStatus run window from "
@@ -262,6 +265,7 @@ def write_factreadingsmeasurement_op(
                 .select(
                     "OperationId",
                     "SensorId",
+                    "SensorTyId",
                     "StatusCode",
                     "MeasurementValue",
                     "ReadingsCount",
