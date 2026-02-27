@@ -123,7 +123,7 @@ def maquinas_soda(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                (col("_device_type") == "Máquina de sodas")&
+                (col("_device_type") == "Máquina de sodas") &
                 (
                     (col("_sensor_type") == "Corriente") |
                     (col("_sensor_type") == "Presión")
