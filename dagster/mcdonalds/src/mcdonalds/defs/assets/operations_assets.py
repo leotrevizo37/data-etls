@@ -115,7 +115,7 @@ def load_raw_dimensions_op(
     context.log.info("Loading dimensions table..." + cleaning)
     dimensions_df = spark_res.read_dim_prod_dimensions()
 
-    return dimensions_df
+    return dimensions_df.filter(col("Active"))
 
 @op(
     required_resource_keys={

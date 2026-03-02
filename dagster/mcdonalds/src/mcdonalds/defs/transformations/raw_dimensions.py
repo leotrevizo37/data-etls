@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit
 
 from ..resources import SparkResource, SqlDimServerResource
 
@@ -54,12 +54,12 @@ def raw_dimensions(
 
     sensors_devices_locations_df = (
         dbo_sensors_df.alias("s")
-        .filter(col("s.Active"))
         .join(dbo_sensor_tys_df.alias("sty"), on="SensorTyId", how="left")
         .select(
             col("s.SensorId"),
             col("s.SensorTyId"),
             col("s.DeviceId"),
+            col("s.Active"),
             col("s.Name").alias("_sensor_name"),
             col("sty.Name").alias("_sensor_type")
         )
@@ -73,6 +73,7 @@ def raw_dimensions(
             col("st._sensor_type"),
             col("dv.DeviceTyId"),
             col("dv.SubLocationId"),
+            col("st.Active"),
             col("dv.Name").alias("_device_name")
         )
         .alias("st_dv")
@@ -86,6 +87,7 @@ def raw_dimensions(
             col("st_dv.DeviceTyId"),
             col("st_dv.SubLocationId"),
             col("st_dv._device_name"),
+            col("st_dv.Active"),
             col("dvt.Name").alias("_device_type")
         )
         .alias("st_dvt")
@@ -101,6 +103,7 @@ def raw_dimensions(
             col("st_dvt._device_name"),
             col("st_dvt._device_type"),
             col("sl.SubLocationTyId"),
+            col("st_dvt.Active"),
             col("sl.Name").alias("_sublocation_name"),
             col("sl.LocationId")
         )
@@ -119,6 +122,7 @@ def raw_dimensions(
             col("st_dvt_sl.SubLocationTyId"),
             col("st_dvt_sl._sublocation_name"),
             col("st_dvt_sl.LocationId"),
+            col("st_dvt_sl.Active"),
             col("slty.Name").alias("_sublocation_type")
         )
     )

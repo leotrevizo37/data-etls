@@ -60,10 +60,10 @@ def maquinas_nieve(
         stats_calculator_anomalies(
             base,
             "Corriente",
-            0.3,
+            0.28,
             None,
             240,
-            0.09
+            0.06
         )
         .select(
             "DeviceId",
