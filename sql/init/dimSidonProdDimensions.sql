@@ -20,6 +20,7 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NULL
             _sensor_type NVARCHAR(255) NULL,
             DeviceTyId UNIQUEIDENTIFIER NOT NULL,
             SubLocationId UNIQUEIDENTIFIER NOT NULL,
+            Active BIT NOT NULL,
             _device_name NVARCHAR(255) NULL,
             _device_type NVARCHAR(255) NULL,
             SubLocationTyId UNIQUEIDENTIFIER NOT NULL,
