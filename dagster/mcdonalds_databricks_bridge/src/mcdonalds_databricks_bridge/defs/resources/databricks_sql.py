@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Iterable, List
+from typing import Generator, Iterable
 import os
 
 from dagster import resource
