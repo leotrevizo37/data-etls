@@ -5,6 +5,7 @@ from pyspark.sql.functions import col
 
 from ..resources import SparkResource, SqlDimServerResource
 
+
 def raw_dimensions(
         spark_res: SparkResource,
         dim_sqlserver: SqlDimServerResource) -> Optional[DataFrame]:
