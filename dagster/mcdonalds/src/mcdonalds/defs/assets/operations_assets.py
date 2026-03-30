@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
 from zoneinfo import ZoneInfo
 
@@ -18,10 +18,10 @@ from dagster import (
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
+from ...operations_window import build_operations_window, resolve_operations_watermark
 
 
 OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
-
 
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
@@ -65,44 +65,29 @@ def start_operations_run_and_get_range_op(
         context.log.info("Operation tables are empty, "
                          "will load factLecturas from beginning.")
 
-    # LocalTimeSpan is persisted as a local, timezone-naive timestamp in SQL.
-    from_local = _coerce_local_naive(last_loaded_at)
-    max_local_hour = _current_operational_hour_start()
-    if from_local > max_local_hour:
+    window = build_operations_window(last_loaded_at)
+    if window["watermark_in_future"]:
         context.log.warning(
             "HourlyDeviceStatus watermark %s is ahead of current local hour %s. "
             "This run will clean future rows and clamp processing to the current local window.",
-            from_local,
-            max_local_hour,
+            window["from_local"],
+            window["max_local_hour"],
         )
-    processing_anchor = min(from_local, max_local_hour)
-    fetch_from = (
-        processing_anchor.replace(minute=0, second=0, microsecond=0)
-    ) - timedelta(hours=11)
-    delete_from = fetch_from
-    delete_to_exclusive = max(from_local, max_local_hour) + timedelta(hours=1)
 
     sql.mark_run_started("HourlyDeviceStatus")
     context.log.info(
         "HourlyDeviceStatus local run window from "
-        + str(fetch_from)
+        + str(window["fetch_from"])
         + " to "
-        + str(max_local_hour)
+        + str(window["max_local_hour"])
         + " (cleanup<"
-        + str(delete_to_exclusive)
+        + str(window["delete_to_exclusive"])
         + ")"
         + " [tz=America/Ciudad_Juarez]"
         + deps
     )
 
-    return {
-        "delete_from": delete_from,
-        "delete_to_exclusive": delete_to_exclusive,
-        "fetch_from": fetch_from,
-        "from_local": from_local,
-        "max_local_hour": max_local_hour,
-        "original_last_loaded_at": last_loaded_at,
-    }
+    return window
 
 @op(
     required_resource_keys={
@@ -417,6 +402,13 @@ def finalize_operations_run_op(
     to_local: datetime = hourly_status["to_local"]
     original_last_loaded_at: datetime = hourly_status["original_last_loaded_at"]
     max_time_span: Optional[datetime] = hourly_status["max_time_span"]
+
+    new_watermark = resolve_operations_watermark(
+        succeeded=succeeded,
+        original_last_loaded_at=original_last_loaded_at,
+        max_time_span=max_time_span,
+        max_local_hour=to_local,
+    )
 
     if not succeeded:
         new_watermark = original_last_loaded_at
