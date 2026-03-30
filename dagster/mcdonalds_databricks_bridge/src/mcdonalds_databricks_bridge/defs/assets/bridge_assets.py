@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, List, Optional
 import os
 import uuid
 
@@ -10,14 +10,13 @@ from dagster import AssetKey, MaterializeResult, asset
 
 from ..resources import (
     BridgeStateSqlServerResource,
+    BridgeTableConfig,
     DatabricksSqlResource,
     SourceSqlServerResource,
-    load_table_config,
 )
 
 
-def _sync_table(context, slot: str) -> MaterializeResult:
-    table_config = load_table_config(slot)
+def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
     source_sql: SourceSqlServerResource = context.resources.source_sqlserver
     bridge_state: BridgeStateSqlServerResource = context.resources.bridge_state_sqlserver
     databricks_sql: DatabricksSqlResource = context.resources.databricks_sql
@@ -158,28 +157,23 @@ def _sync_table(context, slot: str) -> MaterializeResult:
         raise
 
 
-@asset(
-    name="dbx_tablaA_bridge",
-    non_argument_deps={AssetKey("src_tablaA")},
-    required_resource_keys={"source_sqlserver", "bridge_state_sqlserver", "databricks_sql"},
-)
-def dbx_tablaA_bridge(context) -> MaterializeResult:
-    return _sync_table(context, "A")
+def build_bridge_asset(table_config: BridgeTableConfig):
+    @asset(
+        name=table_config.bridge_asset_name,
+        non_argument_deps={AssetKey(table_config.source_asset_name)},
+        required_resource_keys={"source_sqlserver", "bridge_state_sqlserver", "databricks_sql"},
+        group_name=table_config.asset_group_name,
+        tags={
+            "job_type": "databricks_bridge",
+            "bridge_group": table_config.job_group,
+            "bridge_target_table": table_config.target_table,
+        },
+    )
+    def _bridge_asset(context) -> MaterializeResult:
+        return _sync_table(context, table_config)
+
+    return _bridge_asset
 
 
-@asset(
-    name="dbx_tablaB_bridge",
-    non_argument_deps={AssetKey("src_tablaB")},
-    required_resource_keys={"source_sqlserver", "bridge_state_sqlserver", "databricks_sql"},
-)
-def dbx_tablaB_bridge(context) -> MaterializeResult:
-    return _sync_table(context, "B")
-
-
-@asset(
-    name="dbx_tablaC_bridge",
-    non_argument_deps={AssetKey("src_tablaC")},
-    required_resource_keys={"source_sqlserver", "bridge_state_sqlserver", "databricks_sql"},
-)
-def dbx_tablaC_bridge(context) -> MaterializeResult:
-    return _sync_table(context, "C")
+def build_bridge_assets(table_configs: Iterable[BridgeTableConfig]) -> List:
+    return [build_bridge_asset(table_config) for table_config in table_configs]
