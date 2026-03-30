@@ -48,7 +48,7 @@ def _sql_server_type_to_databricks(column: SourceColumn) -> str:
     if sql_type == "date":
         return "DATE"
     if sql_type in {"datetime", "datetime2", "smalldatetime"}:
-        return "TIMESTAMP"
+        return "TIMESTAMP_NTZ"
     if sql_type in {"time", "datetimeoffset"}:
         return "STRING"
     if sql_type in {"uniqueidentifier", "char", "nchar", "varchar", "nvarchar", "text", "ntext", "xml"}:
@@ -125,18 +125,6 @@ class DatabricksSqlResource:
             ]
         )
 
-    def _stage_table_name(self, table_config: BridgeTableConfig) -> str:
-        return table_config.target_table + "_staging"
-
-    def _stage_fqn(self, table_config: BridgeTableConfig) -> str:
-        return ".".join(
-            [
-                _quote_databricks_ident(self.catalog),
-                _quote_databricks_ident(self.staging_schema),
-                _quote_databricks_ident(self._stage_table_name(table_config)),
-            ]
-        )
-
     def build_remote_batch_dir(self, table_config: BridgeTableConfig, batch_id: str) -> str:
         return (
             "/Volumes/"
@@ -180,15 +168,6 @@ class DatabricksSqlResource:
             "CREATE SCHEMA IF NOT EXISTS "
             + ".".join(
                 [
-                    _quote_databricks_ident(self.catalog),
-                    _quote_databricks_ident(self.staging_schema),
-                ]
-            )
-        )
-        cursor.execute(
-            "CREATE SCHEMA IF NOT EXISTS "
-            + ".".join(
-                [
                     _quote_databricks_ident(self.volume_catalog),
                     _quote_databricks_ident(self.volume_schema),
                 ]
@@ -221,16 +200,6 @@ class DatabricksSqlResource:
             + ddl_columns
             + ") USING DELTA"
         )
-        cursor.execute(
-            "CREATE OR REPLACE TABLE "
-            + self._stage_fqn(table_config)
-            + " ("
-            + ddl_columns
-            + ") USING DELTA"
-        )
-
-    def truncate_stage(self, cursor, table_config: BridgeTableConfig) -> None:
-        cursor.execute("TRUNCATE TABLE " + self._stage_fqn(table_config))
 
     def upload_file(self, cursor, local_path: str, remote_path: str) -> None:
         cursor.execute(
@@ -241,10 +210,10 @@ class DatabricksSqlResource:
             + "' OVERWRITE"
         )
 
-    def copy_into_stage(self, cursor, table_config: BridgeTableConfig, remote_batch_dir: str) -> None:
+    def copy_into_target(self, cursor, table_config: BridgeTableConfig, remote_batch_dir: str) -> None:
         copy_sql = (
             "COPY INTO "
-            + self._stage_fqn(table_config)
+            + self._target_fqn(table_config)
             + " FROM '"
             + remote_batch_dir
             + "' FILEFORMAT = PARQUET"
@@ -257,81 +226,15 @@ class DatabricksSqlResource:
             if "DELTA_FAILED_TO_MERGE_FIELDS" in error_text:
                 raise RuntimeError(
                     "COPY INTO failed because the incoming parquet schema does not match "
-                    "the Databricks Delta staging schema. The bridge recreates staging on "
-                    "each run, so if this persists the mismatch is likely on a column type "
-                    "such as datetime/timestamp in the incoming file. Original error: "
+                    "the Databricks Delta bronze target schema. The bridge writes append-only "
+                    "directly into the bronze table, so if this persists the mismatch is likely "
+                    "on a column type such as datetime/timestamp in the incoming file. "
+                    "SQL Server datetime values in this bridge are exported as parquet timestamps "
+                    "without timezone adjustment and should align with TIMESTAMP_NTZ in Databricks. "
+                    "Original error: "
                     + error_text
                 ) from ex
             raise
-
-    def merge_stage_into_target(
-        self,
-        cursor,
-        table_config: BridgeTableConfig,
-        columns: List[SourceColumn],
-    ) -> None:
-        all_columns = [_quote_databricks_ident(column.name) for column in columns]
-        pk_columns = [_quote_databricks_ident(column) for column in table_config.primary_keys]
-        order_expression = (
-            "COALESCE("
-            + "s."
-            + _quote_databricks_ident(table_config.updated_at_column)
-            + ", s."
-            + _quote_databricks_ident(table_config.created_at_column)
-            + ") DESC, s."
-            + _quote_databricks_ident(table_config.created_at_column)
-            + " DESC"
-        )
-        join_condition = " AND ".join(
-            ["t." + column + " = s." + column for column in pk_columns]
-        )
-        update_assignments = ", ".join([column + " = s." + column for column in all_columns])
-        insert_columns = ", ".join(all_columns)
-        insert_values = ", ".join(["s." + column for column in all_columns])
-
-        merge_sql = """
-MERGE INTO {target} AS t
-USING (
-    SELECT {selected_columns}
-    FROM (
-        SELECT
-            s.*,
-            ROW_NUMBER() OVER (
-                PARTITION BY {partition_columns}
-                ORDER BY {order_expression}
-            ) AS _bridge_rownum
-        FROM {stage} AS s
-    ) AS ranked
-    WHERE _bridge_rownum = 1
-) AS s
-ON {join_condition}
-WHEN MATCHED
-AND COALESCE(
-        s.{updated_at},
-        s.{created_at}
-    ) >= COALESCE(
-        t.{updated_at},
-        t.{created_at}
-    )
-THEN UPDATE SET {update_assignments}
-WHEN NOT MATCHED
-THEN INSERT ({insert_columns})
-VALUES ({insert_values})
-""".strip().format(
-            target=self._target_fqn(table_config),
-            selected_columns=", ".join(all_columns),
-            partition_columns=", ".join(pk_columns),
-            order_expression=order_expression,
-            stage=self._stage_fqn(table_config),
-            join_condition=join_condition,
-            updated_at=_quote_databricks_ident(table_config.updated_at_column),
-            created_at=_quote_databricks_ident(table_config.created_at_column),
-            update_assignments=update_assignments,
-            insert_columns=insert_columns,
-            insert_values=insert_values,
-        )
-
-        cursor.execute(merge_sql)
 
     def remove_remote_file(self, cursor, remote_path: str) -> None:
         cursor.execute("REMOVE '" + remote_path + "'")

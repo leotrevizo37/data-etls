@@ -55,6 +55,8 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
         / batch_id
         / (table_config.target_table + ".parquet")
     )
+    remote_batch_dir: Optional[str] = None
+    remote_file_path: Optional[str] = None
 
     try:
         columns = source_sql.get_table_schema(table_config)
@@ -96,27 +98,18 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
                     table_config=table_config,
                     columns=extract_result.columns,
                 )
-                databricks_sql.truncate_stage(cursor=cursor, table_config=table_config)
                 databricks_sql.upload_file(
                     cursor=cursor,
                     local_path=extract_result.output_path or local_output_path.as_posix(),
                     remote_path=remote_file_path,
                 )
-                databricks_sql.copy_into_stage(
+                databricks_sql.copy_into_target(
                     cursor=cursor,
                     table_config=table_config,
                     remote_batch_dir=remote_batch_dir,
                 )
-                databricks_sql.merge_stage_into_target(
-                    cursor=cursor,
-                    table_config=table_config,
-                    columns=extract_result.columns,
-                )
-                databricks_sql.truncate_stage(cursor=cursor, table_config=table_config)
                 databricks_sql.remove_remote_file(cursor=cursor, remote_path=remote_file_path)
-
-        if local_output_path.exists():
-            local_output_path.unlink()
+                remote_file_path = None
 
         bridge_state.mark_run_completed(
             ingestion_name=table_config.ingestion_name,
@@ -130,6 +123,7 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
                 "source_table": table_config.source_fqn,
                 "target_table": table_config.target_table,
                 "row_count": extract_result.row_count,
+                "load_mode": "append_only_copy_into",
                 "max_updated_at": (
                     extract_result.max_updated_at.isoformat()
                     if extract_result.max_updated_at
@@ -141,13 +135,6 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
             }
         )
     except Exception as ex:
-        try:
-            with databricks_sql.connect() as connection:
-                with connection.cursor() as cursor:
-                    databricks_sql.truncate_stage(cursor=cursor, table_config=table_config)
-        except Exception:
-            pass
-
         bridge_state.mark_run_completed(
             ingestion_name=table_config.ingestion_name,
             new_last_loaded_at=last_loaded_at,
@@ -155,6 +142,20 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
             error_message=str(ex),
         )
         raise
+    finally:
+        if remote_file_path:
+            try:
+                with databricks_sql.connect() as connection:
+                    with connection.cursor() as cursor:
+                        databricks_sql.remove_remote_file(cursor=cursor, remote_path=remote_file_path)
+            except Exception:
+                pass
+
+        if local_output_path.exists():
+            try:
+                local_output_path.unlink()
+            except Exception:
+                pass
 
 
 def build_bridge_asset(table_config: BridgeTableConfig):
