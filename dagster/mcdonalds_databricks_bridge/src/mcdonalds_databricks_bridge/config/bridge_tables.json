@@ -1,0 +1,40 @@
+{
+  "tables": [
+    {
+      "key": "tablaA",
+      "ingestion_name": "DatabricksBridge_tablaA",
+      "source_schema": "dbo",
+      "source_table": "tablaA",
+      "target_table": "tablaA",
+      "primary_keys": ["Id"],
+      "updated_at_column": "updated_at",
+      "created_at_column": "created_at",
+      "job_group": "default",
+      "enabled": true
+    },
+    {
+      "key": "tablaB",
+      "ingestion_name": "DatabricksBridge_tablaB",
+      "source_schema": "dbo",
+      "source_table": "tablaB",
+      "target_table": "tablaB",
+      "primary_keys": ["Id"],
+      "updated_at_column": "updated_at",
+      "created_at_column": "created_at",
+      "job_group": "default",
+      "enabled": true
+    },
+    {
+      "key": "tablaC",
+      "ingestion_name": "DatabricksBridge_tablaC",
+      "source_schema": "dbo",
+      "source_table": "tablaC",
+      "target_table": "tablaC",
+      "primary_keys": ["Id"],
+      "updated_at_column": "updated_at",
+      "created_at_column": "created_at",
+      "job_group": "default",
+      "enabled": true
+    }
+  ]
+}

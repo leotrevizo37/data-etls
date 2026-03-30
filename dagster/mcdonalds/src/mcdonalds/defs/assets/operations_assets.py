@@ -1,5 +1,6 @@
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from typing import Optional, Tuple, Dict, Any
+from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
@@ -18,6 +19,9 @@ from dagster import (
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
 from ...operations_window import build_operations_window, resolve_operations_watermark
+
+
+OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
 
 
 OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
