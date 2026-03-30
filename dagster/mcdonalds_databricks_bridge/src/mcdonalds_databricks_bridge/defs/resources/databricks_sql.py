@@ -7,6 +7,7 @@ import os
 
 from dagster import resource
 from databricks import sql
+from databricks.sql.exc import ServerOperationError
 from databricks.sdk.core import Config, oauth_service_principal
 
 from .bridge_config import BridgeTableConfig
@@ -164,6 +165,8 @@ class DatabricksSqlResource:
         table_config: BridgeTableConfig,
         columns: Iterable[SourceColumn],
     ) -> None:
+        columns = list(columns)
+
         cursor.execute(
             "CREATE SCHEMA IF NOT EXISTS "
             + ".".join(
@@ -219,7 +222,7 @@ class DatabricksSqlResource:
             + ") USING DELTA"
         )
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS "
+            "CREATE OR REPLACE TABLE "
             + self._stage_fqn(table_config)
             + " ("
             + ddl_columns
@@ -239,13 +242,27 @@ class DatabricksSqlResource:
         )
 
     def copy_into_stage(self, cursor, table_config: BridgeTableConfig, remote_batch_dir: str) -> None:
-        cursor.execute(
+        copy_sql = (
             "COPY INTO "
             + self._stage_fqn(table_config)
             + " FROM '"
             + remote_batch_dir
             + "' FILEFORMAT = PARQUET"
         )
+
+        try:
+            cursor.execute(copy_sql)
+        except ServerOperationError as ex:
+            error_text = str(ex)
+            if "DELTA_FAILED_TO_MERGE_FIELDS" in error_text:
+                raise RuntimeError(
+                    "COPY INTO failed because the incoming parquet schema does not match "
+                    "the Databricks Delta staging schema. The bridge recreates staging on "
+                    "each run, so if this persists the mismatch is likely on a column type "
+                    "such as datetime/timestamp in the incoming file. Original error: "
+                    + error_text
+                ) from ex
+            raise
 
     def merge_stage_into_target(
         self,
