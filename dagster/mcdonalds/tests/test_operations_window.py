@@ -2,12 +2,6 @@ import sys
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-
-
-PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(PROJECT_SRC) not in sys.path:
-    sys.path.insert(0, str(PROJECT_SRC))
-
 from mcdonalds.operations_window import (
     DEFAULT_OPERATIONS_BOOTSTRAP_START,
     OPERATIONS_TIMEZONE,
@@ -16,6 +10,10 @@ from mcdonalds.operations_window import (
     resolve_operations_watermark,
 )
 
+
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
 
 class BuildOperationsWindowTests(unittest.TestCase):
     def test_uses_local_hour_boundary_for_operational_window(self) -> None:

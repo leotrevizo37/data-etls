@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
 from zoneinfo import ZoneInfo
 
@@ -22,10 +22,6 @@ from ...operations_window import build_operations_window, resolve_operations_wat
 
 
 OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
-
-
-OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
-
 
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
