@@ -1,5 +1,6 @@
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 from typing import Optional, Tuple, Dict, Any
+from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
@@ -19,8 +20,27 @@ from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
 
 
+OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
+
+
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
+
+
+def _coerce_local_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return _truncate_to_seconds(dt)
+    return _truncate_to_seconds(
+        dt.astimezone(OPERATIONS_TIMEZONE).replace(tzinfo=None)
+    )
+
+
+def _current_operational_hour_start() -> datetime:
+    return _truncate_to_seconds(
+        datetime.now(OPERATIONS_TIMEZONE)
+        .replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    )
+
 
 @op(
     required_resource_keys={
@@ -45,22 +65,42 @@ def start_operations_run_and_get_range_op(
         context.log.info("Operation tables are empty, "
                          "will load factLecturas from beginning.")
 
-    from_utc = _truncate_to_seconds(last_loaded_at)
-    now_utc = (_truncate_to_seconds(datetime.now(timezone.utc)).replace(minute=0, second=0, microsecond=0))
-    fetch_from = (from_utc.replace(minute=0, second=0, microsecond=0)) - timedelta(hours=11)
-    delete_from = (from_utc.replace(minute=0, second=0, microsecond=0)) - timedelta(hours=11)
+    # LocalTimeSpan is persisted as a local, timezone-naive timestamp in SQL.
+    from_local = _coerce_local_naive(last_loaded_at)
+    max_local_hour = _current_operational_hour_start()
+    if from_local > max_local_hour:
+        context.log.warning(
+            "HourlyDeviceStatus watermark %s is ahead of current local hour %s. "
+            "This run will clean future rows and clamp processing to the current local window.",
+            from_local,
+            max_local_hour,
+        )
+    processing_anchor = min(from_local, max_local_hour)
+    fetch_from = (
+        processing_anchor.replace(minute=0, second=0, microsecond=0)
+    ) - timedelta(hours=11)
+    delete_from = fetch_from
+    delete_to_exclusive = max(from_local, max_local_hour) + timedelta(hours=1)
 
     sql.mark_run_started("HourlyDeviceStatus")
-    context.log.info("HourlyDeviceStatus run window from "
-                     + str(fetch_from)
-                     + " to " + str(now_utc)
-                     + deps)
+    context.log.info(
+        "HourlyDeviceStatus local run window from "
+        + str(fetch_from)
+        + " to "
+        + str(max_local_hour)
+        + " (cleanup<"
+        + str(delete_to_exclusive)
+        + ")"
+        + " [tz=America/Ciudad_Juarez]"
+        + deps
+    )
 
     return {
         "delete_from": delete_from,
+        "delete_to_exclusive": delete_to_exclusive,
         "fetch_from": fetch_from,
-        "from_utc": from_utc,
-        "to_utc": now_utc,
+        "from_local": from_local,
+        "max_local_hour": max_local_hour,
         "original_last_loaded_at": last_loaded_at,
     }
 
@@ -85,7 +125,7 @@ def window_cleanup(
         table_name="factHourlyDeviceStatus",
         time_column="LocalTimeSpan",
         from_utc=window["delete_from"],
-        to_utc=window["to_utc"],
+        to_utc=window["delete_to_exclusive"],
     )
     if deleted_rows is None or deleted_rows == 0:
         context.log.info("No rows deleted from "
@@ -189,7 +229,12 @@ def build_devices_df_op(
     for method in methods:
         context.log.info("Materializing dataframe for method: " + method)
         fn = getattr(transformation_ops, method)
-        df = fn(factlecturas_extended_df, dims, window["fetch_from"], window["to_utc"]).select(
+        df = fn(
+            factlecturas_extended_df,
+            dims,
+            window["fetch_from"],
+            window["max_local_hour"],
+        ).select(
             col("OperationId"),
             col("DeviceId"),
             col("LocationId"),
@@ -216,7 +261,7 @@ def build_devices_df_op(
         context.log.info("No rows across all transformations.")
         return factlecturas_extended_df.limit(0)
 
-    return union_df
+    return union_df.filter(col("LocalTimeSpan") <= window["max_local_hour"])
 
 @op(
     required_resource_keys={
@@ -244,7 +289,7 @@ def write_factreadingsmeasurement_op(
         return (
             None,
             {
-                "to_utc": window["to_utc"],
+                "to_local": window["max_local_hour"],
                 "original_last_loaded_at": window["original_last_loaded_at"],
                 "max_time_span": None,
                 "succeeded": False,
@@ -281,7 +326,7 @@ def write_factreadingsmeasurement_op(
     return (
         None,
         {
-            "to_utc": window["to_utc"],
+            "to_local": window["max_local_hour"],
             "original_last_loaded_at": window["original_last_loaded_at"],
             "max_time_span": max_time_span,
             "succeeded": succeeded,
@@ -331,7 +376,7 @@ def write_facthourlydevicestatus_op(
     return (
         None,
         {
-            "to_utc": window["to_utc"],
+            "to_local": window["max_local_hour"],
             "original_last_loaded_at": window["original_last_loaded_at"],
             "max_time_span": max_time_span,
             "succeeded": succeeded,
@@ -369,7 +414,7 @@ def finalize_operations_run_op(
         error_message = hourly_status["error_message"]
         context.log.warning("error readings: " + str(error_message))
 
-    to_utc: datetime = hourly_status["to_utc"]
+    to_local: datetime = hourly_status["to_local"]
     original_last_loaded_at: datetime = hourly_status["original_last_loaded_at"]
     max_time_span: Optional[datetime] = hourly_status["max_time_span"]
 
@@ -380,7 +425,7 @@ def finalize_operations_run_op(
         )
     else:
         if max_time_span is None:
-            new_watermark = to_utc
+            new_watermark = to_local
             context.log.info(
                 "HourlyDeviceStatus run succeeded with no rows. Advancing watermark to " + str(new_watermark)
             )
