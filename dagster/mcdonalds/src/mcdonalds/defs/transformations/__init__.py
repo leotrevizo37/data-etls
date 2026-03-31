@@ -1,12 +1,7 @@
-from .factlecturas_extended import factlecturas_extended
-from .raw_dimensions import raw_dimensions
-from .maquinas_nieve import maquinas_nieve
-from .maquinas_soda import maquinas_soda
-from .factReadingsMeasurement_device import factReadingsMeasurement_device
-from .luces import luces
-from .termostatos import termostatos
-from .cuartos_refrigeracion import cuartos_refrigeracion
-from .cuartos_congelacion import cuartos_congelacion
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "factlecturas_extended",
@@ -19,3 +14,30 @@ __all__ = [
     "cuartos_congelacion",
     "cuartos_refrigeracion",
 ]
+
+_MODULE_BY_EXPORT = {
+    "factlecturas_extended": ".factlecturas_extended",
+    "raw_dimensions": ".raw_dimensions",
+    "maquinas_nieve": ".maquinas_nieve",
+    "maquinas_soda": ".maquinas_soda",
+    "luces": ".luces",
+    "factReadingsMeasurement_device": ".factReadingsMeasurement_device",
+    "termostatos": ".termostatos",
+    "cuartos_congelacion": ".cuartos_congelacion",
+    "cuartos_refrigeracion": ".cuartos_refrigeracion",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_path = _MODULE_BY_EXPORT.get(name)
+    if module_path is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = import_module(module_path, __name__)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

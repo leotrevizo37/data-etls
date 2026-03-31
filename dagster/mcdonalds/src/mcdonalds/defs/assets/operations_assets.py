@@ -18,6 +18,7 @@ from dagster import (
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import factlecturas_extended, factReadingsMeasurement_device
+from ...operations_filters import limit_operations_rows_to_closed_hours
 from ...operations_window import build_operations_window, resolve_operations_watermark
 
 
@@ -246,7 +247,10 @@ def build_devices_df_op(
         context.log.info("No rows across all transformations.")
         return factlecturas_extended_df.limit(0)
 
-    return union_df.filter(col("LocalTimeSpan") <= window["max_local_hour"])
+    return limit_operations_rows_to_closed_hours(
+        union_df,
+        window["max_local_hour"],
+    )
 
 @op(
     required_resource_keys={
