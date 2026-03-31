@@ -34,6 +34,8 @@ jobs:
           pip install -e .
 
       - name: Run tests with coverage
+        env:
+          PYTHONWARNINGS: ignore::ResourceWarning
         run: |
           python -m coverage run --source=src/mcdonalds -m unittest discover tests -p "test_*.py"
           python -m coverage report --show-missing

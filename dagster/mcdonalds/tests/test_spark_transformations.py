@@ -1,5 +1,6 @@
 import sys
 import unittest
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -36,6 +37,8 @@ from mcdonalds.operations_filters import (  # noqa: E402
 SODA_DEVICE_TYPE = "M\u00e1quina de sodas"
 SODA_PRESSURE_SENSOR = "Presi\u00f3n"
 
+warnings.simplefilter("ignore", ResourceWarning)
+
 
 class SparkTransformationsTests(unittest.TestCase):
     @classmethod
@@ -45,6 +48,7 @@ class SparkTransformationsTests(unittest.TestCase):
             .master("local[1]")
             .appName("mcdonalds-spark-transformations-tests")
             .config("spark.ui.enabled", "false")
+            .config("spark.ui.showConsoleProgress", "false")
             .config("spark.sql.shuffle.partitions", "1")
             .config("spark.sql.session.timeZone", "UTC")
             .getOrCreate()
