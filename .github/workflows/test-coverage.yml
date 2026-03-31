@@ -35,7 +35,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m coverage run --source=src/mcdonalds -m pytest -q tests
+          python -m coverage run --source=src/mcdonalds -m unittest discover tests -p "test_*.py"
           python -m coverage report --show-missing
           python -m coverage xml -o coverage.xml
 
