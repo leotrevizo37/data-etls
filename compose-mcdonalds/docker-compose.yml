@@ -268,7 +268,7 @@ services:
     healthcheck:
       test: [
         "CMD-SHELL",
-        "python -c 'import socket,sys; s=socket.socket(); s.settimeout(2); s.connect((\"localhost\",7077)); s.close()'"
+        "python3 -c 'import os,socket; host=os.popen(\"hostname -i\").read().strip().split()[0]; s=socket.socket(); s.settimeout(2); s.connect((host,7077)); s.close()'"
       ]
       interval: 10s
       timeout: 5s
