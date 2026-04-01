@@ -12,6 +12,7 @@ def build_source_assets(table_configs: Iterable[BridgeTableConfig]) -> List[Sour
         SourceAsset(
             key=AssetKey(table_config.source_asset_name),
             description="Logical source placeholder for Databricks bridge ingestion.",
+            group_name="smartaudits_bridge",
         )
         for table_config in table_configs
     ]
