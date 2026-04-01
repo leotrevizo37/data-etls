@@ -3,7 +3,7 @@
     {
       "key": "asp_net_users",
       "ingestion_name": "DatabricksBridge_asp_net_users",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "asp_net_users",
       "target_table": "sa_asp_net_users",
       "primary_keys": ["Id"],
@@ -13,7 +13,7 @@
     {
       "key": "categories",
       "ingestion_name": "DatabricksBridge_categories",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "categories",
       "target_table": "sa_categories",
       "primary_keys": ["Id"],
@@ -23,7 +23,7 @@
     {
       "key": "checkpoints",
       "ingestion_name": "DatabricksBridge_checkpoints",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "checkpoints",
       "target_table": "sa_checkpoints",
       "primary_keys": ["Id"],
@@ -33,7 +33,7 @@
     {
       "key": "evidence_photos",
       "ingestion_name": "DatabricksBridge_evidence_photos",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "evidence_photos",
       "target_table": "sa_evidence_photos",
       "primary_keys": ["Id"],
@@ -45,7 +45,7 @@
     {
       "key": "frequency_types",
       "ingestion_name": "DatabricksBridge_frequency_types",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "frequency_types",
       "target_table": "sa_frequency_types",
       "primary_keys": ["Id"],
@@ -55,7 +55,7 @@
     {
       "key": "location_task_list",
       "ingestion_name": "DatabricksBridge_location_task_list",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "location_task_list",
       "target_table": "sa_location_task_list",
       "primary_keys": ["LocationId"],
@@ -65,7 +65,7 @@
     {
       "key": "locations",
       "ingestion_name": "DatabricksBridge_locations",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "locations",
       "target_table": "sa_locations",
       "primary_keys": ["Id"],
@@ -77,7 +77,7 @@
     {
       "key": "mobile_devices",
       "ingestion_name": "DatabricksBridge_mobile_devices",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "mobile_devices",
       "target_table": "sa_mobile_devices",
       "primary_keys": ["Id"],
@@ -89,7 +89,7 @@
     {
       "key": "perfiles",
       "ingestion_name": "DatabricksBridge_perfiles",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "perfiles",
       "target_table": "sa_perfiles",
       "primary_keys": ["Id"],
@@ -99,7 +99,7 @@
     {
       "key": "plan_results",
       "ingestion_name": "DatabricksBridge_plan_results",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "plan_results",
       "target_table": "sa_plan_results",
       "primary_keys": ["Id"],
@@ -111,7 +111,7 @@
     {
       "key": "priority_types",
       "ingestion_name": "DatabricksBridge_priority_types",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "priority_types",
       "target_table": "sa_priority_types",
       "primary_keys": ["Id"],
@@ -121,7 +121,7 @@
     {
       "key": "regions",
       "ingestion_name": "DatabricksBridge_regions",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "regions",
       "target_table": "sa_regions",
       "primary_keys": ["Id"],
@@ -133,7 +133,7 @@
     {
       "key": "sublocations_schedules",
       "ingestion_name": "DatabricksBridge_sublocations_schedules",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "sublocations_schedules",
       "target_table": "sa_sublocations_schedules",
       "primary_keys": ["Id"],
@@ -143,7 +143,7 @@
     {
       "key": "sublocations",
       "ingestion_name": "DatabricksBridge_sublocations",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "sublocations",
       "target_table": "sa_sublocations",
       "primary_keys": ["Id"],
@@ -153,7 +153,7 @@
     {
       "key": "task_categories",
       "ingestion_name": "DatabricksBridge_task_categories",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_categories",
       "target_table": "sa_task_categories",
       "primary_keys": ["TaskId", "CategoryId"],
@@ -163,7 +163,7 @@
     {
       "key": "task_checkpoint_parameters",
       "ingestion_name": "DatabricksBridge_task_checkpoint_parameters",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_checkpoint_parameters",
       "target_table": "sa_task_checkpoint_parameters",
       "primary_keys": ["TaskId", "CheckpointId"],
@@ -173,7 +173,7 @@
     {
       "key": "task_list_tasks",
       "ingestion_name": "DatabricksBridge_task_list_tasks",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_list_tasks",
       "target_table": "sa_task_list_tasks",
       "primary_keys": ["TaskListId", "TaskId"],
@@ -183,7 +183,7 @@
     {
       "key": "task_lists",
       "ingestion_name": "DatabricksBridge_task_lists",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_lists",
       "target_table": "sa_task_lists",
       "primary_keys": ["Id"],
@@ -193,7 +193,7 @@
     {
       "key": "task_recurrence",
       "ingestion_name": "DatabricksBridge_task_recurrence",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_recurrence",
       "target_table": "sa_task_recurrence",
       "job_group": "dims",
@@ -202,7 +202,7 @@
     {
       "key": "task_status",
       "ingestion_name": "DatabricksBridge_task_status",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "task_status",
       "target_table": "sa_task_status",
       "primary_keys": ["Id"],
@@ -212,7 +212,7 @@
     {
       "key": "tasks",
       "ingestion_name": "DatabricksBridge_tasks",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "tasks",
       "target_table": "sa_tasks",
       "primary_keys": ["Id"],
@@ -222,7 +222,7 @@
     {
       "key": "users_locations",
       "ingestion_name": "DatabricksBridge_users_locations",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "users_locations",
       "target_table": "sa_users_locations",
       "job_group": "dims",
@@ -231,7 +231,7 @@
     {
       "key": "work_plan",
       "ingestion_name": "DatabricksBridge_work_plan",
-      "source_schema": "dbo",
+      "source_schema": "",
       "source_table": "work_plan",
       "target_table": "sa_work_plan",
       "primary_keys": ["Id"],

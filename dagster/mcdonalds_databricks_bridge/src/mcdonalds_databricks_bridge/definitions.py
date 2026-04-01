@@ -10,6 +10,7 @@ from .defs.resources import (
     bridge_state_sqlserver_resource,
     databricks_sql_resource,
     load_table_configs,
+    source_mysql_resource,
     source_sqlserver_resource,
 )
 from .defs.schedules import bridge_cleanup_schedule, build_bridge_schedules
@@ -30,6 +31,7 @@ def defs():
         resources={
             "bridge_state_sqlserver": bridge_state_sqlserver_resource,
             "databricks_sql": databricks_sql_resource,
+            "source_mysql": source_mysql_resource,
             "source_sqlserver": source_sqlserver_resource,
         },
     )

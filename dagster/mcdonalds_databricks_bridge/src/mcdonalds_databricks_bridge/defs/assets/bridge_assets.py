@@ -12,12 +12,12 @@ from ..resources import (
     BridgeStateSqlServerResource,
     BridgeTableConfig,
     DatabricksSqlResource,
-    SourceSqlServerResource,
+    SourceMySqlResource,
 )
 
 
 def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
-    source_sql: SourceSqlServerResource = context.resources.source_sqlserver
+    source_sql: SourceMySqlResource = context.resources.source_mysql
     bridge_state: BridgeStateSqlServerResource = context.resources.bridge_state_sqlserver
     databricks_sql: DatabricksSqlResource = context.resources.databricks_sql
 
@@ -162,7 +162,7 @@ def build_bridge_asset(table_config: BridgeTableConfig):
     @asset(
         name=table_config.bridge_asset_name,
         non_argument_deps={AssetKey(table_config.source_asset_name)},
-        required_resource_keys={"source_sqlserver", "bridge_state_sqlserver", "databricks_sql"},
+        required_resource_keys={"source_mysql", "bridge_state_sqlserver", "databricks_sql"},
         group_name=table_config.asset_group_name,
         tags={
             "job_type": "databricks_bridge",

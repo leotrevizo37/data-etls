@@ -11,49 +11,68 @@ from databricks.sql.exc import ServerOperationError
 from databricks.sdk.core import Config, oauth_service_principal
 
 from .bridge_config import BridgeTableConfig
-from .source_sql_server import SourceColumn
+from .source_mysql import SourceColumn
 
 
 def _quote_databricks_ident(identifier: str) -> str:
     return "`" + identifier.replace("`", "``") + "`"
 
 
-def _sql_server_type_to_databricks(column: SourceColumn) -> str:
+def _source_type_to_databricks(column: SourceColumn) -> str:
     sql_type = column.sql_type.lower()
 
     if sql_type == "bigint":
         return "BIGINT"
-    if sql_type == "int":
+    if sql_type in {"int", "integer", "mediumint"}:
         return "INT"
     if sql_type == "smallint":
         return "SMALLINT"
     if sql_type == "tinyint":
         return "TINYINT"
-    if sql_type == "bit":
+    if sql_type in {"bool", "boolean"}:
         return "BOOLEAN"
+    if sql_type == "bit":
+        return "BINARY"
     if sql_type == "real":
         return "FLOAT"
     if sql_type == "float":
         return "DOUBLE"
-    if sql_type in {"decimal", "numeric"}:
+    if sql_type in {"double", "double precision"}:
+        return "DOUBLE"
+    if sql_type in {"decimal", "numeric", "dec", "fixed"}:
         precision = int(column.precision or 38)
         scale = int(column.scale or 0)
         precision = max(1, min(precision, 38))
         scale = max(0, min(scale, precision))
         return f"DECIMAL({precision},{scale})"
-    if sql_type == "money":
-        return "DECIMAL(19,4)"
-    if sql_type == "smallmoney":
-        return "DECIMAL(10,4)"
     if sql_type == "date":
         return "DATE"
-    if sql_type in {"datetime", "datetime2", "smalldatetime"}:
+    if sql_type in {"datetime", "timestamp"}:
         return "TIMESTAMP_NTZ"
-    if sql_type in {"time", "datetimeoffset"}:
+    if sql_type == "year":
+        return "SMALLINT"
+    if sql_type == "time":
         return "STRING"
-    if sql_type in {"uniqueidentifier", "char", "nchar", "varchar", "nvarchar", "text", "ntext", "xml"}:
+    if sql_type in {
+        "char",
+        "varchar",
+        "tinytext",
+        "text",
+        "mediumtext",
+        "longtext",
+        "json",
+        "enum",
+        "set",
+    }:
         return "STRING"
-    if sql_type in {"binary", "varbinary", "image"}:
+    if sql_type in {
+        "binary",
+        "varbinary",
+        "tinyblob",
+        "blob",
+        "mediumblob",
+        "longblob",
+    }:
         return "BINARY"
 
     return "STRING"
@@ -188,7 +207,7 @@ class DatabricksSqlResource:
             [
                 _quote_databricks_ident(column.name)
                 + " "
-                + _sql_server_type_to_databricks(column)
+                + _source_type_to_databricks(column)
                 for column in columns
             ]
         )

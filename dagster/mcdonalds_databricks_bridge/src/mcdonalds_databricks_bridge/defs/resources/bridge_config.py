@@ -63,7 +63,9 @@ class BridgeTableConfig:
 
     @property
     def source_fqn(self) -> str:
-        return f"{self.source_schema}.{self.source_table}"
+        if self.source_schema:
+            return f"{self.source_schema}.{self.source_table}"
+        return self.source_table
 
     @property
     def asset_token(self) -> str:
@@ -91,6 +93,7 @@ def _build_config_from_legacy_slot(slot: str) -> BridgeTableConfig:
     source_table = os.getenv(f"BRIDGE_TABLE_{slot}_SOURCE_TABLE", f"tabla{slot}")
     target_table = os.getenv(f"BRIDGE_TABLE_{slot}_TARGET_TABLE", source_table)
     primary_keys = _split_csv(os.getenv(f"BRIDGE_TABLE_{slot}_PRIMARY_KEYS", "Id"))
+    default_source_schema = os.getenv("BRIDGE_SRCSQL_DB", "")
 
     if not primary_keys:
         raise ValueError(f"BRIDGE_TABLE_{slot}_PRIMARY_KEYS must not be empty.")
@@ -101,7 +104,7 @@ def _build_config_from_legacy_slot(slot: str) -> BridgeTableConfig:
             f"BRIDGE_TABLE_{slot}_INGESTION_NAME",
             f"DatabricksBridge_{source_table}",
         ),
-        source_schema=os.getenv(f"BRIDGE_TABLE_{slot}_SOURCE_SCHEMA", "dbo"),
+        source_schema=os.getenv(f"BRIDGE_TABLE_{slot}_SOURCE_SCHEMA", default_source_schema),
         source_table=source_table,
         target_table=target_table,
         primary_keys=primary_keys,
@@ -145,7 +148,8 @@ def _build_config_from_manifest_entry(entry: Dict[str, Any], index: int) -> Brid
     if not source_table:
         raise ValueError(f"Bridge manifest table entry #{index} is missing 'source_table'.")
 
-    source_schema = str(entry.get("source_schema", "dbo")).strip() or "dbo"
+    default_source_schema = os.getenv("BRIDGE_SRCSQL_DB", "")
+    source_schema = str(entry.get("source_schema", default_source_schema)).strip()
     target_table = str(entry.get("target_table", source_table)).strip() or source_table
     key = str(entry.get("key", target_table)).strip() or target_table
 
