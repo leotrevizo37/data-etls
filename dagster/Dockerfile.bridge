@@ -15,7 +15,8 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        openjdk-17-jre-headless \
        curl ca-certificates gnupg apt-transport-https \
-       unixodbc unixodbc-dev gcc g++ \
+       unixodbc unixodbc-dev odbcinst \
+       gcc g++ \
        sudo \
        unzip \
        rsync \
@@ -32,6 +33,18 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
        mssql-tools18 \
        odbc-mariadb \
   && rm -rf /var/lib/apt/lists/*
+
+RUN test -f /usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so \
+  && cat >/tmp/mariadb-odbc-driver.template <<'EOF'
+[MariaDB ODBC 3.1 Driver]
+Description=MariaDB Connector/ODBC v.3.1
+Driver=/usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so
+Threading=0
+UsageCount=1
+EOF
+RUN odbcinst -i -d -f /tmp/mariadb-odbc-driver.template \
+  && odbcinst -q -d \
+  && cat /etc/odbcinst.ini
 
 ENV PATH="/opt/mssql-tools18/bin:${PATH}"
 
