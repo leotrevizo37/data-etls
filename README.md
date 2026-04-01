@@ -106,3 +106,9 @@ source venv/bin/activate
 ```bash
 uv run dagster dev
 ```
+
+### Testear dependencias/proyecto dagster antes de hacer el build
+* Primero es necesario estar dentro del src del proyecto de dagster
+```bash
+dagster definitions validate -m mcdonalds.definitions -a defs
+```
