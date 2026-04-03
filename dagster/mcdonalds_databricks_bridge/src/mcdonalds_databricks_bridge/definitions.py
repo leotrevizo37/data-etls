@@ -18,6 +18,7 @@ from .defs.resources import (
     source_sqlserver_resource,
 )
 from .defs.schedules import bridge_cleanup_schedule, build_bridge_schedules
+from .location_docs import build_location_docs_metadata
 
 
 @lru_cache(maxsize=1)
@@ -50,6 +51,7 @@ def defs():
                 "Databricks bronze using append-only parquet loads."
             ),
             "table_count": len(table_configs),
+            **build_location_docs_metadata(),
         },
         component_tree=_build_component_tree(),
     )
