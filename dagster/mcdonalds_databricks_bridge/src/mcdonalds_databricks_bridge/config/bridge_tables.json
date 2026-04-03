@@ -7,6 +7,8 @@
       "source_table": "asp_net_users",
       "target_table": "sa_asp_net_users",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -17,6 +19,8 @@
       "source_table": "categories",
       "target_table": "sa_categories",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -27,6 +31,8 @@
       "source_table": "checkpoints",
       "target_table": "sa_checkpoints",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -38,7 +44,7 @@
       "target_table": "sa_evidence_photos",
       "primary_keys": ["Id"],
       "updated_at_column": "createdAt",
-      "created_at_column": "createdAt",
+      "created_at_column": "",
       "job_group": "facts",
       "enabled": true
     },
@@ -49,6 +55,8 @@
       "source_table": "frequency_types",
       "target_table": "sa_frequency_types",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -59,6 +67,8 @@
       "source_table": "location_task_list",
       "target_table": "sa_location_task_list",
       "primary_keys": ["LocationId"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -93,6 +103,8 @@
       "source_table": "perfiles",
       "target_table": "sa_perfiles",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -115,6 +127,8 @@
       "source_table": "priority_types",
       "target_table": "sa_priority_types",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -131,12 +145,14 @@
       "enabled": true
     },
     {
-      "key": "sublocations_schedules",
-      "ingestion_name": "DatabricksBridge_sublocations_schedules",
+      "key": "sublocation_schedules",
+      "ingestion_name": "DatabricksBridge_sublocation_schedules",
       "source_schema": "",
-      "source_table": "sublocations_schedules",
-      "target_table": "sa_sublocations_schedules",
+      "source_table": "sublocation_schedules",
+      "target_table": "sa_sublocation_schedules",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -147,6 +163,8 @@
       "source_table": "sublocations",
       "target_table": "sa_sublocations",
       "primary_keys": ["Id"],
+      "updated_at_column": "",
+      "created_at_column": "",
       "job_group": "dims",
       "enabled": true
     },
@@ -158,6 +176,8 @@
       "target_table": "sa_task_categories",
       "primary_keys": ["TaskId", "CategoryId"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -168,6 +188,8 @@
       "target_table": "sa_task_checkpoint_parameters",
       "primary_keys": ["TaskId", "CheckpointId"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -178,6 +200,8 @@
       "target_table": "sa_task_list_tasks",
       "primary_keys": ["TaskListId", "TaskId"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -188,6 +212,8 @@
       "target_table": "sa_task_lists",
       "primary_keys": ["Id"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -197,6 +223,8 @@
       "source_table": "task_recurrence",
       "target_table": "sa_task_recurrence",
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -207,6 +235,8 @@
       "target_table": "sa_task_status",
       "primary_keys": ["Id"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -217,6 +247,8 @@
       "target_table": "sa_tasks",
       "primary_keys": ["Id"],
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -226,6 +258,8 @@
       "source_table": "users_locations",
       "target_table": "sa_users_locations",
       "job_group": "dims",
+      "updated_at_column": "",
+      "created_at_column": "",
       "enabled": true
     },
     {
@@ -235,7 +269,8 @@
       "source_table": "work_plan",
       "target_table": "sa_work_plan",
       "primary_keys": ["Id"],
-      "created_at_column": "timeLocal",
+      "updated_at_column": "timeLocal",
+      "created_at_column": "",
       "job_group": "facts",
       "enabled": true
     }

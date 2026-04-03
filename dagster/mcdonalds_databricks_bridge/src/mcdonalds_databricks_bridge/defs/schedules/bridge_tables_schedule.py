@@ -1,7 +1,10 @@
 import os
+from collections import defaultdict
+from typing import Dict, Iterable, List, Optional
 
 from dagster import DefaultScheduleStatus, ScheduleDefinition
 
+from ..resources import BridgeTableConfig
 
 _GROUP_CRON_DEFAULTS = {
     "dims": "0 11 * * 1",
@@ -71,7 +74,12 @@ def build_bridge_schedules(bridge_jobs):
             ScheduleDefinition(
                 name=bridge_job.name.replace("_job", "_schedule"),
                 job=bridge_job,
-                cron_schedule=cron_schedule,
+                cron_schedule=_resolve_schedule_cron(
+                    bridge_job=bridge_job,
+                    group_schedule_overrides=group_schedule_overrides,
+                    default_cron=default_cron,
+                    dims_cron=dims_cron,
+                ),
                 execution_timezone=execution_timezone,
                 description=_build_schedule_description(bridge_job.name, cron_schedule),
                 metadata={
