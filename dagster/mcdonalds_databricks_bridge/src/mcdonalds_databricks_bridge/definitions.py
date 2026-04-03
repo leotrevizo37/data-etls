@@ -22,7 +22,7 @@ def defs():
     source_assets = build_source_assets(table_configs)
     bridge_assets = build_bridge_assets(table_configs)
     bridge_jobs = build_bridge_jobs(table_configs)
-    bridge_schedules = build_bridge_schedules(bridge_jobs)
+    bridge_schedules = build_bridge_schedules(bridge_jobs, table_configs)
 
     return Definitions(
         assets=[*source_assets, *bridge_assets, bridge_cleanup_old_runs],

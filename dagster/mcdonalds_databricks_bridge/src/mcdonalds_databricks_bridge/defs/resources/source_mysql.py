@@ -34,9 +34,11 @@ class SourceColumn:
 @dataclass(frozen=True)
 class ExtractResult:
     row_count: int
-    max_updated_at: Optional[datetime]
+    max_cursor_at: Optional[datetime]
     columns: List[SourceColumn]
     output_path: Optional[str]
+    cursor_column: Optional[str]
+    load_mode: str
 
 
 def _mysql_type_to_arrow(column: SourceColumn) -> pa.DataType:
@@ -125,6 +127,26 @@ def _normalize_value(value: Any, sql_type: str) -> Any:
         return value
 
     return str(value)
+
+
+def _resolve_source_column_name(columns: List[SourceColumn], configured_name: str) -> Optional[str]:
+    lookup = {
+        column.name.lower(): column.name
+        for column in columns
+    }
+    return lookup.get(configured_name.strip().lower())
+
+
+def resolve_incremental_cursor_column(
+    table_config: BridgeTableConfig,
+    columns: List[SourceColumn],
+) -> Optional[str]:
+    for candidate in table_config.incremental_cursor_candidates:
+        resolved = _resolve_source_column_name(columns, candidate)
+        if resolved is not None:
+            return resolved
+
+    return None
 
 
 class SourceMySqlResource:
@@ -229,28 +251,54 @@ ORDER BY ORDINAL_POSITION
 
         return columns
 
+    def resolve_incremental_cursor_column(
+        self,
+        table_config: BridgeTableConfig,
+        columns: List[SourceColumn],
+    ) -> Optional[str]:
+        return resolve_incremental_cursor_column(
+            table_config=table_config,
+            columns=columns,
+        )
+
     def extract_incremental_to_parquet(
         self,
         table_config: BridgeTableConfig,
         columns: List[SourceColumn],
         from_updated_at: Optional[datetime],
         output_path: Path,
+        cursor_column: Optional[str],
     ) -> ExtractResult:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         quoted_table = self._build_qualified_table_name(table_config)
-        order_by_columns = [
-            _quote_mysql_ident(table_config.updated_at_column),
-            *[_quote_mysql_ident(key) for key in table_config.primary_keys],
-        ]
+        order_by_columns: List[str] = []
+        ordered_identifiers: List[str] = []
+        seen_identifiers = set()
+
+        if cursor_column:
+            ordered_identifiers.append(cursor_column)
+
+        for primary_key in table_config.primary_keys:
+            resolved_key = _resolve_source_column_name(columns, primary_key) or primary_key
+            ordered_identifiers.append(resolved_key)
+
+        for identifier in ordered_identifiers:
+            lookup_key = identifier.lower()
+            if lookup_key in seen_identifiers:
+                continue
+
+            seen_identifiers.add(lookup_key)
+            order_by_columns.append(_quote_mysql_ident(identifier))
+
         order_by = ", ".join(order_by_columns)
 
         params: List[Any] = []
         query = "SELECT * FROM " + quoted_table
-        if from_updated_at is not None:
+        if cursor_column and from_updated_at is not None:
             query += (
                 " WHERE "
-                + _quote_mysql_ident(table_config.updated_at_column)
+                + _quote_mysql_ident(cursor_column)
                 + " >= ?"
             )
             params.append(from_updated_at)
@@ -263,14 +311,16 @@ ORDER BY ORDINAL_POSITION
             ]
         )
         sql_types_by_name = {column.name: column.sql_type for column in columns}
-        updated_index = next(
-            index
-            for index, column in enumerate(columns)
-            if column.name.lower() == table_config.updated_at_column.lower()
-        )
+        cursor_index = None
+        if cursor_column is not None:
+            cursor_index = next(
+                index
+                for index, column in enumerate(columns)
+                if column.name.lower() == cursor_column.lower()
+            )
 
         row_count = 0
-        max_updated_at: Optional[datetime] = None
+        max_cursor_at: Optional[datetime] = None
         writer: Optional[pq.ParquetWriter] = None
 
         try:
@@ -293,11 +343,12 @@ ORDER BY ORDINAL_POSITION
                             )
                         normalized_rows.append(row_dict)
 
-                        updated_value = row[updated_index]
-                        if updated_value is not None and (
-                            max_updated_at is None or updated_value > max_updated_at
-                        ):
-                            max_updated_at = updated_value
+                        if cursor_index is not None:
+                            cursor_value = row[cursor_index]
+                            if cursor_value is not None and (
+                                max_cursor_at is None or cursor_value > max_cursor_at
+                            ):
+                                max_cursor_at = cursor_value
 
                     table = pa.Table.from_pylist(normalized_rows, schema=arrow_schema)
                     if writer is None:
@@ -310,9 +361,11 @@ ORDER BY ORDINAL_POSITION
 
         return ExtractResult(
             row_count=row_count,
-            max_updated_at=max_updated_at,
+            max_cursor_at=max_cursor_at,
             columns=columns,
             output_path=output_path.as_posix() if row_count > 0 else None,
+            cursor_column=cursor_column,
+            load_mode="incremental" if cursor_column is not None else "full_refresh",
         )
 
 
