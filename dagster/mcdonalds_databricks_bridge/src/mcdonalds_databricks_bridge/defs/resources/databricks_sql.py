@@ -144,6 +144,51 @@ class DatabricksSqlResource:
             ]
         )
 
+    def _full_refresh_stage_fqn(self, table_config: BridgeTableConfig) -> str:
+        return ".".join(
+            [
+                _quote_databricks_ident(self.catalog),
+                _quote_databricks_ident(self.staging_schema),
+                _quote_databricks_ident(table_config.target_table + "__bridge_full_refresh_stage"),
+            ]
+        )
+
+    def _ddl_columns(self, columns: Iterable[SourceColumn]) -> str:
+        return ", ".join(
+            [
+                _quote_databricks_ident(column.name)
+                + " "
+                + _source_type_to_databricks(column)
+                for column in columns
+            ]
+        )
+
+    def _execute_copy_into(self, cursor, target_fqn: str, remote_batch_dir: str) -> None:
+        copy_sql = (
+            "COPY INTO "
+            + target_fqn
+            + " FROM '"
+            + remote_batch_dir
+            + "' FILEFORMAT = PARQUET"
+        )
+
+        try:
+            cursor.execute(copy_sql)
+        except ServerOperationError as ex:
+            error_text = str(ex)
+            if "DELTA_FAILED_TO_MERGE_FIELDS" in error_text:
+                raise RuntimeError(
+                    "COPY INTO failed because the incoming parquet schema does not match "
+                    "the Databricks Delta bronze target schema. The bridge writes append-only "
+                    "directly into the bronze table, so if this persists the mismatch is likely "
+                    "on a column type such as datetime/timestamp in the incoming file. "
+                    "SQL Server datetime values in this bridge are exported as parquet timestamps "
+                    "without timezone adjustment and should align with TIMESTAMP_NTZ in Databricks. "
+                    "Original error: "
+                    + error_text
+                ) from ex
+            raise
+
     def build_remote_batch_dir(self, table_config: BridgeTableConfig, batch_id: str) -> str:
         return (
             "/Volumes/"
@@ -187,6 +232,15 @@ class DatabricksSqlResource:
             "CREATE SCHEMA IF NOT EXISTS "
             + ".".join(
                 [
+                    _quote_databricks_ident(self.catalog),
+                    _quote_databricks_ident(self.staging_schema),
+                ]
+            )
+        )
+        cursor.execute(
+            "CREATE SCHEMA IF NOT EXISTS "
+            + ".".join(
+                [
                     _quote_databricks_ident(self.volume_catalog),
                     _quote_databricks_ident(self.volume_schema),
                 ]
@@ -203,14 +257,7 @@ class DatabricksSqlResource:
             )
         )
 
-        ddl_columns = ", ".join(
-            [
-                _quote_databricks_ident(column.name)
-                + " "
-                + _source_type_to_databricks(column)
-                for column in columns
-            ]
-        )
+        ddl_columns = self._ddl_columns(columns)
 
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS "
@@ -230,30 +277,40 @@ class DatabricksSqlResource:
         )
 
     def copy_into_target(self, cursor, table_config: BridgeTableConfig, remote_batch_dir: str) -> None:
-        copy_sql = (
-            "COPY INTO "
-            + self._target_fqn(table_config)
-            + " FROM '"
-            + remote_batch_dir
-            + "' FILEFORMAT = PARQUET"
+        self._execute_copy_into(cursor, self._target_fqn(table_config), remote_batch_dir)
+
+    def replace_target_from_remote(
+        self,
+        cursor,
+        table_config: BridgeTableConfig,
+        columns: Iterable[SourceColumn],
+        remote_batch_dir: str,
+    ) -> None:
+        stage_fqn = self._full_refresh_stage_fqn(table_config)
+        ddl_columns = self._ddl_columns(columns)
+
+        cursor.execute("DROP TABLE IF EXISTS " + stage_fqn)
+        cursor.execute(
+            "CREATE OR REPLACE TABLE "
+            + stage_fqn
+            + " ("
+            + ddl_columns
+            + ") USING DELTA"
         )
 
         try:
-            cursor.execute(copy_sql)
-        except ServerOperationError as ex:
-            error_text = str(ex)
-            if "DELTA_FAILED_TO_MERGE_FIELDS" in error_text:
-                raise RuntimeError(
-                    "COPY INTO failed because the incoming parquet schema does not match "
-                    "the Databricks Delta bronze target schema. The bridge writes append-only "
-                    "directly into the bronze table, so if this persists the mismatch is likely "
-                    "on a column type such as datetime/timestamp in the incoming file. "
-                    "SQL Server datetime values in this bridge are exported as parquet timestamps "
-                    "without timezone adjustment and should align with TIMESTAMP_NTZ in Databricks. "
-                    "Original error: "
-                    + error_text
-                ) from ex
-            raise
+            self._execute_copy_into(cursor, stage_fqn, remote_batch_dir)
+            cursor.execute(
+                "INSERT OVERWRITE TABLE "
+                + self._target_fqn(table_config)
+                + " SELECT * FROM "
+                + stage_fqn
+            )
+        finally:
+            cursor.execute("DROP TABLE IF EXISTS " + stage_fqn)
+
+    def truncate_target(self, cursor, table_config: BridgeTableConfig) -> None:
+        cursor.execute("TRUNCATE TABLE " + self._target_fqn(table_config))
 
     def remove_remote_file(self, cursor, remote_path: str) -> None:
         cursor.execute("REMOVE '" + remote_path + "'")
