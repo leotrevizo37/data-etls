@@ -6,7 +6,7 @@ from typing import Iterable, List, Optional
 import os
 import uuid
 
-from dagster import AssetKey, MaterializeResult, asset
+from dagster import AssetKey, MaterializeResult, MetadataValue, asset
 
 from ..resources import (
     BridgeStateSqlServerResource,
@@ -16,10 +16,68 @@ from ..resources import (
 )
 
 
+def _elapsed_seconds(started_at: datetime) -> float:
+    return round((datetime.now(timezone.utc) - started_at).total_seconds(), 3)
+
+
+def _build_metadata(
+    table_config: BridgeTableConfig,
+    batch_id: str,
+    row_count: int,
+    overlap_minutes: int,
+    started_at: datetime,
+    column_count: int,
+    last_loaded_at: Optional[datetime],
+    load_mode: str,
+    local_output_path: Optional[str] = None,
+    remote_batch_dir: Optional[str] = None,
+    max_updated_at: Optional[datetime] = None,
+    remote_files_uploaded: int = 0,
+) -> dict:
+    metadata = {
+        "source_table": table_config.source_fqn,
+        "target_table": table_config.target_table,
+        "job_group": table_config.job_group,
+        "row_count": row_count,
+        "rows_loaded": row_count,
+        "column_count": column_count,
+        "primary_key_count": len(table_config.primary_keys),
+        "remote_files_uploaded": remote_files_uploaded,
+        "watermark_overlap_minutes": overlap_minutes,
+        "batch_duration_seconds": _elapsed_seconds(started_at),
+        "batch_id": batch_id,
+        "load_mode": load_mode,
+        "last_loaded_at": (
+            MetadataValue.timestamp(last_loaded_at) if last_loaded_at else "NULL"
+        ),
+        "cursor_column": table_config.updated_at_column,
+    }
+
+    if max_updated_at:
+        metadata["max_updated_at"] = MetadataValue.timestamp(max_updated_at)
+
+    if local_output_path:
+        metadata["local_output_path"] = local_output_path
+
+    if remote_batch_dir:
+        metadata["remote_batch_dir"] = remote_batch_dir
+
+    metadata["load_summary"] = MetadataValue.md(
+        "Append-only bridge load from `"
+        + table_config.source_fqn
+        + "` into Databricks bronze `"
+        + table_config.target_table
+        + "`."
+    )
+
+    return metadata
+
+
 def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
     source_sql: SourceMySqlResource = context.resources.source_mysql
     bridge_state: BridgeStateSqlServerResource = context.resources.bridge_state_sqlserver
     databricks_sql: DatabricksSqlResource = context.resources.databricks_sql
+    started_at = datetime.now(timezone.utc)
 
     batch_id = (
         table_config.target_table
@@ -75,13 +133,16 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
                 error_message=None,
             )
             return MaterializeResult(
-                metadata={
-                    "source_table": table_config.source_fqn,
-                    "target_table": table_config.target_table,
-                    "row_count": 0,
-                    "watermark": last_loaded_at.isoformat() if last_loaded_at else "NULL",
-                    "batch_id": batch_id,
-                }
+                metadata=_build_metadata(
+                    table_config=table_config,
+                    batch_id=batch_id,
+                    row_count=0,
+                    overlap_minutes=overlap_minutes,
+                    started_at=started_at,
+                    column_count=len(columns),
+                    last_loaded_at=last_loaded_at,
+                    load_mode="append_only_copy_into",
+                )
             )
 
         remote_batch_dir = databricks_sql.build_remote_batch_dir(table_config, batch_id)
@@ -119,20 +180,20 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
         )
 
         return MaterializeResult(
-            metadata={
-                "source_table": table_config.source_fqn,
-                "target_table": table_config.target_table,
-                "row_count": extract_result.row_count,
-                "load_mode": "append_only_copy_into",
-                "max_updated_at": (
-                    extract_result.max_updated_at.isoformat()
-                    if extract_result.max_updated_at
-                    else "NULL"
-                ),
-                "batch_id": batch_id,
-                "local_output_path": extract_result.output_path or "NULL",
-                "remote_batch_dir": remote_batch_dir,
-            }
+            metadata=_build_metadata(
+                table_config=table_config,
+                batch_id=batch_id,
+                row_count=extract_result.row_count,
+                overlap_minutes=overlap_minutes,
+                started_at=started_at,
+                column_count=len(extract_result.columns),
+                last_loaded_at=last_loaded_at,
+                load_mode="append_only_copy_into",
+                local_output_path=extract_result.output_path,
+                remote_batch_dir=remote_batch_dir,
+                max_updated_at=extract_result.max_updated_at,
+                remote_files_uploaded=1,
+            )
         )
     except Exception as ex:
         bridge_state.mark_run_completed(
@@ -164,6 +225,14 @@ def build_bridge_asset(table_config: BridgeTableConfig):
         non_argument_deps={AssetKey(table_config.source_asset_name)},
         required_resource_keys={"source_mysql", "bridge_state_sqlserver", "databricks_sql"},
         group_name=table_config.asset_group_name,
+        description=(
+            "Appends rows from the source table `"
+            + table_config.source_fqn
+            + "` into Databricks bronze target `"
+            + table_config.target_table
+            + "`. The bridge preserves row history in bronze and leaves "
+            "deduplication or latest-state logic to downstream Databricks transformations."
+        ),
         tags={
             "job_type": "databricks_bridge",
             "bridge_group": table_config.job_group,

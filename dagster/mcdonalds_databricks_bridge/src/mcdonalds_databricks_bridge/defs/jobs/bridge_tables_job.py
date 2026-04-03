@@ -18,9 +18,17 @@ def build_bridge_jobs(table_configs: Sequence[BridgeTableConfig]) -> List:
             selection=AssetSelection.keys(
                 *[table_config.bridge_asset_name for table_config in table_configs]
             ),
+            description=(
+                "Runs all Databricks bridge ingestion assets across every configured "
+                "job group."
+            ),
             tags={
                 "job_type": "databricks_bridge",
                 "bridge_scope": "all",
+            },
+            metadata={
+                "bridge_table_count": len(table_configs),
+                "bridge_group_count": len({config.job_group for config in table_configs}),
             },
         )
     ]
@@ -39,9 +47,18 @@ def build_bridge_jobs(table_configs: Sequence[BridgeTableConfig]) -> List:
                 selection=AssetSelection.keys(
                     *[table_config.bridge_asset_name for table_config in configs]
                 ),
+                description=(
+                    "Runs bridge ingestion assets for the `"
+                    + group_name
+                    + "` group."
+                ),
                 tags={
                     "job_type": "databricks_bridge",
                     "bridge_scope": "group",
+                    "bridge_group": group_name,
+                },
+                metadata={
+                    "bridge_table_count": len(configs),
                     "bridge_group": group_name,
                 },
             )

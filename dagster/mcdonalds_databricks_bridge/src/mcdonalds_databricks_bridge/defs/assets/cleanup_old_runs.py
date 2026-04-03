@@ -3,13 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
-from dagster import DagsterRunStatus, RunsFilter, asset
+from dagster import DagsterRunStatus, MaterializeResult, RunsFilter, asset
 
 
 @asset(
     name="bridge_cleanup_old_runs",
     config_schema={"keep_days": int, "batch_size": int},
     group_name="smartaudits_bridge",
+    description=(
+        "Deletes old Dagster bridge run records to keep orchestration metadata compact "
+        "without affecting bridge ingestion data."
+    ),
 )
 def bridge_cleanup_old_runs(context) -> Optional[Dict[str, str]]:
     instance = context.instance
@@ -71,10 +75,20 @@ def bridge_cleanup_old_runs(context) -> Optional[Dict[str, str]]:
         cutoff_dt.isoformat(),
     )
 
-    return {
+    result = {
         "keep_days": str(keep_days),
         "batch_size": str(batch_size),
         "cutoff": cutoff_dt.isoformat(),
         "scanned": str(scanned),
         "deleted": str(deleted),
     }
+    return MaterializeResult(
+        metadata={
+            "keep_days": keep_days,
+            "batch_size": batch_size,
+            "scanned_runs": scanned,
+            "deleted_runs": deleted,
+            "cleanup_cutoff": cutoff_dt.isoformat(),
+        },
+        value=result,
+    )
