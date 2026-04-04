@@ -9,6 +9,10 @@ from dagster import DagsterRunStatus, RunsFilter, asset
 @asset(
     name="bridge_cleanup_old_runs",
     config_schema={"keep_days": int, "batch_size": int},
+    description=(
+        "Deletes old Dagster bridge run records to keep orchestration metadata compact "
+        + "without affecting bridge ingestion data."
+    ),
 )
 def bridge_cleanup_old_runs(context) -> Optional[Dict[str, str]]:
     instance = context.instance

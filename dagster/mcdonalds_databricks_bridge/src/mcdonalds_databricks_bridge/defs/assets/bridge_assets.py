@@ -217,6 +217,15 @@ def build_bridge_asset(table_config: BridgeTableConfig):
         non_argument_deps={AssetKey(table_config.source_asset_name)},
         required_resource_keys={"source_mysql", "bridge_state_sqlserver", "databricks_sql"},
         group_name=table_config.asset_group_name,
+        description=(
+            "Appends rows from the source table `"
+            + table_config.source_fqn
+            + "` into Databricks bronze target `"
+            + table_config.target_table
+            + "`. The bridge preserves row history in bronze and leaves "
+            + "deduplication or latest-state logic to downstream Databricks "
+            + "transformations."
+        ),
         tags={
             "job_type": "databricks_bridge",
             "bridge_group": table_config.job_group,
