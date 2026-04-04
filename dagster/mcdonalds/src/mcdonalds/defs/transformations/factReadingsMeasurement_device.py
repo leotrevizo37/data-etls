@@ -8,6 +8,21 @@ from pyspark.sql.functions import (
     lit,
 )
 
+from ...device_status_rules import DEVICE_STATUS_RULES, DEFAULT_DEVICE_STATUS_CODE
+
+
+def _rule_condition(expected_values):
+    condition = None
+    for field_name, expected_value in expected_values.items():
+        field_expr = (
+            col(field_name).isNull()
+            if expected_value is None
+            else col(field_name) == lit(expected_value)
+        )
+        condition = field_expr if condition is None else (condition & field_expr)
+    return condition
+
+
 def factReadingsMeasurement_device(
         factoperations_df: DataFrame) -> DataFrame:
 
@@ -94,95 +109,7 @@ def factReadingsMeasurement_device(
         grouped
         .withColumn(
             "StatusCode",
-            when(
-                (col("amperage_status") == 1)
-                & col("pressure_status").isNull()
-                & col("temperature_status").isNull()
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status") == 1)
-                & (col("pressure_status") == 1)
-                & col("temperature_status").isNull()
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status") == 1)
-                & (col("pressure_status") == 0)
-                & col("temperature_status").isNull()
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(2),
-            )
-            .when(
-                (col("amperage_status") == 1)
-                & (col("pressure_status").isNull())
-                & (col("temperature_status") == 0)
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(4),
-            )
-            .when(
-                (col("amperage_status") == 1)
-                & (col("pressure_status").isNull())
-                & (col("temperature_status") == 1)
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status").isNull())
-                & (col("pressure_status").isNull())
-                & (col("temperature_status") == 1)
-                & col("current_status").isNull()
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status").isNull())
-                & (col("pressure_status").isNull())
-                & (col("temperature_status").isNull())
-                & (col("current_status") == 1)
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status") == 1)
-                & (col("pressure_status").isNull())
-                & (col("temperature_status").isNull())
-                & (col("current_status") == 1)
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                (col("amperage_status") == 0)
-                & (col("pressure_status").isNull())
-                & (col("temperature_status").isNull())
-                & (col("current_status") == 1)
-                & col("termostatus").isNull(),
-                lit(1),
-            )
-            .when(
-                col("amperage_status").isNull()
-                & col("pressure_status").isNull()
-                & (col("temperature_status") == 1)
-                & col("current_status").isNull()
-                & (col("termostatus") == 1),
-                lit(1),
-            )
-            .when(
-                col("amperage_status").isNull()
-                & col("pressure_status").isNull()
-                & (col("temperature_status") == 0)
-                & col("current_status").isNull()
-                & (col("termostatus") == 1),
-                lit(1),
-            )
-            .otherwise(lit(3))
+            _build_status_expression()
         )
         .select(
             col("DeviceId"),
@@ -194,3 +121,16 @@ def factReadingsMeasurement_device(
     )
 
     return result
+
+
+def _build_status_expression():
+    expression = None
+
+    for expected_values, resolved_code in DEVICE_STATUS_RULES:
+        rule_expression = _rule_condition(expected_values)
+        if expression is None:
+            expression = when(rule_expression, lit(resolved_code))
+        else:
+            expression = expression.when(rule_expression, lit(resolved_code))
+
+    return expression.otherwise(lit(DEFAULT_DEVICE_STATUS_CODE))

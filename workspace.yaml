@@ -3,3 +3,7 @@ load_from:
       host: mcdonalds-dagster-user-code
       port: 4001
       location_name: mcdonalds
+  - grpc_server:
+      host: mcdonalds-dagster-user-code-dbx-bridge
+      port: 4001
+      location_name: mcdonalds_databricks_bridge

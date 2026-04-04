@@ -1,0 +1,341 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator, Iterable
+import os
+
+from dagster import resource
+from databricks import sql
+from databricks.sql.exc import ServerOperationError
+from databricks.sdk.core import Config, oauth_service_principal
+
+from .bridge_config import BridgeTableConfig
+from .source_mysql import SourceColumn
+
+
+def _quote_databricks_ident(identifier: str) -> str:
+    return "`" + identifier.replace("`", "``") + "`"
+
+
+def _source_type_to_databricks(column: SourceColumn) -> str:
+    sql_type = column.sql_type.lower()
+
+    if sql_type == "bigint":
+        return "BIGINT"
+    if sql_type in {"int", "integer", "mediumint"}:
+        return "INT"
+    if sql_type == "smallint":
+        return "SMALLINT"
+    if sql_type == "tinyint":
+        return "TINYINT"
+    if sql_type in {"bool", "boolean"}:
+        return "BOOLEAN"
+    if sql_type == "bit":
+        return "BINARY"
+    if sql_type == "real":
+        return "FLOAT"
+    if sql_type == "float":
+        return "DOUBLE"
+    if sql_type in {"double", "double precision"}:
+        return "DOUBLE"
+    if sql_type in {"decimal", "numeric", "dec", "fixed"}:
+        precision = int(column.precision or 38)
+        scale = int(column.scale or 0)
+        precision = max(1, min(precision, 38))
+        scale = max(0, min(scale, precision))
+        return f"DECIMAL({precision},{scale})"
+    if sql_type == "date":
+        return "DATE"
+    if sql_type in {"datetime", "timestamp"}:
+        return "TIMESTAMP_NTZ"
+    if sql_type == "year":
+        return "SMALLINT"
+    if sql_type == "time":
+        return "STRING"
+    if sql_type in {
+        "char",
+        "varchar",
+        "tinytext",
+        "text",
+        "mediumtext",
+        "longtext",
+        "json",
+        "enum",
+        "set",
+    }:
+        return "STRING"
+    if sql_type in {
+        "binary",
+        "varbinary",
+        "tinyblob",
+        "blob",
+        "mediumblob",
+        "longblob",
+    }:
+        return "BINARY"
+
+    return "STRING"
+
+
+class DatabricksSqlResource:
+    def __init__(
+        self,
+        server_hostname: str,
+        http_path: str,
+        auth_mode: str,
+        access_token: str,
+        client_id: str,
+        client_secret: str,
+        catalog: str,
+        target_schema: str,
+        staging_schema: str,
+        volume_catalog: str,
+        volume_schema: str,
+        volume_name: str,
+        staging_allowed_local_path: str,
+    ) -> None:
+        self.server_hostname = server_hostname
+        self.http_path = http_path
+        self.auth_mode = auth_mode.lower()
+        self.access_token = access_token
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.catalog = catalog
+        self.target_schema = target_schema
+        self.staging_schema = staging_schema
+        self.volume_catalog = volume_catalog
+        self.volume_schema = volume_schema
+        self.volume_name = volume_name
+        self.staging_allowed_local_path = staging_allowed_local_path
+
+    @contextmanager
+    def connect(self) -> Generator[sql.Connection, None, None]:
+        kwargs = {
+            "server_hostname": self.server_hostname,
+            "http_path": self.http_path,
+            "catalog": self.catalog,
+            "schema": self.target_schema,
+            "staging_allowed_local_path": self.staging_allowed_local_path,
+        }
+
+        if self.auth_mode == "m2m":
+            config = Config(
+                host="https://" + self.server_hostname,
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+            )
+            kwargs["credentials_provider"] = oauth_service_principal(config)
+        else:
+            kwargs["access_token"] = self.access_token
+
+        connection = sql.connect(**kwargs)
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    def _target_fqn(self, table_config: BridgeTableConfig) -> str:
+        return ".".join(
+            [
+                _quote_databricks_ident(self.catalog),
+                _quote_databricks_ident(self.target_schema),
+                _quote_databricks_ident(table_config.target_table),
+            ]
+        )
+
+    def _full_refresh_stage_fqn(self, table_config: BridgeTableConfig) -> str:
+        return ".".join(
+            [
+                _quote_databricks_ident(self.catalog),
+                _quote_databricks_ident(self.staging_schema),
+                _quote_databricks_ident(table_config.target_table + "__bridge_full_refresh_stage"),
+            ]
+        )
+
+    def _ddl_columns(self, columns: Iterable[SourceColumn]) -> str:
+        return ", ".join(
+            [
+                _quote_databricks_ident(column.name)
+                + " "
+                + _source_type_to_databricks(column)
+                for column in columns
+            ]
+        )
+
+    def _execute_copy_into(self, cursor, target_fqn: str, remote_batch_dir: str) -> None:
+        copy_sql = (
+            "COPY INTO "
+            + target_fqn
+            + " FROM '"
+            + remote_batch_dir
+            + "' FILEFORMAT = PARQUET"
+        )
+
+        try:
+            cursor.execute(copy_sql)
+        except ServerOperationError as ex:
+            error_text = str(ex)
+            if "DELTA_FAILED_TO_MERGE_FIELDS" in error_text:
+                raise RuntimeError(
+                    "COPY INTO failed because the incoming parquet schema does not match "
+                    "the Databricks Delta bronze target schema. The bridge writes append-only "
+                    "directly into the bronze table, so if this persists the mismatch is likely "
+                    "on a column type such as datetime/timestamp in the incoming file. "
+                    "SQL Server datetime values in this bridge are exported as parquet timestamps "
+                    "without timezone adjustment and should align with TIMESTAMP_NTZ in Databricks. "
+                    "Original error: "
+                    + error_text
+                ) from ex
+            raise
+
+    def build_remote_batch_dir(self, table_config: BridgeTableConfig, batch_id: str) -> str:
+        return (
+            "/Volumes/"
+            + self.volume_catalog
+            + "/"
+            + self.volume_schema
+            + "/"
+            + self.volume_name
+            + "/"
+            + table_config.target_table
+            + "/"
+            + batch_id
+        )
+
+    def build_remote_file_path(
+        self,
+        table_config: BridgeTableConfig,
+        batch_id: str,
+        local_path: str,
+    ) -> str:
+        return self.build_remote_batch_dir(table_config, batch_id) + "/" + Path(local_path).name
+
+    def ensure_objects(
+        self,
+        cursor,
+        table_config: BridgeTableConfig,
+        columns: Iterable[SourceColumn],
+    ) -> None:
+        columns = list(columns)
+
+        cursor.execute(
+            "CREATE SCHEMA IF NOT EXISTS "
+            + ".".join(
+                [
+                    _quote_databricks_ident(self.catalog),
+                    _quote_databricks_ident(self.target_schema),
+                ]
+            )
+        )
+        cursor.execute(
+            "CREATE SCHEMA IF NOT EXISTS "
+            + ".".join(
+                [
+                    _quote_databricks_ident(self.catalog),
+                    _quote_databricks_ident(self.staging_schema),
+                ]
+            )
+        )
+        cursor.execute(
+            "CREATE SCHEMA IF NOT EXISTS "
+            + ".".join(
+                [
+                    _quote_databricks_ident(self.volume_catalog),
+                    _quote_databricks_ident(self.volume_schema),
+                ]
+            )
+        )
+        cursor.execute(
+            "CREATE VOLUME IF NOT EXISTS "
+            + ".".join(
+                [
+                    _quote_databricks_ident(self.volume_catalog),
+                    _quote_databricks_ident(self.volume_schema),
+                    _quote_databricks_ident(self.volume_name),
+                ]
+            )
+        )
+
+        ddl_columns = self._ddl_columns(columns)
+
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS "
+            + self._target_fqn(table_config)
+            + " ("
+            + ddl_columns
+            + ") USING DELTA"
+        )
+
+    def upload_file(self, cursor, local_path: str, remote_path: str) -> None:
+        cursor.execute(
+            "PUT '"
+            + local_path.replace("\\", "/")
+            + "' INTO '"
+            + remote_path
+            + "' OVERWRITE"
+        )
+
+    def copy_into_target(self, cursor, table_config: BridgeTableConfig, remote_batch_dir: str) -> None:
+        self._execute_copy_into(cursor, self._target_fqn(table_config), remote_batch_dir)
+
+    def replace_target_from_remote(
+        self,
+        cursor,
+        table_config: BridgeTableConfig,
+        columns: Iterable[SourceColumn],
+        remote_batch_dir: str,
+    ) -> None:
+        stage_fqn = self._full_refresh_stage_fqn(table_config)
+        ddl_columns = self._ddl_columns(columns)
+
+        cursor.execute("DROP TABLE IF EXISTS " + stage_fqn)
+        cursor.execute(
+            "CREATE OR REPLACE TABLE "
+            + stage_fqn
+            + " ("
+            + ddl_columns
+            + ") USING DELTA"
+        )
+
+        try:
+            self._execute_copy_into(cursor, stage_fqn, remote_batch_dir)
+            cursor.execute(
+                "INSERT OVERWRITE TABLE "
+                + self._target_fqn(table_config)
+                + " SELECT * FROM "
+                + stage_fqn
+            )
+        finally:
+            cursor.execute("DROP TABLE IF EXISTS " + stage_fqn)
+
+    def truncate_target(self, cursor, table_config: BridgeTableConfig) -> None:
+        cursor.execute("TRUNCATE TABLE " + self._target_fqn(table_config))
+
+    def remove_remote_file(self, cursor, remote_path: str) -> None:
+        cursor.execute("REMOVE '" + remote_path + "'")
+
+
+@resource
+def databricks_sql_resource(_):
+    staging_allowed_local_path = os.getenv(
+        "DBX_STAGING_ALLOWED_LOCAL_PATH",
+        "/tmp/databricks_bridge",
+    )
+    Path(staging_allowed_local_path).mkdir(parents=True, exist_ok=True)
+
+    return DatabricksSqlResource(
+        server_hostname=os.getenv("DATABRICKS_SERVER_HOSTNAME", ""),
+        http_path=os.getenv("DATABRICKS_HTTP_PATH", ""),
+        auth_mode=os.getenv("DBX_AUTH_MODE", "pat"),
+        access_token=os.getenv("DATABRICKS_TOKEN", ""),
+        client_id=os.getenv("DATABRICKS_CLIENT_ID", ""),
+        client_secret=os.getenv("DATABRICKS_CLIENT_SECRET", ""),
+        catalog=os.getenv("DBX_CATALOG", "main"),
+        target_schema=os.getenv("DBX_TARGET_SCHEMA", "bronze"),
+        staging_schema=os.getenv("DBX_STAGING_SCHEMA", "staging"),
+        volume_catalog=os.getenv("DBX_VOLUME_CATALOG", os.getenv("DBX_CATALOG", "main")),
+        volume_schema=os.getenv("DBX_VOLUME_SCHEMA", "files"),
+        volume_name=os.getenv("DBX_VOLUME_NAME", "bridge"),
+        staging_allowed_local_path=staging_allowed_local_path,
+    )

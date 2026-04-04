@@ -1,0 +1,55 @@
+FROM python:3.10-slim-bookworm
+
+ENV ACCEPT_EULA=Y \
+    DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DAGSTER_HOME=/opt/dagster/dagster_home \
+    PYTHONPATH=/opt/dagster/app/mcdonalds_databricks_bridge/src
+
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds_databricks_bridge
+
+WORKDIR /opt/dagster/app/mcdonalds_databricks_bridge
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       openjdk-17-jre-headless \
+       curl ca-certificates gnupg apt-transport-https \
+       unixodbc unixodbc-dev odbcinst \
+       gcc g++ \
+       sudo \
+       unzip \
+       rsync \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+      | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
+  && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
+      > /etc/apt/sources.list.d/microsoft-prod.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+       msodbcsql18 \
+       mssql-tools18 \
+       odbc-mariadb \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN test -f /usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so \
+  && cat >/tmp/mariadb-odbc-driver.template <<'EOF'
+[MariaDB ODBC 3.1 Driver]
+Description=MariaDB Connector/ODBC v.3.1
+Driver=/usr/lib/x86_64-linux-gnu/odbc/libmaodbc.so
+Threading=0
+UsageCount=1
+EOF
+RUN odbcinst -i -d -f /tmp/mariadb-odbc-driver.template \
+  && odbcinst -q -d \
+  && cat /etc/odbcinst.ini
+
+ENV PATH="/opt/mssql-tools18/bin:${PATH}"
+
+COPY dagster/requirements.bridge.txt /tmp/requirements.bridge.txt
+COPY dagster/mcdonalds_databricks_bridge /opt/dagster/app/mcdonalds_databricks_bridge
+
+RUN pip install --no-cache-dir --upgrade pip \
+  && pip install --no-cache-dir -r /tmp/requirements.bridge.txt
