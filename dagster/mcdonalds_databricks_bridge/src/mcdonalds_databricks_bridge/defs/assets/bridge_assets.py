@@ -89,20 +89,7 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
     overlap_minutes = int(os.getenv("BRIDGE_WATERMARK_OVERLAP_MINUTES", "15"))
 
     last_loaded_at = bridge_state.get_watermark(table_config.ingestion_name)
-    if last_loaded_at is None:
-        from_updated_at: Optional[datetime] = None
-        context.log.info(
-            "No watermark found for %s. A full initial load will be attempted.",
-            table_config.ingestion_name,
-        )
-    else:
-        from_updated_at = last_loaded_at - timedelta(minutes=overlap_minutes)
-        context.log.info(
-            "Using incremental extraction for %s from %s with overlap_minutes=%s.",
-            table_config.ingestion_name,
-            from_updated_at.isoformat(),
-            overlap_minutes,
-        )
+    from_updated_at: Optional[datetime] = None
 
     bridge_state.mark_run_started(table_config.ingestion_name)
 
@@ -118,14 +105,64 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
 
     try:
         columns = source_sql.get_table_schema(table_config)
+        cursor_column = source_sql.resolve_incremental_cursor_column(
+            table_config=table_config,
+            columns=columns,
+        )
+
+        if cursor_column is None:
+            configured_candidates = table_config.incremental_cursor_candidates
+            if configured_candidates:
+                context.log.warning(
+                    "Bridge table %s does not expose any configured incremental cursor columns %s. "
+                    "A full refresh will be executed against the target table.",
+                    table_config.source_fqn,
+                    configured_candidates,
+                )
+            else:
+                context.log.info(
+                    "Bridge table %s does not define updated/created cursor columns. "
+                    "A full refresh will be executed against the target table.",
+                    table_config.source_fqn,
+                )
+        elif last_loaded_at is None:
+            context.log.info(
+                "No watermark found for %s. An initial load will be extracted using cursor column %s.",
+                table_config.ingestion_name,
+                cursor_column,
+            )
+        else:
+            from_updated_at = last_loaded_at - timedelta(minutes=overlap_minutes)
+            context.log.info(
+                "Using incremental extraction for %s from %s with cursor_column=%s and overlap_minutes=%s.",
+                table_config.ingestion_name,
+                from_updated_at.isoformat(),
+                cursor_column,
+                overlap_minutes,
+            )
+
         extract_result = source_sql.extract_incremental_to_parquet(
             table_config=table_config,
             columns=columns,
             from_updated_at=from_updated_at,
             output_path=local_output_path,
+            cursor_column=cursor_column,
         )
 
         if extract_result.row_count == 0:
+            if extract_result.load_mode == "full_refresh":
+                with databricks_sql.connect() as connection:
+                    with connection.cursor() as cursor:
+                        databricks_sql.ensure_objects(
+                            cursor=cursor,
+                            table_config=table_config,
+                            columns=extract_result.columns,
+                        )
+                        databricks_sql.truncate_target(
+                            cursor=cursor,
+                            table_config=table_config,
+                        )
+
             bridge_state.mark_run_completed(
                 ingestion_name=table_config.ingestion_name,
                 new_last_loaded_at=last_loaded_at,
@@ -164,17 +201,25 @@ def _sync_table(context, table_config: BridgeTableConfig) -> MaterializeResult:
                     local_path=extract_result.output_path or local_output_path.as_posix(),
                     remote_path=remote_file_path,
                 )
-                databricks_sql.copy_into_target(
-                    cursor=cursor,
-                    table_config=table_config,
-                    remote_batch_dir=remote_batch_dir,
-                )
+                if extract_result.load_mode == "full_refresh":
+                    databricks_sql.replace_target_from_remote(
+                        cursor=cursor,
+                        table_config=table_config,
+                        columns=extract_result.columns,
+                        remote_batch_dir=remote_batch_dir,
+                    )
+                else:
+                    databricks_sql.copy_into_target(
+                        cursor=cursor,
+                        table_config=table_config,
+                        remote_batch_dir=remote_batch_dir,
+                    )
                 databricks_sql.remove_remote_file(cursor=cursor, remote_path=remote_file_path)
                 remote_file_path = None
 
         bridge_state.mark_run_completed(
             ingestion_name=table_config.ingestion_name,
-            new_last_loaded_at=extract_result.max_updated_at or last_loaded_at,
+            new_last_loaded_at=extract_result.max_cursor_at or last_loaded_at,
             succeeded=True,
             error_message=None,
         )

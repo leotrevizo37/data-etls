@@ -62,6 +62,25 @@ class BridgeTableConfig:
     schedule_cron: Optional[str] = None
 
     @property
+    def incremental_cursor_candidates(self) -> List[str]:
+        candidates: List[str] = []
+        seen = set()
+
+        for value in [self.updated_at_column, self.created_at_column]:
+            normalized = value.strip()
+            if not normalized:
+                continue
+
+            lookup_key = normalized.lower()
+            if lookup_key in seen:
+                continue
+
+            seen.add(lookup_key)
+            candidates.append(normalized)
+
+        return candidates
+
+    @property
     def source_fqn(self) -> str:
         if self.source_schema:
             return f"{self.source_schema}.{self.source_table}"
@@ -164,6 +183,18 @@ def _build_config_from_manifest_entry(entry: Dict[str, Any], index: int) -> Brid
             f"Bridge manifest table entry '{key}' must define at least one primary key."
         )
 
+    updated_at_value = entry.get("updated_at_column")
+    if updated_at_value is None:
+        updated_at_column = "updated_at"
+    else:
+        updated_at_column = str(updated_at_value).strip()
+
+    created_at_value = entry.get("created_at_column")
+    if created_at_value is None:
+        created_at_column = "created_at"
+    else:
+        created_at_column = str(created_at_value).strip()
+
     return BridgeTableConfig(
         key=key,
         ingestion_name=str(
@@ -174,10 +205,8 @@ def _build_config_from_manifest_entry(entry: Dict[str, Any], index: int) -> Brid
         source_table=source_table,
         target_table=target_table,
         primary_keys=primary_keys,
-        updated_at_column=str(entry.get("updated_at_column", "updated_at")).strip()
-        or "updated_at",
-        created_at_column=str(entry.get("created_at_column", "created_at")).strip()
-        or "created_at",
+        updated_at_column=updated_at_column,
+        created_at_column=created_at_column,
         enabled=_coerce_bool(entry.get("enabled", True)),
         job_group=str(entry.get("job_group", DEFAULT_BRIDGE_JOB_GROUP)).strip()
         or DEFAULT_BRIDGE_JOB_GROUP,
