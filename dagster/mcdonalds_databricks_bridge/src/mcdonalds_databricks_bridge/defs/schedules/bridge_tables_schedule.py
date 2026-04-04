@@ -48,14 +48,27 @@ def _resolve_schedule_cron(
     return default_cron
 
 
+def _should_schedule_job(bridge_job, has_group_jobs: bool) -> bool:
+    bridge_scope: Optional[str] = bridge_job.tags.get("bridge_scope")
+
+    if not has_group_jobs:
+        return True
+
+    return bridge_scope == "group"
+
+
 def build_bridge_schedules(bridge_jobs, table_configs):
     schedules: List[ScheduleDefinition] = []
     default_cron = os.getenv("BRIDGE_SYNC_CRON", "0 */8 * * *")
     dims_cron = os.getenv("BRIDGE_DIMS_SYNC_CRON", "0 11 * * 1")
     execution_timezone = os.getenv("BRIDGE_EXECUTION_TIMEZONE", "America/Ciudad_Juarez")
     group_schedule_overrides = _resolve_group_schedule_overrides(table_configs)
+    has_group_jobs = any(bridge_job.tags.get("bridge_scope") == "group" for bridge_job in bridge_jobs)
 
     for bridge_job in bridge_jobs:
+        if not _should_schedule_job(bridge_job, has_group_jobs=has_group_jobs):
+            continue
+
         schedules.append(
             ScheduleDefinition(
                 name=bridge_job.name.replace("_job", "_schedule"),
