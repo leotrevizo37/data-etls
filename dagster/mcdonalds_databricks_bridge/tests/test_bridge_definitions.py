@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 from mcdonalds_databricks_bridge.definitions import defs
+from dagster.components.core.load_defs import PLUGIN_COMPONENT_TYPES_JSON_METADATA_KEY
 from mcdonalds_databricks_bridge.defs.assets.bridge_assets import _sync_table
 from mcdonalds_databricks_bridge.defs.jobs import build_bridge_jobs
 from mcdonalds_databricks_bridge.defs.resources import BridgeTableConfig
@@ -27,11 +28,11 @@ class _FakeBridgeState:
 
 class _FakeSourceMySql:
     def __init__(self, output_path):
-        self._output_path = output_path
         self.columns = [
             SourceColumn("Id", "int", False, 1),
             SourceColumn("created_at", "datetime", True, 2),
         ]
+        self.output_path = output_path
 
     def get_table_schema(self, _table_config):
         return self.columns
@@ -41,7 +42,7 @@ class _FakeSourceMySql:
             row_count=3,
             max_updated_at=None,
             columns=self.columns,
-            output_path=self._output_path,
+            output_path=self.output_path,
         )
 
 
@@ -67,7 +68,6 @@ class _FakeConnection:
 class _FakeDatabricksSql:
     def __init__(self, staging_allowed_local_path):
         self.staging_allowed_local_path = staging_allowed_local_path
-        self.calls = []
 
     def build_remote_batch_dir(self, table_config, batch_id):
         return f"/Volumes/main/files/bridge/{table_config.target_table}/{batch_id}"
@@ -78,17 +78,17 @@ class _FakeDatabricksSql:
     def connect(self):
         return _FakeConnection()
 
-    def ensure_objects(self, **kwargs):
-        self.calls.append(("ensure_objects", kwargs["table_config"].target_table))
+    def ensure_objects(self, **_kwargs):
+        return None
 
-    def upload_file(self, **kwargs):
-        self.calls.append(("upload_file", kwargs["remote_path"]))
+    def upload_file(self, **_kwargs):
+        return None
 
-    def copy_into_target(self, **kwargs):
-        self.calls.append(("copy_into_target", kwargs["table_config"].target_table))
+    def copy_into_target(self, **_kwargs):
+        return None
 
-    def remove_remote_file(self, **kwargs):
-        self.calls.append(("remove_remote_file", kwargs["remote_path"]))
+    def remove_remote_file(self, **_kwargs):
+        return None
 
 
 class BridgeDefinitionsTests(unittest.TestCase):
@@ -112,8 +112,10 @@ class BridgeDefinitionsTests(unittest.TestCase):
 
         self.assertIsNotNone(definitions.component_tree)
         self.assertEqual(definitions.component_tree.defs_module.__name__, "mcdonalds_databricks_bridge.defs")
+        self.assertIn(PLUGIN_COMPONENT_TYPES_JSON_METADATA_KEY, definitions.metadata)
+        self.assertTrue(definitions.metadata[PLUGIN_COMPONENT_TYPES_JSON_METADATA_KEY])
 
-    def test_group_schedules_use_specialized_crons(self):
+    def test_bridge_schedules_use_single_global_cron(self):
         table_configs = [
             self._build_table_config("dims", "sample_dims"),
             self._build_table_config("facts", "sample_facts"),
@@ -122,36 +124,19 @@ class BridgeDefinitionsTests(unittest.TestCase):
 
         with unittest.mock.patch.dict(
             os.environ,
-            {
-                "BRIDGE_DIMS_SYNC_CRON": "0 7 * * 1",
-                "BRIDGE_FACTS_SYNC_CRON": "0 11 * * 1-5",
-                "BRIDGE_SYNC_CRON": "0 */8 * * *",
-            },
+            {"BRIDGE_SYNC_CRON": "0 */8 * * *"},
             clear=False,
         ):
             schedules = build_bridge_schedules(jobs)
 
-        self.assertEqual({schedule.name for schedule in schedules}, {"bridge_dims_schedule", "bridge_facts_schedule"})
-        cron_by_name = {schedule.name: schedule.cron_schedule for schedule in schedules}
-        self.assertEqual(cron_by_name["bridge_dims_schedule"], "0 7 * * 1")
-        self.assertEqual(cron_by_name["bridge_facts_schedule"], "0 11 * * 1-5")
-
-    def test_full_bridge_schedule_requires_opt_in(self):
-        jobs = build_bridge_jobs(
-            [
-                self._build_table_config("dims", "sample_dims"),
-                self._build_table_config("facts", "sample_facts"),
-            ]
+        self.assertEqual(
+            {schedule.name for schedule in schedules},
+            {"bridge_dims_schedule", "bridge_facts_schedule", "bridge_tables_schedule"},
         )
-
-        with unittest.mock.patch.dict(
-            os.environ,
-            {"BRIDGE_ALL_TABLES_SYNC_CRON": "0 4 * * 0"},
-            clear=False,
-        ):
-            schedules = build_bridge_schedules(jobs)
-
-        self.assertIn("bridge_tables_schedule", {schedule.name for schedule in schedules})
+        cron_by_name = {schedule.name: schedule.cron_schedule for schedule in schedules}
+        self.assertEqual(cron_by_name["bridge_dims_schedule"], "0 */8 * * *")
+        self.assertEqual(cron_by_name["bridge_facts_schedule"], "0 */8 * * *")
+        self.assertEqual(cron_by_name["bridge_tables_schedule"], "0 */8 * * *")
 
     def test_bridge_asset_emits_numeric_metadata_for_plots(self):
         table_config = self._build_table_config()

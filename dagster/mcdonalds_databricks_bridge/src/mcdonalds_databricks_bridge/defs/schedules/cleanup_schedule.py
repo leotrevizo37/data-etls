@@ -16,8 +16,5 @@ bridge_cleanup_schedule = ScheduleDefinition(
         }
     },
     execution_timezone=os.getenv("BRIDGE_EXECUTION_TIMEZONE", "America/Ciudad_Juarez"),
-    description=(
-        "Runs bridge maintenance to remove old Dagster run history on a regular cadence."
-    ),
     default_status=DefaultScheduleStatus.RUNNING,
 )
