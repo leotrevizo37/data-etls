@@ -11,6 +11,7 @@ def build_source_assets(table_configs: Iterable[BridgeTableConfig]) -> List[Sour
     return [
         SourceAsset(
             key=AssetKey(table_config.source_asset_name),
+            group_name="smartaudits_bridge",
             description=(
                 "Logical source placeholder for the bridge extract of `"
                 + table_config.source_fqn
