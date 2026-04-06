@@ -490,6 +490,7 @@ def upstream_deps_gate(context,
     ins={
         "data_transformations": AssetIn(key=AssetKey("data_transformations"), dagster_type=Nothing),
     },
+    group_name="sense_operations",
 )
 def operations_assets(data_transformations):
     deps = upstream_deps_gate(data_transformations)
