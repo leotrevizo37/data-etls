@@ -3,7 +3,7 @@ from typing import Optional, Tuple, Dict, Any
 from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, lit, max as spark_max
 from dagster import (
     AssetIn,
     AssetKey,
@@ -41,6 +41,19 @@ def _current_operational_hour_start() -> datetime:
         datetime.now(OPERATIONS_TIMEZONE)
         .replace(minute=0, second=0, microsecond=0, tzinfo=None)
     )
+
+
+def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
+    if devices_df.rdd.isEmpty() or "ReadingsCount" not in devices_df.columns:
+        return None
+
+    latest_row = (
+        devices_df
+        .filter(col("ReadingsCount") > 0)
+        .agg(spark_max("LocalTimeSpan").alias("max_ts"))
+        .collect()[0]
+    )
+    return latest_row.max_ts
 
 
 @op(
@@ -247,10 +260,25 @@ def build_devices_df_op(
         context.log.info("No rows across all transformations.")
         return factlecturas_extended_df.limit(0)
 
-    return limit_operations_rows_to_closed_hours(
+    limited_df = limit_operations_rows_to_closed_hours(
         union_df,
         window["max_local_hour"],
     )
+    latest_real_local_hour = _get_latest_real_local_hour(limited_df)
+
+    if latest_real_local_hour is None:
+        context.log.info(
+            "No real readings found in the current operations window. "
+            "Skipping scaffold-only rows and keeping the watermark in place."
+        )
+        return limited_df.limit(0)
+
+    context.log.info(
+        "Latest real operations hour found at %s. "
+        "Rows scaffolded beyond that hour will not be materialized.",
+        latest_real_local_hour,
+    )
+    return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
 
 @op(
     required_resource_keys={
@@ -421,9 +449,10 @@ def finalize_operations_run_op(
         )
     else:
         if max_time_span is None:
-            new_watermark = to_local
+            new_watermark = original_last_loaded_at
             context.log.info(
-                "HourlyDeviceStatus run succeeded with no rows. Advancing watermark to " + str(new_watermark)
+                "HourlyDeviceStatus run succeeded with no rows containing real readings. "
+                "Keeping watermark at " + str(new_watermark)
             )
         else:
             new_watermark = max_time_span
