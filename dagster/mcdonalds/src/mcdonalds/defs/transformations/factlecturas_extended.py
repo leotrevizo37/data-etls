@@ -73,16 +73,16 @@ def factlecturas_extended(
             col("dim.SensorId"),
             col("dim.SensorTyId"),
             col("dim.DeviceId"),
-            col("dim._sensor_name"),
-            col("dim._sensor_type"),
+            col("dim.sensor_name"),
+            col("dim.sensor_type"),
             col("dim.DeviceTyId"),
             col("dim.SubLocationId"),
-            col("dim._device_name"),
-            col("dim._device_type"),
+            col("dim.device_name"),
+            col("dim.device_type"),
             col("dim.SubLocationTyId"),
-            col("dim._sublocation_name"),
+            col("dim.sublocation_name"),
             col("dim.LocationId"),
-            col("dim._sublocation_type")
+            col("dim.sublocation_type")
         )
     )
 

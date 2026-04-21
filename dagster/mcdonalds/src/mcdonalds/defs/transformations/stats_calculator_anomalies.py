@@ -32,7 +32,7 @@ def stats_calculator_anomalies(
     ok_ratio: Optional[float] = 0.5) -> Optional[DataFrame]:
     base = (
         base
-        .filter(col("_sensor_type") == sensor_type)
+        .filter(col("sensor_type") == sensor_type)
         .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
         .withColumn(
             "5MinuteStart",
@@ -79,7 +79,7 @@ def stats_calculator_anomalies(
 
     per_min5_max_df = (
         base
-        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId", "_sensor_type")
+        .groupBy("DeviceId", "5MinuteStart", "SensorId", "LocationId", "SensorTyId", "sensor_type")
         .agg(
             spark_max("Value").alias("Value_phase_max")
         )
@@ -114,7 +114,7 @@ def stats_calculator_anomalies(
 
     valor_df = (
         per5max_df
-        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "SensorId", "_sensor_type")
+        .groupBy("DeviceId", "HourStart", "LocationId", "SensorTyId", "SensorId", "sensor_type")
         .agg(
             avg("Value_phase_max").alias("MeasurementValue"),
             count("*").alias("total_sensors"),

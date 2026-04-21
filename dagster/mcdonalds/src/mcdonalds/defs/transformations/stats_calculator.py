@@ -31,7 +31,7 @@ def stats_calculator(
 
     base = (
         base
-        .filter((col("_sensor_type") == sensor_type))
+        .filter((col("sensor_type") == sensor_type))
         .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
         .withColumn(
             "5MinuteStart",
@@ -49,7 +49,7 @@ def stats_calculator(
 
     stats_df = (
         base
-        .groupBy("DeviceId", "HourStart", "SensorId", "LocationId", "SensorTyId", "_sensor_type")
+        .groupBy("DeviceId", "HourStart", "SensorId", "LocationId", "SensorTyId", "sensor_type")
         .agg(
             avg("Value").alias("Val_dummy"),
             spark_sum(

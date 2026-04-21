@@ -15,7 +15,7 @@ def luces(
     max_hour: str) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
-        .filter(col("_device_type") == "Luminaria")
+        .filter(col("device_type") == "Luminaria")
     )
 
     if base.rdd.isEmpty():
@@ -23,8 +23,8 @@ def luces(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (
-                        (col("_device_type") == "Luminaria") &
-                        (col("_sensor_type") == "Encendido")
+                        (col("device_type") == "Luminaria") &
+                        (col("sensor_type") == "Encendido")
                     )
                 ),
                 min_hour,
@@ -64,7 +64,7 @@ def luces(
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
@@ -81,7 +81,7 @@ def luces(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -89,8 +89,8 @@ def luces(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                (col("_device_type") == "Luminaria") &
-                (col("_sensor_type") == "Encendido")
+                (col("device_type") == "Luminaria") &
+                (col("sensor_type") == "Encendido")
             ),
             min_hour,
             max_hour

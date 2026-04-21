@@ -17,7 +17,7 @@ def cuartos_refrigeracion(
     base = (
         factlecturas_extended_df
         .filter(
-            col("_device_type").isin([
+            col("device_type").isin([
                 "Cuarto de conservación",
                 "Ambiente conservacion",
                 "Compresor conservación"
@@ -30,14 +30,15 @@ def cuartos_refrigeracion(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (
-                        col("_device_type").isin([
+                        col("device_type").isin([
                             "Cuarto de conservación",
                             "Ambiente conservacion",
                             "Compresor conservación"]
                         )
                     ) & (
-                        (col("_sensor_type") == "Corriente") |
-                        (col("_sensor_type") == "Temperatura")
+                        (col("sensor_type") == "Corriente") |
+                        (col("sensor_type") == "Temperatura") |
+                        (col("sensor_type") == "Humedad")
                     )
                 ),
                 min_hour,
@@ -82,7 +83,30 @@ def cuartos_refrigeracion(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
+            "ReadingsCount",
+        )
+    )
+
+    humidity_stats_df = (
+        stats_calculator_anomalies(
+            base,
+            "Humedad",
+            10,
+            90,
+            240,
+            0.25
+        )
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "SensorId",
+            "LocalTimeSpan",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -100,14 +124,16 @@ def cuartos_refrigeracion(
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
     )
 
     cuartos_refrigeracion_df = (
-        temperature_stats_df.unionByName(current_stats_df)
+        temperature_stats_df
+        .unionByName(current_stats_df)
+        .unionByName(humidity_stats_df)
         .select(
             "DeviceId",
             "LocationId",
@@ -117,7 +143,7 @@ def cuartos_refrigeracion(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -126,14 +152,14 @@ def cuartos_refrigeracion(
         lecturas_time_hours(
             dimensions_df.filter(
                 (
-                    col("_device_type").isin([
+                    col("device_type").isin([
                         "Cuarto de conservación",
                         "Ambiente conservacion",
                         "Compresor conservación"]
                     )
                 ) & (
-                    (col("_sensor_type") == "Corriente") |
-                    (col("_sensor_type") == "Temperatura")
+                    (col("sensor_type") == "Corriente") |
+                    (col("sensor_type") == "Temperatura")
                 )
             ),
             min_hour,

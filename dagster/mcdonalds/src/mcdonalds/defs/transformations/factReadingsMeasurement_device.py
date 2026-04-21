@@ -28,7 +28,7 @@ def factReadingsMeasurement_device(
 
     sensor_typed_df = (
         factoperations_df
-        .groupBy("OperationId", "DeviceId", "LocationId", "LocalTimeSpan", "SensorTyId", "_sensor_type")
+        .groupBy("OperationId", "DeviceId", "LocationId", "LocalTimeSpan", "SensorTyId", "sensor_type")
         .agg(
             when(
                 spark_min(col("StatusCode")) == 1, 1
@@ -45,11 +45,11 @@ def factReadingsMeasurement_device(
 
             spark_max(
                 when(
-                    (col("_sensor_type") == "Corriente") & (col("StatusCode") == 1),
+                    (col("sensor_type") == "Corriente") & (col("StatusCode") == 1),
                     lit(1),
                 )
                 .when(
-                    (col("_sensor_type") == "Corriente") & (col("StatusCode") == 3),
+                    (col("sensor_type") == "Corriente") & (col("StatusCode") == 3),
                     lit(0),
                 )
                 .otherwise(lit(None))
@@ -57,11 +57,11 @@ def factReadingsMeasurement_device(
 
             spark_max(
                 when(
-                    (col("_sensor_type") == "Presión") & (col("StatusCode") == 1),
+                    (col("sensor_type") == "Presión") & (col("StatusCode") == 1),
                     lit(1),
                 )
                 .when(
-                    (col("_sensor_type") == "Presión") & (col("StatusCode") == 3),
+                    (col("sensor_type") == "Presión") & (col("StatusCode") == 3),
                     lit(0),
                 )
                 .otherwise(lit(None))
@@ -69,11 +69,11 @@ def factReadingsMeasurement_device(
 
             spark_max(
                 when(
-                    (col("_sensor_type") == "Temperatura") & (col("StatusCode") == 1),
+                    (col("sensor_type") == "Temperatura") & (col("StatusCode") == 1),
                     lit(1),
                 )
                 .when(
-                    (col("_sensor_type") == "Temperatura") & (col("StatusCode") == 3),
+                    (col("sensor_type") == "Temperatura") & (col("StatusCode") == 3),
                     lit(0),
                 )
                 .otherwise(lit(None))
@@ -81,11 +81,11 @@ def factReadingsMeasurement_device(
 
             spark_max(
                 when(
-                    (col("_sensor_type") == "Encendido") & (col("StatusCode") == 1),
+                    (col("sensor_type") == "Encendido") & (col("StatusCode") == 1),
                     lit(1),
                 )
                 .when(
-                    (col("_sensor_type") == "Encendido") & (col("StatusCode") == 3),
+                    (col("sensor_type") == "Encendido") & (col("StatusCode") == 3),
                     lit(0),
                 )
                 .otherwise(lit(None))
@@ -93,11 +93,11 @@ def factReadingsMeasurement_device(
 
             spark_max(
                 when(
-                    (col("_sensor_type") == "On/Off Termostato") & (col("StatusCode") == 1),
+                    (col("sensor_type") == "On/Off Termostato") & (col("StatusCode") == 1),
                     lit(1),
                 )
                 .when(
-                    (col("_sensor_type") == "On/Off Termostato") & (col("StatusCode") == 3),
+                    (col("sensor_type") == "On/Off Termostato") & (col("StatusCode") == 3),
                     lit(0),
                 )
                 .otherwise(lit(None))
