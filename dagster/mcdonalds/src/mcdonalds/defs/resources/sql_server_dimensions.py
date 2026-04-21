@@ -108,6 +108,46 @@ class SqlDimServerResource:
                     return None
                 return row[0]
 
+    def get_watermark_schedules(self) -> Optional[datetime]:
+        conn_str = (
+                "DRIVER={ODBC Driver 18 for SQL Server}"
+                + ";SERVER="
+                + self.host
+                + ","
+                + str(self.port)
+                + ";DATABASE="
+                + self.database
+                + ";UID="
+                + self.user
+                + ";PWD="
+                + self.password
+                + ";TrustServerCertificate=yes"
+                + ";Connection Timeout="
+                + str(self.connect_timeout)
+        )
+        conn = pyodbc.connect(conn_str)
+        tablas = [
+                  "GroupSensors",
+                  "GroupHasSchedules",
+                  "ProgramSchedules",
+                  "ProgramProfileTys",
+                  "ProgramProfiles"]
+        maximos = []
+        with conn:
+            with conn.cursor() as cursor:
+                try:
+                    for i in tablas:
+                        cursor.execute(f"SELECT MAX(ModifiedAt) FROM dbo.{i};")
+                        row = cursor.fetchone()
+                        if row is None or row[0] is None:
+                            pass
+                        maximos.append(row)
+                except pyodbc.Error:
+                    return None
+                if len(maximos) == 0:
+                    return None
+                return max(maximos)
+
 @resource
 def dim_sqlserver_resource(_):
     host = os.getenv("DIMSQL_HOST", "localhost")
