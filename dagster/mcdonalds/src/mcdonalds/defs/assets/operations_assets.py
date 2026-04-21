@@ -327,6 +327,7 @@ def write_factreadingsmeasurement_op(
                     "OperationId",
                     "SensorId",
                     "SensorTyId",
+                    "LocalTimeSpan",
                     "StatusCode",
                     "MeasurementValue",
                     "ReadingsCount",

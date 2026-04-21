@@ -43,12 +43,8 @@ def cuartos_congelacion(
                     ) &
                     (
                         (col("_sensor_type") == "Corriente") |
-                        (col("_sensor_type") == "Temperatura")
-                    ) &
-                    (
-                        (col("_sensor_name") != "Resistencia de deshielo") &
-                        (col("_device_type") != "Resitencia de deshielo") &
-                        (col("_device_type") != "Resistencia de deshielo")
+                        (col("_sensor_type") == "Temperatura") |
+                        (col("_sensor_type") == "Humedad")
                     )
                 ),
                 min_hour,
@@ -98,14 +94,32 @@ def cuartos_congelacion(
         )
     )
 
+    humidity_stats_df = (
+        stats_calculator_anomalies(
+            base,
+            "Humedad",
+            10,
+            90,
+            240,
+            0.25
+        )
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "SensorId",
+            "LocalTimeSpan",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
+            "_sensor_type",
+            "ReadingsCount",
+        )
+    )
+
     current_stats_df = (
         stats_calculator(
-            base
-            .filter(
-                (col("_sensor_name") != "Resistencia de deshielo") &
-                (col("_device_type") != "Resitencia de deshielo") &
-                (col("_device_type") != "Resistencia de deshielo")
-            ),
+            base,
             "Corriente",
             1)
         .select(
@@ -123,7 +137,9 @@ def cuartos_congelacion(
     )
 
     cuartos_conservacion_df = (
-        temperature_stats_df.unionByName(current_stats_df)
+        temperature_stats_df
+        .unionByName(current_stats_df)
+        .unionByName(humidity_stats_df)
         .select(
             "DeviceId",
             "LocationId",
@@ -154,12 +170,8 @@ def cuartos_congelacion(
                 ) &
                 (
                     (col("_sensor_type") == "Corriente") |
-                    (col("_sensor_type") == "Temperatura")
-                ) &
-                (
-                    (col("_sensor_name") != "Resistencia de deshielo") &
-                    (col("_device_type") != "Resitencia de deshielo") &
-                    (col("_device_type") != "Resistencia de deshielo")
+                    (col("_sensor_type") == "Temperatura") |
+                    (col("_sensor_type") == "Humedad")
                 )
             ),
             min_hour,
