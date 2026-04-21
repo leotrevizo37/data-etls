@@ -16,7 +16,7 @@ def cuartos_congelacion(
     base = (
         factlecturas_extended_df
         .filter(
-            col("_device_type").isin([
+            col("device_type").isin([
                 "Cuarto de congelación",
                 "Ambiente congelacion",
                 "Compresor congelación",
@@ -32,7 +32,7 @@ def cuartos_congelacion(
                 dimensions_df.filter(
                     (
                         (
-                            col("_device_type").isin([
+                            col("device_type").isin([
                                 "Cuarto de congelación",
                                 "Ambiente congelacion",
                                 "Compresor congelación",
@@ -42,9 +42,9 @@ def cuartos_congelacion(
                         )
                     ) &
                     (
-                        (col("_sensor_type") == "Corriente") |
-                        (col("_sensor_type") == "Temperatura") |
-                        (col("_sensor_type") == "Humedad")
+                        (col("sensor_type") == "Corriente") |
+                        (col("sensor_type") == "Temperatura") |
+                        (col("sensor_type") == "Humedad")
                     )
                 ),
                 min_hour,
@@ -89,7 +89,7 @@ def cuartos_congelacion(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -112,7 +112,7 @@ def cuartos_congelacion(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -130,7 +130,7 @@ def cuartos_congelacion(
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
@@ -149,7 +149,7 @@ def cuartos_congelacion(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -159,7 +159,7 @@ def cuartos_congelacion(
             dimensions_df.filter(
                 (
                     (
-                        col("_device_type").isin([
+                        col("device_type").isin([
                             "Cuarto de congelación",
                             "Ambiente congelacion",
                             "Compresor congelación",
@@ -169,9 +169,9 @@ def cuartos_congelacion(
                     )
                 ) &
                 (
-                    (col("_sensor_type") == "Corriente") |
-                    (col("_sensor_type") == "Temperatura") |
-                    (col("_sensor_type") == "Humedad")
+                    (col("sensor_type") == "Corriente") |
+                    (col("sensor_type") == "Temperatura") |
+                    (col("sensor_type") == "Humedad")
                 )
             ),
             min_hour,

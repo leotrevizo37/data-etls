@@ -22,7 +22,7 @@ def maquinas_soda(
         factlecturas_extended_df
         .filter(
             (
-                    (col("_device_type") == "Máquina de sodas")
+                    (col("device_type") == "Máquina de sodas")
             )
         )
     )
@@ -31,10 +31,10 @@ def maquinas_soda(
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
-                    (col("_device_type") == "Máquina de sodas") &
+                    (col("device_type") == "Máquina de sodas") &
                     (
-                        (col("_sensor_type") == "Corriente") |
-                        (col("_sensor_type") == "Presión")
+                        (col("sensor_type") == "Corriente") |
+                        (col("sensor_type") == "Presión")
                     )
                 ),
                 min_hour,
@@ -79,7 +79,7 @@ def maquinas_soda(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("LocalTimeSpan", date_trunc("hour", col("LocalTimeSpan")))
@@ -99,7 +99,7 @@ def maquinas_soda(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -115,7 +115,7 @@ def maquinas_soda(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -123,10 +123,10 @@ def maquinas_soda(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                (col("_device_type") == "Máquina de sodas") &
+                (col("device_type") == "Máquina de sodas") &
                 (
-                    (col("_sensor_type") == "Corriente") |
-                    (col("_sensor_type") == "Presión")
+                    (col("sensor_type") == "Corriente") |
+                    (col("sensor_type") == "Presión")
                 )
             ),
             min_hour,

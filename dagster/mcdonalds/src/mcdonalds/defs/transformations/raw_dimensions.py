@@ -84,8 +84,8 @@ def raw_dimensions(
             col("st.SensorId"),
             col("st.SensorTyId"),
             col("st.DeviceId"),
-            col("st._sensor_name"),
-            col("st._sensor_type"),
+            col("st.sensor_name"),
+            col("st.sensor_type"),
             col("dv.DeviceTyId"),
             col("dv.SubLocationId"),
             col("st.Active"),
@@ -97,11 +97,11 @@ def raw_dimensions(
             col("st_dv.SensorId"),
             col("st_dv.SensorTyId"),
             col("st_dv.DeviceId"),
-            col("st_dv._sensor_name"),
-            col("st_dv._sensor_type"),
+            col("st_dv.sensor_name"),
+            col("st_dv.sensor_type"),
             col("st_dv.DeviceTyId"),
             col("st_dv.SubLocationId"),
-            col("st_dv._device_name"),
+            col("st_dv.device_name"),
             col("st_dv.Active"),
             col("dvt.Name").alias("device_type")
         )
@@ -111,12 +111,12 @@ def raw_dimensions(
             col("st_dvt.SensorId"),
             col("st_dvt.SensorTyId"),
             col("st_dvt.DeviceId"),
-            col("st_dvt._sensor_name"),
-            col("st_dvt._sensor_type"),
+            col("st_dvt.sensor_name"),
+            col("st_dvt.sensor_type"),
             col("st_dvt.DeviceTyId"),
             col("st_dvt.SubLocationId"),
-            col("st_dvt._device_name"),
-            col("st_dvt._device_type"),
+            col("st_dvt.device_name"),
+            col("st_dvt.device_type"),
             col("sl.SubLocationTyId"),
             col("st_dvt.Active"),
             col("sl.Name").alias("sublocation_name"),
@@ -128,15 +128,15 @@ def raw_dimensions(
             col("st_dvt_sl.SensorId"),
             col("st_dvt_sl.SensorTyId"),
             col("st_dvt_sl.DeviceId"),
-            col("st_dvt_sl._sensor_name"),
-            col("st_dvt_sl._sensor_type"),
+            col("st_dvt_sl.sensor_name"),
+            col("st_dvt_sl.sensor_type"),
             col("st_dvt_sl.DeviceTyId"),
             col("st_dvt_sl.SubLocationId"),
-            col("st_dvt_sl._device_name"),
-            col("st_dvt_sl._device_type"),
+            col("st_dvt_sl.device_name"),
+            col("st_dvt_sl.device_type"),
             col("st_dvt_sl.SubLocationTyId"),
             col("st_dvt_sl.Active"),
-            col("st_dvt_sl.Name").alias("sublocation_name"),
+            col("st_dvt_sl.sublocation_name"),
             col("st_dvt_sl.LocationId"),
             col("loca.Name").alias("location_name"),
             col("loca.CityId")
@@ -162,27 +162,7 @@ def raw_dimensions(
             col("slty.Name").alias("sublocation_type")
         )
         .alias("st_dvt_sl_slt")
-        .join(dbo_sublocation_tys_df.alias("slty"), on="SubLocationTyId", how="left")
-        .select(
-            col("st_dvt_sl_slt.SensorId"),
-            col("st_dvt_sl_slt.SensorTyId"),
-            col("st_dvt_sl_slt.DeviceId"),
-            col("st_dvt_sl_slt.sensor_name"),
-            col("st_dvt_sl_slt.sensor_type"),
-            col("st_dvt_sl_slt.DeviceTyId"),
-            col("st_dvt_sl_slt.SubLocationId"),
-            col("st_dvt_sl_slt.device_name"),
-            col("st_dvt_sl_slt.device_type"),
-            col("st_dvt_sl_slt.SubLocationTyId"),
-            col("st_dvt_sl_slt.sublocation_name"),
-            col("st_dvt_sl_slt.LocationId"),
-            col("st_dvt_sl_slt.Active"),
-            col("st_dvt_sl_slt.location_name"),
-            col("st_dvt_sl_slt.CityId"),
-            col("st_dvt_sl_slt.sublocation_type")
-        )
-        .alias("st_dvt_sl_slt_c")
-        .join(dbo_cities_df.alias("city"), on="", how="left")
+        .join(dbo_cities_df.alias("city"), on="CityId", how="left")
         .select(
             col("st_dvt_sl_slt.SensorId"),
             col("st_dvt_sl_slt.SensorTyId"),
