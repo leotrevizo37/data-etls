@@ -20,7 +20,7 @@ def maquinas_nieve(
         factlecturas_extended_df
         .filter(
             (
-                    (col("_device_type") == "Máquina de nieve")
+                    (col("device_type") == "Máquina de nieve")
             )
         )
     )
@@ -29,8 +29,8 @@ def maquinas_nieve(
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
-                    (col("_device_type") == "Máquina de nieve") &
-                    (col("_sensor_type") == "Corriente")
+                    (col("device_type") == "Máquina de nieve") &
+                    (col("sensor_type") == "Corriente")
                 ),
                 min_hour,
                 max_hour
@@ -74,7 +74,7 @@ def maquinas_nieve(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("LocalTimeSpan", date_trunc("hour", col("LocalTimeSpan")))
@@ -83,8 +83,8 @@ def maquinas_nieve(
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
-                (col("_device_type") == "Máquina de nieve") &
-                (col("_sensor_type") == "Corriente")
+                (col("device_type") == "Máquina de nieve") &
+                (col("sensor_type") == "Corriente")
             ),
             min_hour,
             max_hour

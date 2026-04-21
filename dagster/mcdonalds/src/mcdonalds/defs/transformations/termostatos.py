@@ -17,9 +17,9 @@ def termostatos(
         factlecturas_extended_df
         .filter(
             (
-                    (col("_device_type") == "A/C de Cocina") |
-                    (col("_device_type") == "A/C de Comedor") |
-                    (col("_device_type") == "Ambiente playland")
+                    (col("device_type") == "A/C de Cocina") |
+                    (col("device_type") == "A/C de Comedor") |
+                    (col("device_type") == "Ambiente playland")
             )
         )
     )
@@ -29,13 +29,13 @@ def termostatos(
             lecturas_time_hours(
                 dimensions_df.filter(
                     (
-                        (col("_device_type") == "A/C de Cocina") |
-                        (col("_device_type") == "A/C de Comedor") |
-                        (col("_device_type") == "Ambiente playland")
+                        (col("device_type") == "A/C de Cocina") |
+                        (col("device_type") == "A/C de Comedor") |
+                        (col("device_type") == "Ambiente playland")
                     ) &
                     (
-                        (col("_sensor_type") == "On/Off Termostato") |
-                        (col("_sensor_type") == "Temperatura")
+                        (col("sensor_type") == "On/Off Termostato") |
+                        (col("sensor_type") == "Temperatura")
                     )
                 ),
                 min_hour,
@@ -80,7 +80,7 @@ def termostatos(
             "LocalTimeSpan",
             "StatusCode",
             "Promedio",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumnRenamed("Promedio", "MeasurementValue")
@@ -100,7 +100,7 @@ def termostatos(
             "LocalTimeSpan",
             "StatusCode",
             "MeasurementValue",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
         .withColumn("Anomalies", lit(None))
@@ -117,7 +117,7 @@ def termostatos(
             "StatusCode",
             "MeasurementValue",
             "Anomalies",
-            "_sensor_type",
+            "sensor_type",
             "ReadingsCount",
         )
     )
@@ -126,13 +126,13 @@ def termostatos(
         lecturas_time_hours(
             dimensions_df.filter(
                 (
-                    (col("_device_type") == "A/C de Cocina") |
-                    (col("_device_type") == "A/C de Comedor") |
-                    (col("_device_type") == "Ambiente playland")
+                    (col("device_type") == "A/C de Cocina") |
+                    (col("device_type") == "A/C de Comedor") |
+                    (col("device_type") == "Ambiente playland")
                 ) &
                 (
-                    (col("_sensor_type") == "On/Off Termostato") |
-                    (col("_sensor_type") == "Temperatura")
+                    (col("sensor_type") == "On/Off Termostato") |
+                    (col("sensor_type") == "Temperatura")
                 )
             ),
             min_hour,
