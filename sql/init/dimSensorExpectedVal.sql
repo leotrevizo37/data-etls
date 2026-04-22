@@ -15,17 +15,17 @@ IF OBJECT_ID(N'dwh.dimSensorExpectedVal', N'U') IS NULL
         (
             SensorId UNIQUEIDENTIFIER NOT NULL,
             DeviceId UNIQUEIDENTIFIER NOT NULL,
-            min_expected_value DATETIME2(0) NOT NULL,
-            max_expected_value SMALLINT NOT NULL,
-            StartTime NVARCHAR(255) NOT NULL,
-            EndTime NVARCHAR(255) NOT NULL,
+            min_expected_value DECIMAL(5,3) NOT NULL,
+            max_expected_value DECIMAL(5,3) NOT NULL,
+            StartTime TIME(0) NOT NULL,
+            EndTime TIME(0) NOT NULL,
             scheduledDays NVARCHAR(255) NOT NULL,
             ModifiedAt DATETIME2(0) NOT NULL
-            CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
+            CONSTRAINT DF_dimSensorExpectedVal_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
-            CONSTRAINT PK_factReadingsMeasurement
+            CONSTRAINT PK_dimSensorExpectedVal
             PRIMARY KEY CLUSTERED (SensorId, StartTime, scheduledDays)
-            WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
+            WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
         );
     END;
 GO

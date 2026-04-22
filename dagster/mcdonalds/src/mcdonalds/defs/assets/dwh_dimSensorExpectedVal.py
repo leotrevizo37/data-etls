@@ -4,24 +4,30 @@ from dagster import (
         MaterializeResult,
         AssetExecutionContext)
 
-from ..resources import (SparkResource,
-                         SqlDimServerResource)
-from ..transformations import raw_dimensions
+from ..resources import (
+    SparkResource,
+    SqlDimServerResource,
+    SqlServerResource,
+)
+from ..transformations import sensor_expected_values
+
 
 @asset(
     non_argument_deps={
-        AssetKey("dbo_ProgramProfileTys"),
         AssetKey("dbo_ProgramProfiles"),
         AssetKey("dbo_ProgramSchedules"),
         AssetKey("dbo_GroupSensors"),
         AssetKey("dbo_GroupHasSchedules"),
         AssetKey("dbo_GroupHasSensors"),
         AssetKey("dbo_sensors"),
-        AssetKey("dbo_devices")
+        AssetKey("dbo_sensor_tys"),
+        AssetKey("dbo_devices"),
+        AssetKey("dbo_device_tys"),
     },
     required_resource_keys={
         "spark",
-        "dim_sqlserver"
+        "dim_sqlserver",
+        "sqlserver",
     },
     group_name="sense_operations",
 )
@@ -29,12 +35,18 @@ def dwh_dimsensorexpectedval(
     context: AssetExecutionContext) -> MaterializeResult:
     spark_res: SparkResource = context.resources.spark
     dim_sql: SqlDimServerResource = context.resources.dim_sqlserver
+    sqlserver: SqlServerResource = context.resources.sqlserver
 
-    context.log.info("Changes detected, materializing dimensions...")
-    raw_dims_df = raw_dimensions(spark_res, dim_sql)
-    context.log.info("Inserting new entries to stg.dimSidonProdDimensions...")
-    _inserted = spark_res.write_dim_prod_dimensions(raw_dims_df)
+    context.log.info("Changes detected, materializing dimSensorExpectedVal...")
+    expected_values_df = sensor_expected_values(spark_res, dim_sql)
+
+    context.log.info("Refreshing dwh.dimSensorExpectedVal...")
+    cleared = sqlserver.execute_query("DELETE FROM dwh.dimSensorExpectedVal")
+    if isinstance(cleared, Exception):
+        raise RuntimeError("Failed to clear dwh.dimSensorExpectedVal.") from cleared
+
+    inserted = spark_res.write_dim_sensor_expected_values(expected_values_df)
 
     return MaterializeResult(
-        metadata={"row_count": _inserted},
+        metadata={"row_count": inserted},
     )

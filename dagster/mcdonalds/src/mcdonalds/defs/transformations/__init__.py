@@ -6,6 +6,7 @@ from typing import Any
 __all__ = [
     "factlecturas_extended",
     "raw_dimensions",
+    "sensor_expected_values",
     "maquinas_nieve",
     "maquinas_soda",
     "luces",
@@ -18,6 +19,7 @@ __all__ = [
 _MODULE_BY_EXPORT = {
     "factlecturas_extended": ".factlecturas_extended",
     "raw_dimensions": ".raw_dimensions",
+    "sensor_expected_values": ".sensor_expected_values",
     "maquinas_nieve": ".maquinas_nieve",
     "maquinas_soda": ".maquinas_soda",
     "luces": ".luces",

@@ -80,35 +80,35 @@ class SqlDimServerResource:
         }
 
     def get_watermark(self) -> Optional[datetime]:
-        conn_str = (
-                "DRIVER={ODBC Driver 18 for SQL Server}"
-                + ";SERVER="
-                + self.host
-                + ","
-                + str(self.port)
-                + ";DATABASE="
-                + self.database
-                + ";UID="
-                + self.user
-                + ";PWD="
-                + self.password
-                + ";TrustServerCertificate=yes"
-                + ";Connection Timeout="
-                + str(self.connect_timeout)
-        )
-        conn = pyodbc.connect(conn_str)
-        with conn:
-            with conn.cursor() as cursor:
-                try:
-                    cursor.execute("SELECT MAX(ModifiedAt) FROM dbo.sensors;")
-                    row = cursor.fetchone()
-                except pyodbc.Error:
-                    return None
-                if row is None or row[0] is None:
-                    return None
-                return row[0]
+        return self._get_max_modified_at(["Sensors"])
 
     def get_watermark_schedules(self) -> Optional[datetime]:
+        return self._get_max_modified_at(
+            [
+                "GroupSensors",
+                "GroupHasSchedules",
+                "GroupHasSensors",
+                "ProgramSchedules",
+                "ProgramProfiles",
+            ]
+        )
+
+    def get_watermark_sensor_expected_values(self) -> Optional[datetime]:
+        return self._get_max_modified_at(
+            [
+                "Sensors",
+                "SensorTys",
+                "Devices",
+                "DeviceTys",
+                "GroupSensors",
+                "GroupHasSchedules",
+                "GroupHasSensors",
+                "ProgramSchedules",
+                "ProgramProfiles",
+            ]
+        )
+
+    def _get_max_modified_at(self, tables: list[str]) -> Optional[datetime]:
         conn_str = (
                 "DRIVER={ODBC Driver 18 for SQL Server}"
                 + ";SERVER="
@@ -126,27 +126,22 @@ class SqlDimServerResource:
                 + str(self.connect_timeout)
         )
         conn = pyodbc.connect(conn_str)
-        tablas = [
-                  "GroupSensors",
-                  "GroupHasSchedules",
-                  "ProgramSchedules",
-                  "ProgramProfileTys",
-                  "ProgramProfiles"]
-        maximos = []
+        max_modified_at: Optional[datetime] = None
+
         with conn:
             with conn.cursor() as cursor:
                 try:
-                    for i in tablas:
-                        cursor.execute(f"SELECT MAX(ModifiedAt) FROM dbo.{i};")
+                    for table_name in tables:
+                        cursor.execute(f"SELECT MAX(ModifiedAt) FROM dbo.{table_name};")
                         row = cursor.fetchone()
                         if row is None or row[0] is None:
-                            pass
-                        maximos.append(row)
+                            continue
+                        if max_modified_at is None or row[0] > max_modified_at:
+                            max_modified_at = row[0]
                 except pyodbc.Error:
                     return None
-                if len(maximos) == 0:
-                    return None
-                return max(maximos)
+
+        return max_modified_at
 
 @resource
 def dim_sqlserver_resource(_):

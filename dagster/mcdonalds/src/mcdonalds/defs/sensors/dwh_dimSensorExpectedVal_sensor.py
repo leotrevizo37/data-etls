@@ -6,11 +6,11 @@ from dagster import (RunRequest,
                      sensor,
                      DefaultSensorStatus)
 
-from ..jobs import refresh_dimensions_job
+from ..jobs import refresh_sensor_expected_values_job
 
 
 @sensor(
-    job=refresh_dimensions_job,
+    job=refresh_sensor_expected_values_job,
     minimum_interval_seconds=3600,
     required_resource_keys={"dim_sqlserver"},
     name="dwh_dimsensorexpectedval_sensor",
@@ -20,13 +20,13 @@ def dwh_dimsensorexpectedval_sensor(context: SensorEvaluationContext):
     dim_sql = context.resources.dim_sqlserver
 
     try:
-        current_wm = dim_sql.get_watermark()
+        current_wm = dim_sql.get_watermark_sensor_expected_values()
     except Exception as ex:
         context.log.warning(
-            "Skipping dimension refresh sensor because watermark lookup failed: %s",
+            "Skipping dimSensorExpectedVal refresh sensor because watermark lookup failed: %s",
             ex,
         )
-        return SkipReason("Dimension source watermark is currently unavailable.")
+        return SkipReason("dimSensorExpectedVal source watermark is currently unavailable.")
 
     current_wm_str = current_wm.isoformat() if current_wm else "NULL"
 
@@ -43,6 +43,9 @@ def dwh_dimsensorexpectedval_sensor(context: SensorEvaluationContext):
 
     return RunRequest(
         run_key=current_wm_str,
-        tags={"dims_asset": "dwh_dimsensorexpectedval", "source_watermark": current_wm_str},
+        tags={
+            "dims_asset": "dwh_dimsensorexpectedval",
+            "source_watermark": current_wm_str,
+        },
         cursor=current_wm_str,
     )
