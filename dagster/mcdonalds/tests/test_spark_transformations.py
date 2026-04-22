@@ -443,6 +443,7 @@ class SparkTransformationsTests(unittest.TestCase):
             [
                 {
                     "ProgramProfileId": "profile-on",
+                    "ProgramProfileTyId": "pty-on",
                     "DeviceId": "device-hvac",
                     "Mode": "00",
                     "Temperature": 20.0,
@@ -451,10 +452,25 @@ class SparkTransformationsTests(unittest.TestCase):
                 },
                 {
                     "ProgramProfileId": "profile-off",
+                    "ProgramProfileTyId": "pty-off",
                     "DeviceId": "device-hvac",
-                    "Mode": "01",
+                    "Mode": "00",
                     "Temperature": 24.0,
                     "TemperatureGrace": 1.0,
+                    "Active": True,
+                },
+            ]
+        )
+        program_profile_tys_df = self.spark.createDataFrame(
+            [
+                {
+                    "ProgramProfileTyId": "pty-on",
+                    "Name": "Wake",
+                    "Active": True,
+                },
+                {
+                    "ProgramProfileTyId": "pty-off",
+                    "Name": "off",
                     "Active": True,
                 },
             ]
@@ -474,6 +490,13 @@ class SparkTransformationsTests(unittest.TestCase):
                     "Days": "Mon",
                     "Time": "22:00",
                     "Active": True,
+                },
+                {
+                    "ProgramProfileId": "profile-on",
+                    "ScheduleCode": "C",
+                    "Days": "Mon",
+                    "Time": "12:00",
+                    "Active": False,
                 },
             ]
         )
@@ -506,6 +529,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         result = build_sensor_expected_values_from_dataframes(
             dimensions_df=dimensions_df,
+            program_profile_tys_df=program_profile_tys_df,
             program_profiles_df=program_profiles_df,
             program_schedules_df=program_schedules_df,
             group_sensors_df=group_sensors_df,
@@ -542,6 +566,10 @@ class SparkTransformationsTests(unittest.TestCase):
             ("sensor-temp", "00:00:00", "07:59:00", "1"),
             rows,
         )
+        self.assertNotIn(
+            ("sensor-temp", "12:00:00", "22:00:00", "1"),
+            rows,
+        )
         self.assertEqual(
             rows[("sensor-switch", "22:00:00", "23:59:00", "1")]["min_expected_value"],
             Decimal("0.000"),
@@ -573,7 +601,11 @@ class SparkTransformationsTests(unittest.TestCase):
         )
         empty_profiles_df = self.spark.createDataFrame(
             [],
-            "ProgramProfileId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+            "ProgramProfileId string, ProgramProfileTyId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+        )
+        empty_profile_tys_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileTyId string, Name string, Active boolean",
         )
         empty_program_schedules_df = self.spark.createDataFrame(
             [],
@@ -608,6 +640,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         result = build_sensor_expected_values_from_dataframes(
             dimensions_df=dimensions_df,
+            program_profile_tys_df=empty_profile_tys_df,
             program_profiles_df=empty_profiles_df,
             program_schedules_df=empty_program_schedules_df,
             group_sensors_df=group_sensors_df,
@@ -631,7 +664,11 @@ class SparkTransformationsTests(unittest.TestCase):
         )
         empty_profiles_df = self.spark.createDataFrame(
             [],
-            "ProgramProfileId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+            "ProgramProfileId string, ProgramProfileTyId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+        )
+        empty_profile_tys_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileTyId string, Name string, Active boolean",
         )
         empty_program_schedules_df = self.spark.createDataFrame(
             [],
@@ -666,6 +703,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         result = build_sensor_expected_values_from_dataframes(
             dimensions_df=dimensions_df,
+            program_profile_tys_df=empty_profile_tys_df,
             program_profiles_df=empty_profiles_df,
             program_schedules_df=empty_program_schedules_df,
             group_sensors_df=group_sensors_df,

@@ -155,6 +155,7 @@ def _split_cross_midnight(df: DataFrame) -> DataFrame:
 def build_hvac_programs(
     program_profiles_df: DataFrame,
     program_schedules_df: DataFrame,
+    program_profile_tys_df: DataFrame,
 ) -> DataFrame:
     return (
         program_profiles_df.alias("pf")
@@ -165,6 +166,12 @@ def build_hvac_programs(
             .dropDuplicates(["ProgramProfileId", "ScheduleCode", "Days", "Time"]),
             on="ProgramProfileId",
             how="inner",
+        )
+        .join(
+            program_profile_tys_df.alias("pty")
+            .filter(F.coalesce(F.col("pty.Active"), F.lit(False))),
+            on="ProgramProfileTyId",
+            how="left",
         )
         .select(
             F.col("pf.DeviceId").alias("device_id"),
@@ -177,6 +184,7 @@ def build_hvac_programs(
             ),
             F.col("ps.Days"),
             _extract_hhmm("ps.Time").alias("Time"),
+            F.lower(F.trim(F.col("pty.Name"))).alias("profile_type_name"),
         )
         .filter(F.col("Time").isNotNull())
         .dropDuplicates(
@@ -187,6 +195,7 @@ def build_hvac_programs(
                 "temperature_grace",
                 "Days",
                 "Time",
+                "profile_type_name",
             ]
         )
     )
@@ -220,6 +229,10 @@ def build_hvac_expected_values(
         .withColumn("time_value", _extract_hhmm("Time"))
         .filter(F.col("time_value").isNotNull())
         .withColumn(
+            "is_off_profile",
+            F.coalesce(F.col("profile_type_name") == F.lit("off"), F.lit(False)),
+        )
+        .withColumn(
             "time_ts",
             F.to_timestamp(
                 F.concat(F.lit("2000-01-01 "), F.col("time_value"), F.lit(":00")),
@@ -245,13 +258,13 @@ def build_hvac_expected_values(
             "sensor_id",
             "device_id",
             F.when(
-                (F.col("Mode") == F.lit("00"))
+                (~F.col("is_off_profile"))
                 & F.col("Temperature").isNotNull()
                 & F.col("temperature_grace").isNotNull(),
                 (F.col("Temperature") - F.col("temperature_grace")).cast("double"),
             ).otherwise(F.lit(None).cast("double")).alias("min_expected_value"),
             F.when(
-                (F.col("Mode") == F.lit("00"))
+                (~F.col("is_off_profile"))
                 & F.col("Temperature").isNotNull()
                 & F.col("temperature_grace").isNotNull(),
                 (F.col("Temperature") + F.col("temperature_grace")).cast("double"),
@@ -271,7 +284,7 @@ def build_hvac_expected_values(
         .withColumn("end_time", F.coalesce(F.col("next_time"), F.col("first_time")))
         .withColumn(
             "min_expected_value",
-            F.when(F.col("Mode") == F.lit("00"), F.lit(1.0)).otherwise(F.lit(0.0)),
+            F.when(F.col("is_off_profile"), F.lit(0.0)).otherwise(F.lit(1.0)),
         )
         .withColumn("max_expected_value", F.col("min_expected_value"))
         .select(
@@ -443,6 +456,7 @@ def build_sensor_expected_values_from_dataframes(
     dimensions_df: DataFrame,
     program_profiles_df: DataFrame,
     program_schedules_df: DataFrame,
+    program_profile_tys_df: DataFrame,
     group_sensors_df: DataFrame,
     group_has_schedules_df: DataFrame,
     group_has_sensors_df: DataFrame,
@@ -450,7 +464,11 @@ def build_sensor_expected_values_from_dataframes(
     spark = dimensions_df.sparkSession
 
     hvac_expected_values = build_hvac_expected_values(
-        build_hvac_programs(program_profiles_df, program_schedules_df),
+        build_hvac_programs(
+            program_profiles_df,
+            program_schedules_df,
+            program_profile_tys_df,
+        ),
         dimensions_df,
     )
     lights_expected_values = build_lights_expected_values(
@@ -525,6 +543,11 @@ def sensor_expected_values(
     if dimensions_df is None:
         return _empty_final_expected_values_df(spark)
 
+    program_profile_tys_df = _read_dim_source_table(
+        spark_res,
+        dim_sqlserver,
+        "ProgramProfileTys",
+    )
     program_profiles_df = _read_dim_source_table(spark_res, dim_sqlserver, "ProgramProfiles")
     program_schedules_df = _read_dim_source_table(spark_res, dim_sqlserver, "ProgramSchedules")
     group_sensors_df = _read_dim_source_table(spark_res, dim_sqlserver, "GroupSensors")
@@ -533,6 +556,7 @@ def sensor_expected_values(
 
     return build_sensor_expected_values_from_dataframes(
         dimensions_df=dimensions_df,
+        program_profile_tys_df=program_profile_tys_df,
         program_profiles_df=program_profiles_df,
         program_schedules_df=program_schedules_df,
         group_sensors_df=group_sensors_df,

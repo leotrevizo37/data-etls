@@ -14,6 +14,7 @@ from ..transformations import sensor_expected_values
 
 @asset(
     non_argument_deps={
+        AssetKey("dbo_ProgramProfileTys"),
         AssetKey("dbo_ProgramProfiles"),
         AssetKey("dbo_ProgramSchedules"),
         AssetKey("dbo_GroupSensors"),

@@ -89,6 +89,7 @@ class SqlDimServerResource:
                 "GroupHasSchedules",
                 "GroupHasSensors",
                 "ProgramSchedules",
+                "ProgramProfileTys",
                 "ProgramProfiles",
             ]
         )
@@ -104,6 +105,7 @@ class SqlDimServerResource:
                 "GroupHasSchedules",
                 "GroupHasSensors",
                 "ProgramSchedules",
+                "ProgramProfileTys",
                 "ProgramProfiles",
             ]
         )
