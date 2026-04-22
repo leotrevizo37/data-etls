@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -10,8 +12,8 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from ..resources import SparkResource, SqlDimServerResource
-from .raw_dimensions import raw_dimensions
+if TYPE_CHECKING:
+    from ..resources import SparkResource, SqlDimServerResource
 
 
 HVAC_DEVICE_TYPES = (
@@ -537,6 +539,8 @@ def sensor_expected_values(
     spark_res: SparkResource,
     dim_sqlserver: SqlDimServerResource,
 ) -> DataFrame:
+    from .raw_dimensions import raw_dimensions
+
     spark = spark_res.get_spark()
     dimensions_df = raw_dimensions(spark_res, dim_sqlserver)
 
