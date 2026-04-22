@@ -103,13 +103,9 @@ def _normalize_days(column) -> F.Column:
 
 def _extract_hhmm(column_name: str) -> F.Column:
     text_value = F.trim(F.col(column_name).cast("string"))
-    parsed_value = F.coalesce(
-        F.date_format(F.to_timestamp(text_value, "HH:mm:ss"), "HH:mm"),
-        F.date_format(F.to_timestamp(text_value, "HH:mm"), "HH:mm"),
-    )
-    extracted_value = F.regexp_extract(text_value, r"(\d{1,2}:\d{2})", 1)
+    extracted_value = F.regexp_extract(text_value, r"(\d{1,2}:\d{2})(?::\d{2})?", 1)
     extracted_parts = F.split(extracted_value, ":")
-    extracted_formatted = F.when(
+    return F.when(
         extracted_value != "",
         F.format_string(
             "%02d:%02d",
@@ -117,7 +113,6 @@ def _extract_hhmm(column_name: str) -> F.Column:
             extracted_parts.getItem(1).cast("int"),
         ),
     )
-    return F.coalesce(parsed_value, extracted_formatted)
 
 
 def _append_seconds(column_name: str) -> F.Column:
@@ -145,7 +140,8 @@ def _split_cross_midnight(df: DataFrame) -> DataFrame:
             "end_time",
             F.date_format(
                 F.to_timestamp(
-                    F.concat(F.lit("2000-01-01 "), F.col("end_time"), F.lit(":00"))
+                    F.concat(F.lit("2000-01-01 "), F.col("end_time"), F.lit(":00")),
+                    "yyyy-MM-dd HH:mm:ss",
                 )
                 - F.expr("INTERVAL 1 MINUTE"),
                 "HH:mm",
@@ -226,7 +222,8 @@ def build_hvac_expected_values(
         .withColumn(
             "time_ts",
             F.to_timestamp(
-                F.concat(F.lit("2000-01-01 "), F.col("time_value"), F.lit(":00"))
+                F.concat(F.lit("2000-01-01 "), F.col("time_value"), F.lit(":00")),
+                "yyyy-MM-dd HH:mm:ss",
             ),
         )
     )
