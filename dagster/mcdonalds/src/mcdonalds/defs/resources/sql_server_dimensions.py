@@ -80,6 +80,37 @@ class SqlDimServerResource:
         }
 
     def get_watermark(self) -> Optional[datetime]:
+        return self._get_max_modified_at(["Sensors"])
+
+    def get_watermark_schedules(self) -> Optional[datetime]:
+        return self._get_max_modified_at(
+            [
+                "GroupSensors",
+                "GroupHasSchedules",
+                "GroupHasSensors",
+                "ProgramSchedules",
+                "ProgramProfileTys",
+                "ProgramProfiles",
+            ]
+        )
+
+    def get_watermark_sensor_expected_values(self) -> Optional[datetime]:
+        return self._get_max_modified_at(
+            [
+                "Sensors",
+                "SensorTys",
+                "Devices",
+                "DeviceTys",
+                "GroupSensors",
+                "GroupHasSchedules",
+                "GroupHasSensors",
+                "ProgramSchedules",
+                "ProgramProfileTys",
+                "ProgramProfiles",
+            ]
+        )
+
+    def _get_max_modified_at(self, tables: list[str]) -> Optional[datetime]:
         conn_str = (
                 "DRIVER={ODBC Driver 18 for SQL Server}"
                 + ";SERVER="
@@ -97,16 +128,22 @@ class SqlDimServerResource:
                 + str(self.connect_timeout)
         )
         conn = pyodbc.connect(conn_str)
+        max_modified_at: Optional[datetime] = None
+
         with conn:
             with conn.cursor() as cursor:
                 try:
-                    cursor.execute("SELECT MAX(ModifiedAt) FROM dbo.sensors;")
-                    row = cursor.fetchone()
+                    for table_name in tables:
+                        cursor.execute(f"SELECT MAX(ModifiedAt) FROM dbo.{table_name};")
+                        row = cursor.fetchone()
+                        if row is None or row[0] is None:
+                            continue
+                        if max_modified_at is None or row[0] > max_modified_at:
+                            max_modified_at = row[0]
                 except pyodbc.Error:
                     return None
-                if row is None or row[0] is None:
-                    return None
-                return row[0]
+
+        return max_modified_at
 
 @resource
 def dim_sqlserver_resource(_):

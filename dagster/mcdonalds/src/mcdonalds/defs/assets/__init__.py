@@ -5,9 +5,16 @@ from .source_assets import (dbo_sensors,
                             dbo_device_tys,
                             dbo_sublocations,
                             dbo_sublocation_tys,
-                            dwh_factlecturas)
+                            dwh_factlecturas,
+                            dbo_ProgramProfileTys,
+                            dbo_ProgramProfiles,
+                            dbo_ProgramSchedules,
+                            dbo_GroupSensors,
+                            dbo_GroupHasSchedules,
+                            dbo_GroupHasSensors)
 from .data_transformations import data_transformations
 from .dwh_dimSidonProdDimensions import dwh_dimsidonproddimensions
+from .dwh_dimSensorExpectedVal import dwh_dimsensorexpectedval
 from .cleanup_old_runs import cleanup_old_runs
 
 __all__ = [
@@ -18,8 +25,15 @@ __all__ = [
     "dbo_sublocations",
     "dbo_sublocation_tys",
     "dwh_factlecturas",
+    "dbo_ProgramProfileTys",
+    "dbo_ProgramProfiles",
+    "dbo_ProgramSchedules",
+    "dbo_GroupSensors",
+    "dbo_GroupHasSchedules",
+    "dbo_GroupHasSensors",
     "operations_assets",
     "data_transformations",
     "dwh_dimsidonproddimensions",
+    "dwh_dimsensorexpectedval",
     "cleanup_old_runs"
 ]

@@ -274,6 +274,35 @@ class SparkResource:
 
         return df_write.count()
 
+    def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
+        if df.rdd.isEmpty():
+            return 0
+
+        df_write = df.dropDuplicates(
+            [
+                "SensorId",
+                "DeviceId",
+                "StartTime",
+                "EndTime",
+                "scheduledDays",
+                "min_expected_value",
+                "max_expected_value",
+            ]
+        ).coalesce(2)
+        row_count = df_write.count()
+
+        if row_count == 0:
+            return 0
+
+        df_write.write.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSensorExpectedVal",
+            mode="append",
+            properties=self._build_wh_path()["properties"],
+        )
+
+        return row_count
+
     def read_dim_prod_dimensions(self) -> DataFrame:
         spark = self.get_spark()
 
