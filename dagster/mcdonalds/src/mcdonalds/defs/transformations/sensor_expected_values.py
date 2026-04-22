@@ -236,8 +236,6 @@ def build_hvac_expected_values(
 
     temperature_status = (
         programs_prepared
-        .filter(F.col("Mode") == F.lit("00"))
-        .filter(F.col("Temperature").isNotNull() & F.col("temperature_grace").isNotNull())
         .join(temperature_dimensions, on="device_id", how="inner")
         .withColumn("start_time", F.col("time_value"))
         .withColumn("next_time", F.lead("time_value").over(ordered_window))
@@ -246,12 +244,18 @@ def build_hvac_expected_values(
         .select(
             "sensor_id",
             "device_id",
-            (F.col("Temperature") - F.col("temperature_grace")).cast("double").alias(
-                "min_expected_value"
-            ),
-            (F.col("Temperature") + F.col("temperature_grace")).cast("double").alias(
-                "max_expected_value"
-            ),
+            F.when(
+                (F.col("Mode") == F.lit("00"))
+                & F.col("Temperature").isNotNull()
+                & F.col("temperature_grace").isNotNull(),
+                (F.col("Temperature") - F.col("temperature_grace")).cast("double"),
+            ).otherwise(F.lit(None).cast("double")).alias("min_expected_value"),
+            F.when(
+                (F.col("Mode") == F.lit("00"))
+                & F.col("Temperature").isNotNull()
+                & F.col("temperature_grace").isNotNull(),
+                (F.col("Temperature") + F.col("temperature_grace")).cast("double"),
+            ).otherwise(F.lit(None).cast("double")).alias("max_expected_value"),
             "start_time",
             "end_time",
             "scheduled_days",
@@ -463,8 +467,6 @@ def build_sensor_expected_values_from_dataframes(
         .filter(
             F.col("sensor_id").isNotNull()
             & F.col("device_id").isNotNull()
-            & F.col("min_expected_value").isNotNull()
-            & F.col("max_expected_value").isNotNull()
             & F.col("start_time").isNotNull()
             & F.col("end_time").isNotNull()
             & F.col("scheduled_days").isNotNull()

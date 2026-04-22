@@ -15,8 +15,8 @@ IF OBJECT_ID(N'dwh.dimSensorExpectedVal', N'U') IS NULL
         (
             SensorId UNIQUEIDENTIFIER NOT NULL,
             DeviceId UNIQUEIDENTIFIER NOT NULL,
-            min_expected_value DECIMAL(5,3) NOT NULL,
-            max_expected_value DECIMAL(5,3) NOT NULL,
+            min_expected_value DECIMAL(5, 3) NULL,
+            max_expected_value DECIMAL(5, 3) NULL,
             StartTime TIME(0) NOT NULL,
             EndTime TIME(0) NOT NULL,
             scheduledDays NVARCHAR(255) NOT NULL,

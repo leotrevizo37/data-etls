@@ -523,7 +523,7 @@ class SparkTransformationsTests(unittest.TestCase):
             for row in result.collect()
         }
 
-        self.assertEqual(result.count(), 7)
+        self.assertEqual(result.count(), 9)
         self.assertEqual(
             rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["min_expected_value"],
             Decimal("65.300"),
@@ -532,9 +532,23 @@ class SparkTransformationsTests(unittest.TestCase):
             rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["max_expected_value"],
             Decimal("70.700"),
         )
+        self.assertIsNone(
+            rows[("sensor-temp", "22:00:00", "23:59:00", "1")]["min_expected_value"]
+        )
+        self.assertIsNone(
+            rows[("sensor-temp", "22:00:00", "23:59:00", "1")]["max_expected_value"]
+        )
+        self.assertIn(
+            ("sensor-temp", "00:00:00", "07:59:00", "1"),
+            rows,
+        )
         self.assertEqual(
             rows[("sensor-switch", "22:00:00", "23:59:00", "1")]["min_expected_value"],
             Decimal("0.000"),
+        )
+        self.assertEqual(
+            rows[("sensor-switch", "08:00:00", "22:00:00", "1")]["min_expected_value"],
+            Decimal("1.000"),
         )
         self.assertEqual(
             rows[("sensor-light", "00:00:00", "05:59:00", "1")]["max_expected_value"],
