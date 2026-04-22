@@ -12,11 +12,19 @@ def _build_defs() -> Any:
 
     from .assets import (
         cleanup_old_runs,
+        dbo_GroupHasSchedules,
+        dbo_GroupHasSensors,
+        dbo_GroupSensors,
+        dbo_ProgramProfileTys,
+        dbo_ProgramProfiles,
+        dbo_ProgramSchedules,
         dbo_devices,
         dbo_sensor_tys,
         dbo_sensors,
         dbo_device_tys,
         dbo_sublocations,
+        dbo_sublocation_tys,
+        dwh_dimsensorexpectedval,
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
         operations_assets,
@@ -26,6 +34,7 @@ def _build_defs() -> Any:
         fact_lecturas_ingestion_job,
         fact_operations_tables_job,
         refresh_dimensions_job,
+        refresh_sensor_expected_values_job,
     )
     from .resources import (
         dim_sqlserver_resource,
@@ -43,13 +52,17 @@ def _build_defs() -> Any:
         operations_sched_every_4h,
         operations_sched_every_w,
     )
-    from .sensors import dwh_dimsidonproddimensions_sensor
+    from .sensors import (
+        dwh_dimsensorexpectedval_sensor,
+        dwh_dimsidonproddimensions_sensor,
+    )
 
     return Definitions(
         jobs=[
             fact_lecturas_ingestion_job,
             fact_operations_tables_job,
             refresh_dimensions_job,
+            refresh_sensor_expected_values_job,
             cleanup_job,
         ],
         resources={
@@ -69,6 +82,7 @@ def _build_defs() -> Any:
             cleanup_schedule,
         ],
         sensors=[
+            dwh_dimsensorexpectedval_sensor,
             dwh_dimsidonproddimensions_sensor,
         ],
         assets=[
@@ -77,9 +91,17 @@ def _build_defs() -> Any:
             dbo_devices,
             dbo_device_tys,
             dbo_sublocations,
+            dbo_sublocation_tys,
+            dbo_ProgramProfileTys,
+            dbo_ProgramProfiles,
+            dbo_ProgramSchedules,
+            dbo_GroupSensors,
+            dbo_GroupHasSchedules,
+            dbo_GroupHasSensors,
             dwh_factlecturas,
             operations_assets,
             dwh_dimsidonproddimensions,
+            dwh_dimsensorexpectedval,
             cleanup_old_runs,
         ],
     )

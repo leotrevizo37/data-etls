@@ -140,68 +140,6 @@ services:
       retries: 10
       start_period: 20s
 
-  dagster-user-code-dbx-bridge:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile.bridge
-    container_name: mcdonalds-dagster-user-code-dbx-bridge
-    env_file:
-      - .env
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/mcdonalds_databricks_bridge/src
-      APP_DB: ${APP_DB}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      BRIDGE_SRCSQL_HOST: ${BRIDGE_SRCSQL_HOST}
-      BRIDGE_SRCSQL_PORT: ${BRIDGE_SRCSQL_PORT:-1433}
-      BRIDGE_SRCSQL_DB: ${BRIDGE_SRCSQL_DB}
-      BRIDGE_SRCSQL_USER: ${BRIDGE_SRCSQL_USER}
-      BRIDGE_SRCSQL_PASSWORD: ${BRIDGE_SRCSQL_PASSWORD}
-      DATABRICKS_SERVER_HOSTNAME: ${DATABRICKS_SERVER_HOSTNAME}
-      DATABRICKS_HTTP_PATH: ${DATABRICKS_HTTP_PATH}
-      DATABRICKS_TOKEN: ${DATABRICKS_TOKEN}
-      DATABRICKS_CLIENT_ID: ${DATABRICKS_CLIENT_ID}
-      DATABRICKS_CLIENT_SECRET: ${DATABRICKS_CLIENT_SECRET}
-      DBX_STAGING_ALLOWED_LOCAL_PATH: ${DBX_STAGING_ALLOWED_LOCAL_PATH:-/tmp/databricks_bridge}
-    working_dir: /opt/dagster/app/mcdonalds_databricks_bridge
-    volumes:
-      - ../dagster/dagster_home:/opt/dagster/dagster_home
-      - ../dagster/mcdonalds_databricks_bridge:/opt/dagster/app/mcdonalds_databricks_bridge
-      - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
-      - dbx-bridge-staging:/tmp/databricks_bridge
-    networks:
-      - mcdonalds-dagster
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    ports:
-      - "${DBX_BRIDGE_USER_CODE_PORT:-4005}:4001"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4001",
-      "-m", "mcdonalds_databricks_bridge.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4001 -h 127.0.0.1"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
   dagster-web:
     build:
       context: ..
@@ -210,8 +148,6 @@ services:
     <<: *dagster_common
     depends_on:
       dagster-user-code:
-        condition: service_healthy
-      dagster-user-code-dbx-bridge:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -234,8 +170,6 @@ services:
     <<: *dagster_common
     depends_on:
       dagster-user-code:
-        condition: service_healthy
-      dagster-user-code-dbx-bridge:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -314,7 +248,6 @@ services:
 volumes:
   spark-data:
   dagster_postgres_data:
-  dbx-bridge-staging:
 
 networks:
   mcdonalds-dagster:

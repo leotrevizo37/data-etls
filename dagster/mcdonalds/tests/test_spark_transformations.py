@@ -2,6 +2,7 @@ import sys
 import unittest
 import warnings
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
@@ -23,6 +24,9 @@ from mcdonalds.defs.transformations.lecturas_time_hours import (  # noqa: E402
     lecturas_time_hours,
 )
 from mcdonalds.defs.transformations.maquinas_soda import maquinas_soda  # noqa: E402
+from mcdonalds.defs.transformations.sensor_expected_values import (  # noqa: E402
+    build_sensor_expected_values_from_dataframes,
+)
 from mcdonalds.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
@@ -116,7 +120,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Presion",
+                    "sensor_type": "Presion",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 3),
                     "Value": 21.0,
                 },
@@ -125,7 +129,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Presion",
+                    "sensor_type": "Presion",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 18),
                     "Value": 24.0,
                 },
@@ -134,7 +138,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Presion",
+                    "sensor_type": "Presion",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 43),
                     "Value": 10.0,
                 },
@@ -143,7 +147,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 55),
                     "Value": 999.0,
                 },
@@ -174,7 +178,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Presion",
+                    "sensor_type": "Presion",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 25.0,
                 },
@@ -183,7 +187,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Presion",
+                    "sensor_type": "Presion",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 110.0,
                 },
@@ -214,7 +218,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 5.0,
                 }
@@ -233,7 +237,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 0.0,
                 },
@@ -242,7 +246,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 20),
                     "Value": 0.0,
                 },
@@ -251,7 +255,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 1.0,
                 },
@@ -282,7 +286,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 1.0,
                 },
@@ -291,7 +295,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
+                    "sensor_type": "Corriente",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 1.0,
                 },
@@ -321,8 +325,8 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": "Corriente",
+                    "device_type": SODA_DEVICE_TYPE,
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 0.5,
                 },
@@ -331,8 +335,8 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": "Corriente",
+                    "device_type": SODA_DEVICE_TYPE,
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 0.6,
                 },
@@ -341,8 +345,8 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "_sensor_type": SODA_PRESSURE_SENSOR,
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": SODA_PRESSURE_SENSOR,
+                    "device_type": SODA_DEVICE_TYPE,
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
                     "Value": 21.0,
                 },
@@ -351,8 +355,8 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "_sensor_type": SODA_PRESSURE_SENSOR,
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": SODA_PRESSURE_SENSOR,
+                    "device_type": SODA_DEVICE_TYPE,
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 22.0,
                 },
@@ -365,16 +369,16 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 10,
                     "LocationId": 100,
                     "SensorTyId": 200,
-                    "_sensor_type": "Corriente",
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": "Corriente",
+                    "device_type": SODA_DEVICE_TYPE,
                 },
                 {
                     "DeviceId": 1,
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "_sensor_type": SODA_PRESSURE_SENSOR,
-                    "_device_type": SODA_DEVICE_TYPE,
+                    "sensor_type": SODA_PRESSURE_SENSOR,
+                    "device_type": SODA_DEVICE_TYPE,
                 },
             ]
         )
@@ -398,9 +402,322 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual({row["StatusCode"] for row in rows}, {1})
         self.assertEqual({row["LocationId"] for row in rows}, {100})
         self.assertEqual(
-            {row["_sensor_type"] for row in rows},
+            {row["sensor_type"] for row in rows},
             {"Corriente", SODA_PRESSURE_SENSOR},
         )
+
+    def test_build_sensor_expected_values_generates_hvac_and_light_rows(self) -> None:
+        dimensions_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "sensor-temp",
+                    "DeviceId": "device-hvac",
+                    "sensor_type": "Temperatura",
+                    "device_type": "A/C de Cocina",
+                    "Active": True,
+                },
+                {
+                    "SensorId": "sensor-switch",
+                    "DeviceId": "device-hvac",
+                    "sensor_type": "On/Off Termostato",
+                    "device_type": "A/C de Cocina",
+                    "Active": True,
+                },
+                {
+                    "SensorId": "sensor-light",
+                    "DeviceId": "device-light",
+                    "sensor_type": "Encendido",
+                    "device_type": "Luminaria",
+                    "Active": True,
+                },
+                {
+                    "SensorId": "sensor-ignored",
+                    "DeviceId": "device-other",
+                    "sensor_type": "Temperatura",
+                    "device_type": "Congelador",
+                    "Active": True,
+                },
+            ]
+        )
+        program_profiles_df = self.spark.createDataFrame(
+            [
+                {
+                    "ProgramProfileId": "profile-on",
+                    "ProgramProfileTyId": "pty-on",
+                    "DeviceId": "device-hvac",
+                    "Mode": "00",
+                    "Temperature": 20.0,
+                    "TemperatureGrace": 1.5,
+                    "Active": True,
+                },
+                {
+                    "ProgramProfileId": "profile-off",
+                    "ProgramProfileTyId": "pty-off",
+                    "DeviceId": "device-hvac",
+                    "Mode": "00",
+                    "Temperature": 24.0,
+                    "TemperatureGrace": 1.0,
+                    "Active": True,
+                },
+            ]
+        )
+        program_profile_tys_df = self.spark.createDataFrame(
+            [
+                {
+                    "ProgramProfileTyId": "pty-on",
+                    "Name": "Wake",
+                    "Active": True,
+                },
+                {
+                    "ProgramProfileTyId": "pty-off",
+                    "Name": "off",
+                    "Active": True,
+                },
+            ]
+        )
+        program_schedules_df = self.spark.createDataFrame(
+            [
+                {
+                    "ProgramProfileId": "profile-on",
+                    "ScheduleCode": "A",
+                    "Days": "Mon",
+                    "Time": "08:00",
+                    "Active": True,
+                },
+                {
+                    "ProgramProfileId": "profile-off",
+                    "ScheduleCode": "B",
+                    "Days": "Mon",
+                    "Time": "22:00",
+                    "Active": True,
+                },
+                {
+                    "ProgramProfileId": "profile-on",
+                    "ScheduleCode": "C",
+                    "Days": "Mon",
+                    "Time": "12:00",
+                    "Active": False,
+                },
+            ]
+        )
+        group_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "Active": True},
+            ]
+        )
+        group_has_schedules_df = self.spark.createDataFrame(
+            [
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "0 6 * * MON",
+                    "Value": True,
+                    "Active": True,
+                },
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "0 18 * * MON",
+                    "Value": False,
+                    "Active": True,
+                },
+            ]
+        )
+        group_has_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "SensorsSensorId": "sensor-light"},
+            ]
+        )
+
+        result = build_sensor_expected_values_from_dataframes(
+            dimensions_df=dimensions_df,
+            program_profile_tys_df=program_profile_tys_df,
+            program_profiles_df=program_profiles_df,
+            program_schedules_df=program_schedules_df,
+            group_sensors_df=group_sensors_df,
+            group_has_schedules_df=group_has_schedules_df,
+            group_has_sensors_df=group_has_sensors_df,
+        )
+
+        rows = {
+            (
+                row["SensorId"],
+                row["StartTime"],
+                row["EndTime"],
+                row["scheduledDays"],
+            ): row
+            for row in result.collect()
+        }
+
+        self.assertEqual(result.count(), 9)
+        self.assertEqual(
+            rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["min_expected_value"],
+            Decimal("65.300"),
+        )
+        self.assertEqual(
+            rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["max_expected_value"],
+            Decimal("70.700"),
+        )
+        self.assertIsNone(
+            rows[("sensor-temp", "22:00:00", "23:59:00", "1")]["min_expected_value"]
+        )
+        self.assertIsNone(
+            rows[("sensor-temp", "22:00:00", "23:59:00", "1")]["max_expected_value"]
+        )
+        self.assertIn(
+            ("sensor-temp", "00:00:00", "07:59:00", "1"),
+            rows,
+        )
+        self.assertNotIn(
+            ("sensor-temp", "12:00:00", "22:00:00", "1"),
+            rows,
+        )
+        self.assertEqual(
+            rows[("sensor-switch", "22:00:00", "23:59:00", "1")]["min_expected_value"],
+            Decimal("0.000"),
+        )
+        self.assertEqual(
+            rows[("sensor-switch", "08:00:00", "22:00:00", "1")]["min_expected_value"],
+            Decimal("1.000"),
+        )
+        self.assertEqual(
+            rows[("sensor-light", "00:00:00", "05:59:00", "1")]["max_expected_value"],
+            Decimal("0.000"),
+        )
+        self.assertNotIn(
+            ("sensor-ignored", "08:00:00", "22:00:00", "1"),
+            rows,
+        )
+
+    def test_build_sensor_expected_values_maps_sunday_to_seven(self) -> None:
+        dimensions_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "sensor-light",
+                    "DeviceId": "device-light",
+                    "sensor_type": "Encendido",
+                    "device_type": "Luminaria",
+                    "Active": True,
+                },
+            ]
+        )
+        empty_profiles_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileId string, ProgramProfileTyId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+        )
+        empty_profile_tys_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileTyId string, Name string, Active boolean",
+        )
+        empty_program_schedules_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileId string, ScheduleCode string, Days string, Time string, Active boolean",
+        )
+        group_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "Active": True},
+            ]
+        )
+        group_has_schedules_df = self.spark.createDataFrame(
+            [
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "0 9 * * SUN",
+                    "Value": True,
+                    "Active": True,
+                },
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "0 21 * * SUN",
+                    "Value": False,
+                    "Active": True,
+                },
+            ]
+        )
+        group_has_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "SensorsSensorId": "sensor-light"},
+            ]
+        )
+
+        result = build_sensor_expected_values_from_dataframes(
+            dimensions_df=dimensions_df,
+            program_profile_tys_df=empty_profile_tys_df,
+            program_profiles_df=empty_profiles_df,
+            program_schedules_df=empty_program_schedules_df,
+            group_sensors_df=group_sensors_df,
+            group_has_schedules_df=group_has_schedules_df,
+            group_has_sensors_df=group_has_sensors_df,
+        )
+
+        self.assertEqual({row["scheduledDays"] for row in result.collect()}, {"7"})
+
+    def test_build_sensor_expected_values_normalizes_wildcard_days(self) -> None:
+        dimensions_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "sensor-light",
+                    "DeviceId": "device-light",
+                    "sensor_type": "Encendido",
+                    "device_type": "Luminaria",
+                    "Active": True,
+                },
+            ]
+        )
+        empty_profiles_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileId string, ProgramProfileTyId string, DeviceId string, Mode string, Temperature double, TemperatureGrace double, Active boolean",
+        )
+        empty_profile_tys_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileTyId string, Name string, Active boolean",
+        )
+        empty_program_schedules_df = self.spark.createDataFrame(
+            [],
+            "ProgramProfileId string, ScheduleCode string, Days string, Time string, Active boolean",
+        )
+        group_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "Active": True},
+            ]
+        )
+        group_has_schedules_df = self.spark.createDataFrame(
+            [
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "30 9 * * ?",
+                    "Value": True,
+                    "Active": True,
+                },
+                {
+                    "GroupSensorsId": "group-1",
+                    "Crone": "0 21 * * ?",
+                    "Value": False,
+                    "Active": True,
+                },
+            ]
+        )
+        group_has_sensors_df = self.spark.createDataFrame(
+            [
+                {"GroupSensorsId": "group-1", "SensorsSensorId": "sensor-light"},
+            ]
+        )
+
+        result = build_sensor_expected_values_from_dataframes(
+            dimensions_df=dimensions_df,
+            program_profile_tys_df=empty_profile_tys_df,
+            program_profiles_df=empty_profiles_df,
+            program_schedules_df=empty_program_schedules_df,
+            group_sensors_df=group_sensors_df,
+            group_has_schedules_df=group_has_schedules_df,
+            group_has_sensors_df=group_has_sensors_df,
+        )
+
+        rows = result.orderBy("StartTime").collect()
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({row["scheduledDays"] for row in rows}, {"1-7"})
+        self.assertEqual(rows[0]["StartTime"], "00:00:00")
+        self.assertEqual(rows[0]["EndTime"], "09:29:00")
+        self.assertEqual(rows[-1]["StartTime"], "21:00:00")
 
     def test_limit_operations_rows_to_closed_hours_removes_future_rows(self) -> None:
         schema = StructType(
@@ -408,7 +725,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 StructField("DeviceId", IntegerType(), True),
                 StructField("SensorId", IntegerType(), True),
                 StructField("LocalTimeSpan", TimestampType(), True),
-                StructField("_sensor_type", StringType(), True),
+                StructField("sensor_type", StringType(), True),
                 StructField("MeasurementValue", DoubleType(), True),
             ]
         )
