@@ -159,7 +159,8 @@ def cuartos_refrigeracion(
                     )
                 ) & (
                     (col("sensor_type") == "Corriente") |
-                    (col("sensor_type") == "Temperatura")
+                    (col("sensor_type") == "Temperatura") |
+                    (col("sensor_type") == "Humedad")
                 )
             ),
             min_hour,
