@@ -42,10 +42,10 @@ operations_sched_every_w = ScheduleDefinition(
     default_status=DefaultScheduleStatus.STOPPED,
 )
 
-operations_sched_every_40m_w = ScheduleDefinition(
-    name="operations_sched_every_40m_w",
+operations_sched_every_30m_w = ScheduleDefinition(
+    name="operations_sched_every_30m_w",
     job=fact_operations_tables_job,
-    cron_schedule="*/41 5-16 * * 1-5",
+    cron_schedule="*/32 5-16 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.RUNNING,
 )
