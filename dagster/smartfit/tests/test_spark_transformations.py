@@ -826,23 +826,23 @@ class SparkTransformationsTests(unittest.TestCase):
         )
         self.assertEqual(
             rows[("sensor-temp", "05:00:00", "07:00:00", "1,2,3,4,5")]["min_expected_value"],
-            Decimal("66.200"),
+            Decimal("19.000"),
         )
         self.assertEqual(
             rows[("sensor-temp", "05:00:00", "07:00:00", "1,2,3,4,5")]["max_expected_value"],
-            Decimal("69.800"),
+            Decimal("21.000"),
         )
         self.assertEqual(
             rows[("sensor-temp", "07:00:00", "11:00:00", "1,2,3,4,5")]["min_expected_value"],
-            Decimal("69.800"),
+            Decimal("21.000"),
         )
         self.assertEqual(
             rows[("sensor-temp", "07:00:00", "11:00:00", "1,2,3,4,5")]["max_expected_value"],
-            Decimal("73.400"),
+            Decimal("23.000"),
         )
         self.assertEqual(
             rows[("sensor-temp", "05:00:00", "11:00:00", "6,7")]["min_expected_value"],
-            Decimal("66.200"),
+            Decimal("19.000"),
         )
         self.assertEqual(
             rows[("sensor-switch", "05:00:00", "07:00:00", "1,2,3,4,5")]["min_expected_value"],
