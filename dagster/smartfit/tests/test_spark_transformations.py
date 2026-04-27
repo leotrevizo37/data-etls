@@ -466,10 +466,10 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C rooftop",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
-                    "Value": 68.0,
+                    "Value": 23.0,
                 },
             ]
         )
@@ -488,7 +488,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C rooftop",
                 },
             ]
@@ -509,9 +509,9 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(rows[10]["StatusCode"], 3)
         self.assertEqual(rows[10]["ReadingsCount"], 0)
         self.assertIsNone(rows[10]["MeasurementValue"])
-        self.assertEqual(rows[11]["StatusCode"], 1)
+        self.assertEqual(rows[11]["StatusCode"], 3)
         self.assertEqual(rows[11]["ReadingsCount"], 1)
-        self.assertAlmostEqual(rows[11]["MeasurementValue"], 68.0)
+        self.assertAlmostEqual(rows[11]["MeasurementValue"], 23.0)
         self.assertEqual(len({row["OperationId"] for row in rows.values()}), 1)
 
     def test_build_sensor_expected_values_generates_hvac_and_light_rows(self) -> None:
