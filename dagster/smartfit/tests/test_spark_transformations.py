@@ -341,20 +341,20 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C rooftop",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
-                    "Value": 68.0,
+                    "Value": 24.0,
                 },
                 {
                     "DeviceId": 1,
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C rooftop",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
-                    "Value": 69.0,
+                    "Value": 22.0,
                 },
                 {
                     "DeviceId": 2,
@@ -381,20 +381,20 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 21,
                     "LocationId": 101,
                     "SensorTyId": 301,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "AMBIENTE lounge",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
-                    "Value": 70.0,
+                    "Value": 21.0,
                 },
                 {
                     "DeviceId": 2,
                     "SensorId": 21,
                     "LocationId": 101,
                     "SensorTyId": 301,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "AMBIENTE lounge",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
-                    "Value": 71.0,
+                    "Value": 23.0,
                 },
             ]
         )
@@ -413,7 +413,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 11,
                     "LocationId": 100,
                     "SensorTyId": 201,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C rooftop",
                 },
                 {
@@ -429,7 +429,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorId": 21,
                     "LocationId": 101,
                     "SensorTyId": 301,
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "AMBIENTE lounge",
                 },
             ]
@@ -451,7 +451,11 @@ class SparkTransformationsTests(unittest.TestCase):
             {row["LocalTimeSpan"] for row in rows},
             {datetime(2026, 3, 29, 10, 0)},
         )
-        self.assertEqual({row["StatusCode"] for row in rows}, {1})
+        rows_by_sensor = {row["SensorId"]: row for row in rows}
+        self.assertEqual(rows_by_sensor[10]["StatusCode"], 1)
+        self.assertEqual(rows_by_sensor[11]["StatusCode"], 1)
+        self.assertEqual(rows_by_sensor[20]["StatusCode"], 1)
+        self.assertEqual(rows_by_sensor[21]["StatusCode"], 3)
         self.assertEqual(len({row["OperationId"] for row in rows}), 2)
 
     def test_termostatos_scaffolds_missing_sensor_type_stats(self) -> None:
