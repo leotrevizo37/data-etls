@@ -6,7 +6,7 @@ ENV_FILE := compose-mcdonalds/.env
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 
-.PHONY: help up down restart build ps lint-python test-python
+.PHONY: help up down restart build ps lint-python test-python lint-mcdonalds lint-smartfit test-mcdonalds test-smartfit
 
 help:
 	@echo "Targets:"
@@ -15,8 +15,8 @@ help:
 	@echo "  make restart     Re-arranca todos los servicios"
 	@echo "  make build       Unicamente crea las imagenes"
 	@echo "  make ps          Muestra los contenedores"
-	@echo "  make lint-python Corre Ruff sobre el codigo Python"
-	@echo "  make test-python Corre la suite de tests del modulo mcdonalds"
+	@echo "  make lint-python Corre Ruff sobre los modulos Python"
+	@echo "  make test-python Corre la suite de tests de los modulos Dagster"
 
 up:
 	$(COMPOSE) up -d --build
@@ -33,8 +33,18 @@ build:
 ps:
 	$(COMPOSE) ps
 
-lint-python:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/mcdonalds && ruff check src tests"
+lint-python: lint-mcdonalds lint-smartfit
 
-test-python:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code -lc "cd /opt/dagster/app/mcdonalds && python -m unittest discover tests -p 'test_*.py'"
+lint-mcdonalds:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/mcdonalds && ruff check src tests"
+
+lint-smartfit:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/smartfit && ruff check src tests"
+
+test-python: test-mcdonalds test-smartfit
+
+test-mcdonalds:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "cd /opt/dagster/app/mcdonalds && python -m unittest discover tests -p 'test_*.py'"
+
+test-smartfit:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "cd /opt/dagster/app/smartfit && python -m unittest discover tests -p 'test_*.py'"
