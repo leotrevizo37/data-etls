@@ -516,7 +516,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 {
                     "SensorId": "sensor-temp",
                     "DeviceId": "device-hvac",
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "a/C de Cocina principal",
                     "Active": True,
                 },
@@ -697,7 +697,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 {
                     "SensorId": "sensor-temp",
                     "DeviceId": "device-hvac",
-                    "sensor_type": "Temperatura",
+                    "sensor_type": "Temperatura C",
                     "device_type": "A/C principal",
                     "Active": True,
                 },
