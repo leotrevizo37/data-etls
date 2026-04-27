@@ -554,7 +554,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "ProgramProfileTyId": "pty-on",
                     "DeviceId": "device-hvac",
                     "Mode": "00",
-                    "Temperature": 20.0,
+                    "Temperature": 23.0,
                     "TemperatureGrace": 1.5,
                     "Active": True,
                 },
@@ -563,7 +563,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "ProgramProfileTyId": "pty-off",
                     "DeviceId": "device-hvac",
                     "Mode": "00",
-                    "Temperature": 24.0,
+                    "Temperature": 23.0,
                     "TemperatureGrace": 1.0,
                     "Active": True,
                 },
@@ -658,11 +658,11 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(result.count(), 9)
         self.assertEqual(
             rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["min_expected_value"],
-            Decimal("65.300"),
+            Decimal("21.500"),
         )
         self.assertEqual(
             rows[("sensor-temp", "08:00:00", "22:00:00", "1")]["max_expected_value"],
-            Decimal("70.700"),
+            Decimal("24.500"),
         )
         self.assertIsNone(
             rows[("sensor-temp", "22:00:00", "23:59:00", "1")]["min_expected_value"]
