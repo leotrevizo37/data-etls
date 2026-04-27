@@ -140,7 +140,7 @@ services:
       DAGSTER_HOME: /opt/dagster/dagster_home
       PYTHONPATH: /opt/dagster/app/mcdonalds/src
       APP_DB: ${MCDONALDS_DB:-mcdonalds}
-      DIM_DB: ${MCDONALDS_DB:-mcdonalds}
+      DIM_DB: ${MCDONALDS_DIM_DB:-mcdonalds}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
@@ -178,7 +178,7 @@ services:
       DAGSTER_HOME: /opt/dagster/dagster_home
       PYTHONPATH: /opt/dagster/app/smartfit/src
       APP_DB: ${SMARTFIT_DB:-smartfit}
-      DIM_DB: ${SMARTFIT_DB:-smartfit}
+      DIM_DB: ${SMARTFIT_DIM_DB:-smartfit}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
