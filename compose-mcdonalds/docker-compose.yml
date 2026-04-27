@@ -104,7 +104,7 @@ services:
       retries: 10
       start_period: 15s
 
-  dagster-user-code:
+  dagster-user-code-mcd:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
@@ -140,6 +140,42 @@ services:
       retries: 10
       start_period: 20s
 
+  dagster-user-code-smft:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: smartfit-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/smartfit/src
+      APP_DB: ${APP_DB}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+    ports:
+      - "${USER_CODE_PORT:-4000}:4002"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4002",
+      "-m", "smartfit.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4002 -h 127.0.0.1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   dagster-web:
     build:
       context: ..
@@ -147,7 +183,9 @@ services:
     container_name: mcdonalds-dagster-web
     <<: *dagster_common
     depends_on:
-      dagster-user-code:
+      dagster-user-code-mcd:
+        condition: service_healthy
+      dagster-user-code-smft:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy

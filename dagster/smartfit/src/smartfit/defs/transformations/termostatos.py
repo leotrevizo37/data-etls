@@ -1,0 +1,172 @@
+from typing import Optional
+
+from pyspark import StorageLevel
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.functions import expr, lit
+
+from .lecturas_time_hours import lecturas_time_hours
+from .stats_calculator import stats_calculator
+
+
+def _is_hvac_device_type(column_name: str = "device_type") -> F.Column:
+    normalized = F.lower(F.trim(F.col(column_name).cast("string")))
+    return normalized.startswith("a/c") | normalized.startswith("ambiente")
+
+
+def _is_hvac_sensor_type(column_name: str = "sensor_type") -> F.Column:
+    return F.col(column_name).isin("On/Off Termostato", "Temperatura", "Temperatura C")
+
+
+def _hvac_dimensions(dimensions_df: DataFrame) -> DataFrame:
+    return dimensions_df.filter(_is_hvac_device_type("device_type") & _is_hvac_sensor_type("sensor_type"))
+
+
+def termostatos(
+    factlecturas_extended_df: DataFrame,
+    dimensions_df: DataFrame,
+    min_hour: str,
+    max_hour: str,
+) -> Optional[DataFrame]:
+    hvac_dimensions_df = _hvac_dimensions(dimensions_df)
+    base = factlecturas_extended_df.filter(_is_hvac_device_type("device_type"))
+    scaffold_base_df = lecturas_time_hours(hvac_dimensions_df, min_hour, max_hour)
+
+    if scaffold_base_df is None:
+        return None
+
+    if base.rdd.isEmpty():
+        empty_base_df = (
+            scaffold_base_df
+            .join(
+                hvac_dimensions_df,
+                on=["DeviceId", "SensorId", "SensorTyId"],
+                how="left",
+            )
+        )
+
+        group_ids_df = (
+            empty_base_df
+            .select("DeviceId", "LocalTimeSpan")
+            .distinct()
+            .withColumn("OperationId", expr("uuid()"))
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        _ = group_ids_df.count()
+
+        group_with_guid_df = (
+            empty_base_df
+            .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+            .withColumn("ReadingsCount", lit(0))
+            .withColumn("Anomalies", lit(None))
+            .withColumn("StatusCode", lit(3))
+            .withColumn("MeasurementValue", lit(None))
+        )
+
+        return group_with_guid_df
+
+    state_stats_df = stats_calculator(
+        base,
+        "On/Off Termostato",
+        1,
+    )
+    if state_stats_df is not None:
+        state_stats_df = (
+            state_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "StatusCode",
+                "Promedio",
+                "sensor_type",
+                "ReadingsCount",
+            )
+            .withColumnRenamed("Promedio", "MeasurementValue")
+            .withColumn("Anomalies", lit(None))
+        )
+
+    temperature_stats_df = stats_calculator(
+        base,
+        "Temperatura C",
+        24,
+    )
+    if temperature_stats_df is not None:
+        temperature_stats_df = (
+            temperature_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "StatusCode",
+                "MeasurementValue",
+                "sensor_type",
+                "ReadingsCount",
+            )
+            .withColumn("Anomalies", lit(None))
+        )
+
+    stats_dfs = [
+        stats_df
+        for stats_df in (state_stats_df, temperature_stats_df)
+        if stats_df is not None
+    ]
+
+    if not stats_dfs:
+        return None
+
+    termostatos_df = stats_dfs[0]
+    for stats_df in stats_dfs[1:]:
+        termostatos_df = termostatos_df.unionByName(stats_df)
+
+    termostatos_df = (
+        termostatos_df
+        .select(
+            "DeviceId",
+            "LocationId",
+            "SensorTyId",
+            "SensorId",
+            "LocalTimeSpan",
+            "StatusCode",
+            "MeasurementValue",
+            "Anomalies",
+            "sensor_type",
+            "ReadingsCount",
+        )
+    )
+
+    scaffold_df = (
+        scaffold_base_df
+        .join(
+            termostatos_df,
+            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
+            how="left",
+        )
+    )
+
+    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "StatusCode": 3})
+
+    if scaffold_enriched.rdd.isEmpty():
+        return None
+
+    group_ids_df = (
+        scaffold_enriched
+        .select("DeviceId", "LocalTimeSpan")
+        .distinct()
+        .withColumn("OperationId", expr("uuid()"))
+        .persist(StorageLevel.MEMORY_AND_DISK)
+    )
+
+    _ = group_ids_df.count()
+
+    group_with_guid_df = scaffold_enriched.join(
+        group_ids_df,
+        on=["DeviceId", "LocalTimeSpan"],
+        how="left",
+    )
+
+    return group_with_guid_df
