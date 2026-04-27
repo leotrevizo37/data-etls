@@ -8,6 +8,7 @@ from .factoperations_scheduler import (operations_sched_every_4h,
                                        operations_sched_every_6h,
                                        operations_sched_every_2h,
                                        operations_sched_every_1h,
+                                       operations_sched_every_1h_w,
                                        operations_sched_every_w)
 from .cleanup_schedule import cleanup_schedule
 
@@ -22,6 +23,7 @@ __all__ = [
     "operations_sched_every_6h",
     "operations_sched_every_2h",
     "operations_sched_every_1h",
+    "operations_sched_every_1h_w",
     "operations_sched_every_w",
     "cleanup_schedule"
 ]
