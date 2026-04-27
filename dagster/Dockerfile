@@ -7,9 +7,9 @@ ENV ACCEPT_EULA=Y \
     DAGSTER_HOME=/opt/dagster/dagster_home \
     PYTHONPATH=/opt/dagster/app/src
 
-RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds /opt/dagster/app/smartfit
 
-WORKDIR /opt/dagster/app/mcdonalds
+WORKDIR /opt/dagster/app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -34,6 +34,7 @@ ENV PATH="/opt/mssql-tools18/bin:${PATH}"
 
 COPY dagster/requirements.txt /tmp/requirements.txt
 COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
+COPY dagster/smartfit /opt/dagster/app/smartfit
 
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir -r /tmp/requirements.txt
