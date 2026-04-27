@@ -3,11 +3,11 @@ x-dagster-common: &dagster_common
     - .env
   environment:
     DAGSTER_HOME: /opt/dagster/dagster_home
-    PYTHONPATH: /opt/dagster/app/mcdonalds/src
-  working_dir: /opt/dagster/app/mcdonalds
+  working_dir: /opt/dagster/app
   volumes:
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
+    - ../dagster/smartfit:/opt/dagster/app/smartfit
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -36,45 +36,67 @@ services:
       - |
           set -eu
 
-          echo "Waiting for SQL Server at ${MSSQL_HOST}:${MSSQL_PORT:-1433}..."
-          until /opt/mssql-tools/bin/sqlcmd \
-                    -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
-                    -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
+          SQLCMD=/opt/mssql-tools/bin/sqlcmd
+
+          echo "Waiting for SQL Server at $${MSSQL_HOST}:$${MSSQL_PORT:-1433}..."
+          until "$$SQLCMD" \
+                    -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                    -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                     -Q "SELECT 1" >/dev/null 2>&1; do
             echo "SQL Server not ready, retrying in 5s..."
             sleep 5
           done
 
-          APP_DB_SQLSTRING=$$(printf "%s" "${APP_DB}" | sed "s/'/''/g")
-          APP_DB_IDENTIFIER=$$(printf "%s" "${APP_DB}" | sed "s/]/]]/g")
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds smartfit}"
 
-          echo "Ensuring database ${APP_DB} exists..."
-          /opt/mssql-tools/bin/sqlcmd \
-              -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
-              -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
-              -d master \
-              -b \
-              -Q "IF DB_ID(N'$$APP_DB_SQLSTRING') IS NULL EXEC(N'CREATE DATABASE [$$APP_DB_IDENTIFIER]');"
+          for db_spec in $$USER_CODE_DBS; do
+            case "$$db_spec" in
+              *=*)
+                USER_CODE="$${db_spec%%=*}"
+                APP_DB="$${db_spec#*=}"
+                ;;
+              *)
+                USER_CODE="$$db_spec"
+                APP_DB="$$db_spec"
+                ;;
+            esac
 
-          echo "Running SQL init scripts from /sql/init and /sql/procedures..."
-          for f in /sql/init/*.sql; do
-            [ -e "$$f" ] || continue
-            echo "==> $$f"
-            /opt/mssql-tools/bin/sqlcmd \
-                -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
-                -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
-                -d"${APP_DB}" \
-                -b -i "$$f"
-          done
+            if [ -z "$$USER_CODE" ] || [ -z "$$APP_DB" ]; then
+              echo "Invalid USER_CODE_DBS entry: '$$db_spec'"
+              exit 1
+            fi
 
-          for f in /sql/procedures/*.sql; do
-            [ -e "$$f" ] || continue
-            echo "==> $$f"
-            /opt/mssql-tools/bin/sqlcmd \
-                -S ${MSSQL_HOST},${MSSQL_PORT:-1433} \
-                -U ${MSSQL_USER} -P ${MSSQL_PASSWORD} \
-                -d"${APP_DB}" \
-                -b -i "$$f"
+            APP_DB_SQLSTRING=$$(printf "%s" "$$APP_DB" | sed "s/'/''/g")
+            APP_DB_IDENTIFIER=$$(printf "%s" "$$APP_DB" | sed "s/]/]]/g")
+
+            echo "Ensuring database $$APP_DB exists for user_code $$USER_CODE..."
+            "$$SQLCMD" \
+                -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
+                -d master \
+                -b \
+                -Q "IF DB_ID(N'$$APP_DB_SQLSTRING') IS NULL EXEC(N'CREATE DATABASE [$$APP_DB_IDENTIFIER]');"
+
+            echo "Running SQL init scripts for $$USER_CODE from /sql/init and /sql/procedures..."
+            for f in /sql/init/*.sql; do
+              [ -e "$$f" ] || continue
+              echo "==> [$$APP_DB] $$f"
+              "$$SQLCMD" \
+                  -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                  -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
+                  -d"$$APP_DB" \
+                  -b -i "$$f"
+            done
+
+            for f in /sql/procedures/*.sql; do
+              [ -e "$$f" ] || continue
+              echo "==> [$$APP_DB] $$f"
+              "$$SQLCMD" \
+                  -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                  -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
+                  -d"$$APP_DB" \
+                  -b -i "$$f"
+            done
           done
 
           echo "SQL init completed."
@@ -113,16 +135,18 @@ services:
     depends_on:
       sql-init:
         condition: service_completed_successfully
+    working_dir: /opt/dagster/app/mcdonalds
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
       PYTHONPATH: /opt/dagster/app/mcdonalds/src
-      APP_DB: ${APP_DB}
+      APP_DB: ${MCDONALDS_DB:-mcdonalds}
+      DIM_DB: ${MCDONALDS_DB:-mcdonalds}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
       MSSQL_PASSWORD: ${MSSQL_PASSWORD}
     ports:
-      - "${USER_CODE_PORT:-4000}:4001"
+      - "${MCDONALDS_USER_CODE_PORT:-4001}:4001"
     command: [
       "dagster", "api", "grpc",
       "-h", "0.0.0.0",
@@ -149,16 +173,18 @@ services:
     depends_on:
       sql-init:
         condition: service_completed_successfully
+    working_dir: /opt/dagster/app/smartfit
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
       PYTHONPATH: /opt/dagster/app/smartfit/src
-      APP_DB: ${APP_DB}
+      APP_DB: ${SMARTFIT_DB:-smartfit}
+      DIM_DB: ${SMARTFIT_DB:-smartfit}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
       MSSQL_PASSWORD: ${MSSQL_PASSWORD}
     ports:
-      - "${USER_CODE_PORT:-4000}:4002"
+      - "${SMARTFIT_USER_CODE_PORT:-4002}:4002"
     command: [
       "dagster", "api", "grpc",
       "-h", "0.0.0.0",
@@ -207,10 +233,14 @@ services:
     container_name: mcdonalds-dagster-daemon
     <<: *dagster_common
     depends_on:
-      dagster-user-code:
+      dagster-user-code-mcd:
+        condition: service_healthy
+      dagster-user-code-smft:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
     command: [
       "dagster-daemon", "run",
       "-w", "/opt/dagster/app/workspace.yaml"
