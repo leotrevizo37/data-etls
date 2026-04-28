@@ -10,18 +10,19 @@ from ..transformations import raw_dimensions
 
 @asset(
     non_argument_deps={
-        AssetKey("dbo_sensors"),
-        AssetKey("dbo_sensor_tys"),
-        AssetKey("dbo_devices"),
-        AssetKey("dbo_device_tys"),
-        AssetKey("dbo_sublocations"),
-        AssetKey("dbo_sublocation_tys")
+        AssetKey(["mcdonalds", "dbo_sensors"]),
+        AssetKey(["mcdonalds", "dbo_sensor_tys"]),
+        AssetKey(["mcdonalds", "dbo_devices"]),
+        AssetKey(["mcdonalds", "dbo_device_tys"]),
+        AssetKey(["mcdonalds", "dbo_sublocations"]),
+        AssetKey(["mcdonalds", "dbo_sublocation_tys"])
     },
     required_resource_keys={
         "spark",
         "dim_sqlserver"
     },
-    group_name="sense_operations",
+    group_name="mcdonalds",
+    key_prefix=["mcdonalds"],
 )
 def dwh_dimsidonproddimensions(
     context: AssetExecutionContext) -> MaterializeResult:

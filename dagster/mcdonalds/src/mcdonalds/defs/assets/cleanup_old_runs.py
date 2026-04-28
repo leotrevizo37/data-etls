@@ -9,7 +9,8 @@ from dagster import asset, DagsterRunStatus, RunsFilter
 @asset(
     name="cleanup_old_runs",
     config_schema={"keep_days": int, "batch_size": int},
-    group_name="sense_operations",
+    group_name="mcdonalds",
+    key_prefix=["mcdonalds"],
 )
 def cleanup_old_runs(context) -> Optional[Dict[str, Any]]:
     instance = context.instance
