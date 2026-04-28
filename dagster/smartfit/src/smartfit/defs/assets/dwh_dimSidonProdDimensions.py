@@ -3,6 +3,7 @@ from dagster import (
         asset,
         MaterializeResult,
         AssetExecutionContext)
+from time import perf_counter
 
 from ..resources import (SparkResource,
                          SqlDimServerResource)
@@ -26,6 +27,7 @@ from ..transformations import raw_dimensions
 )
 def dwh_dimsidonproddimensions(
     context: AssetExecutionContext) -> MaterializeResult:
+    start_time = perf_counter()
     spark_res: SparkResource = context.resources.spark
     dim_sql: SqlDimServerResource = context.resources.dim_sqlserver
 
@@ -35,5 +37,8 @@ def dwh_dimsidonproddimensions(
     _inserted = spark_res.write_dim_prod_dimensions(raw_dims_df)
 
     return MaterializeResult(
-        metadata={"row_count": _inserted},
+        metadata={
+            "row_count": _inserted,
+            "elapsed_seconds": round(perf_counter() - start_time, 3),
+        },
     )

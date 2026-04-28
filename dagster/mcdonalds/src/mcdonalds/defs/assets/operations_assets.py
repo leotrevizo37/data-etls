@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
+from time import perf_counter
 from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
@@ -299,10 +300,33 @@ def write_factreadingsmeasurement_op(
         devices_df: DataFrame,
         window: Dict[str, Any],
         fact_hourly_result: Optional[Dict[str, Any]] = None) -> Tuple[None, Dict[str, Any]]:
+    start_time = perf_counter()
     spark_res = context.resources.spark
+
+    inserted = 0
+    rows_with_readings_count_gt_0 = 0
+    max_time_span: Optional[datetime] = None
+    succeeded = False
+    error_message: Optional[str] = None
+
+    def add_asset_metadata() -> None:
+        metadata: Dict[str, Any] = {
+            "row_count": inserted,
+            "rows_with_readings_count_gt_0": rows_with_readings_count_gt_0,
+            "elapsed_seconds": round(perf_counter() - start_time, 3),
+            "from_local": str(window["fetch_from"]),
+            "to_local": str(window["max_local_hour"]),
+            "max_time_span": str(max_time_span) if max_time_span else None,
+            "succeeded": succeeded,
+        }
+        if error_message:
+            metadata["error_message"] = error_message
+        context.add_output_metadata(metadata, output_name="asset")
 
     if not fact_hourly_result["succeeded"]:
         context.log.warning("write_facthourlydevicestatus_op failed")
+        error_message = "write_facthourlydevicestatus_op failed"
+        add_asset_metadata()
         return (
             None,
             {
@@ -310,18 +334,18 @@ def write_factreadingsmeasurement_op(
                 "original_last_loaded_at": window["original_last_loaded_at"],
                 "max_time_span": None,
                 "succeeded": False,
-                "error_message": "write_facthourlydevicestatus_op failed",
+                "error_message": error_message,
             },
     )
-    max_time_span: Optional[datetime] = None
-    succeeded = False
-    error_message: Optional[str] = None
 
     try:
         if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
             succeeded = True
         else:
-            inserted_ = spark_res.write_fact_operations(
+            rows_with_readings_count_gt_0 = devices_df.filter(
+                col("ReadingsCount") > 0
+            ).count()
+            inserted = spark_res.write_fact_operations(
                 devices_df
                 .select(
                     "OperationId",
@@ -336,10 +360,12 @@ def write_factreadingsmeasurement_op(
             )
             max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
             succeeded = True
-            context.log.info(str(inserted_) + "rows inserted.")
+            context.log.info(str(inserted) + "rows inserted.")
     except Exception as ex:
         error_message = str(ex)
         succeeded = False
+
+    add_asset_metadata()
 
     return (
         None,
