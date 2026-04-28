@@ -132,7 +132,7 @@ def finalize_run_op(context, result: Dict[str, Any]) -> None:
         "sqlserver": sqlserver_resource,
         "spark": spark_resource,
     },
-    tags={"job_type": "lecturas"},
+    tags={"job_type": "lecturas", "user_code": "mcdonalds"},
 )
 def fact_lecturas_ingestion_job():
     window = start_run_and_get_range_op()

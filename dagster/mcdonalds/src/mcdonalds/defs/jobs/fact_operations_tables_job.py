@@ -8,5 +8,5 @@ fact_operations_tables_job = define_asset_job(
         AssetKey(["mcdonalds", "dwh_factReadingsMeasurement"]),
         AssetKey(["mcdonalds", "ctl_IngestionControl"])
     ),
-    tags={"job_type": "operaciones"},
+    tags={"job_type": "operaciones", "user_code": "mcdonalds"},
 )
