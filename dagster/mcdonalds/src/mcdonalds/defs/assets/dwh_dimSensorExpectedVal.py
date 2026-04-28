@@ -3,6 +3,7 @@ from dagster import (
         asset,
         MaterializeResult,
         AssetExecutionContext)
+from time import perf_counter
 
 from ..resources import (
     SparkResource,
@@ -35,6 +36,7 @@ from ..transformations import sensor_expected_values
 )
 def dwh_dimsensorexpectedval(
     context: AssetExecutionContext) -> MaterializeResult:
+    start_time = perf_counter()
     spark_res: SparkResource = context.resources.spark
     dim_sql: SqlDimServerResource = context.resources.dim_sqlserver
     sqlserver: SqlServerResource = context.resources.sqlserver
@@ -50,5 +52,8 @@ def dwh_dimsensorexpectedval(
     inserted = spark_res.write_dim_sensor_expected_values(expected_values_df)
 
     return MaterializeResult(
-        metadata={"row_count": inserted},
+        metadata={
+            "row_count": inserted,
+            "elapsed_seconds": round(perf_counter() - start_time, 3),
+        },
     )
