@@ -14,23 +14,24 @@ from ..transformations import sensor_expected_values
 
 @asset(
     non_argument_deps={
-        AssetKey("dbo_ProgramProfileTys"),
-        AssetKey("dbo_ProgramProfiles"),
-        AssetKey("dbo_ProgramSchedules"),
-        AssetKey("dbo_GroupSensors"),
-        AssetKey("dbo_GroupHasSchedules"),
-        AssetKey("dbo_GroupHasSensors"),
-        AssetKey("dbo_sensors"),
-        AssetKey("dbo_sensor_tys"),
-        AssetKey("dbo_devices"),
-        AssetKey("dbo_device_tys"),
+        AssetKey(["smartfit", "dbo_ProgramProfileTys"]),
+        AssetKey(["smartfit", "dbo_ProgramProfiles"]),
+        AssetKey(["smartfit", "dbo_ProgramSchedules"]),
+        AssetKey(["smartfit", "dbo_GroupSensors"]),
+        AssetKey(["smartfit", "dbo_GroupHasSchedules"]),
+        AssetKey(["smartfit", "dbo_GroupHasSensors"]),
+        AssetKey(["smartfit", "dbo_sensors"]),
+        AssetKey(["smartfit", "dbo_sensor_tys"]),
+        AssetKey(["smartfit", "dbo_devices"]),
+        AssetKey(["smartfit", "dbo_device_tys"]),
     },
     required_resource_keys={
         "spark",
         "dim_sqlserver",
         "sqlserver",
     },
-    group_name="sense_operations",
+    group_name="smartfit",
+    key_prefix=["smartfit"],
 )
 def dwh_dimsensorexpectedval(
     context: AssetExecutionContext) -> MaterializeResult:
