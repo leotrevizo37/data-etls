@@ -1,9 +1,9 @@
-from dagster import define_asset_job, AssetSelection
+from dagster import AssetKey, AssetSelection, define_asset_job
 
 cleanup_job = define_asset_job(
     name="cleanup_job",
     selection=AssetSelection.keys(
-        "cleanup_old_runs",
+        AssetKey(["mcdonalds", "cleanup_old_runs"]),
     ),
     tags={"job_type": "limpieza"},
 )

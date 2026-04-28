@@ -6,7 +6,6 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, max as spark_max
 from dagster import (
     AssetIn,
-    AssetKey,
     AssetOut,
     In,
     Nothing,
@@ -485,14 +484,14 @@ def upstream_deps_gate(context,
 @graph_multi_asset(
     outs={
         "dwh_factHourlyDeviceStatus": AssetOut(
-            key=AssetKey("dwh_factHourlyDeviceStatus"), key_prefix=["mcdonalds"]),
+            key_prefix=["mcdonalds"]),
         "dwh_factReadingsMeasurement": AssetOut(
-            key=AssetKey("dwh_factReadingsMeasurement"), key_prefix=["mcdonalds"]),
+            key_prefix=["mcdonalds"]),
         "ctl_IngestionControl" : AssetOut(
-            key=AssetKey("ctl_IngestionControl"), key_prefix=["mcdonalds"]),
+            key_prefix=["mcdonalds"]),
     },
     ins={
-        "data_transformations": AssetIn(key=AssetKey("data_transformations"), dagster_type=Nothing),
+        "data_transformations": AssetIn(key_prefix=["mcdonalds"], dagster_type=Nothing),
     },
     group_name="mcdonalds",
 )

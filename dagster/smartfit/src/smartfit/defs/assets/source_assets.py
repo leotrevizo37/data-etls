@@ -1,67 +1,54 @@
 from dagster import SourceAsset, AssetKey
 
 dbo_sensors = SourceAsset(
-    key=AssetKey("dbo_sensors"),
+    key=AssetKey(["smartfit", "dbo_sensors"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_sensor_tys = SourceAsset(
-    key=AssetKey("dbo_sensor_tys"),
+    key=AssetKey(["smartfit", "dbo_sensor_tys"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_devices = SourceAsset(
-    key=AssetKey("dbo_devices"),
+    key=AssetKey(["smartfit", "dbo_devices"]),
     group_name="smartfit",
-    key_prefix=["smartfit"]
 )
 dbo_device_tys = SourceAsset(
-    key=AssetKey("dbo_device_tys"),
+    key=AssetKey(["smartfit", "dbo_device_tys"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_sublocations = SourceAsset(
-    key=AssetKey("dbo_sublocations"),
+    key=AssetKey(["smartfit", "dbo_sublocations"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_sublocation_tys = SourceAsset(
-    key=AssetKey("dbo_sublocation_tys"),
+    key=AssetKey(["smartfit", "dbo_sublocation_tys"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dwh_factlecturas = SourceAsset(
-    key=AssetKey("dwh_factlecturas"),
+    key=AssetKey(["smartfit", "dwh_factlecturas"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_ProgramProfileTys = SourceAsset(
-    key=AssetKey("dbo_ProgramProfileTys"),
+    key=AssetKey(["smartfit", "dbo_ProgramProfileTys"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_ProgramProfiles = SourceAsset(
-    key=AssetKey("dbo_ProgramProfiles"),
+    key=AssetKey(["smartfit", "dbo_ProgramProfiles"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_ProgramSchedules = SourceAsset(
-    key=AssetKey("dbo_ProgramSchedules"),
+    key=AssetKey(["smartfit", "dbo_ProgramSchedules"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_GroupSensors = SourceAsset(
-    key=AssetKey("dbo_GroupSensors"),
+    key=AssetKey(["smartfit", "dbo_GroupSensors"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_GroupHasSchedules = SourceAsset(
-    key=AssetKey("dbo_GroupHasSchedules"),
+    key=AssetKey(["smartfit", "dbo_GroupHasSchedules"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )
 dbo_GroupHasSensors = SourceAsset(
-    key=AssetKey("dbo_GroupHasSensors"),
+    key=AssetKey(["smartfit", "dbo_GroupHasSensors"]),
     group_name="smartfit",
-    key_prefix=["smartfit"],
 )

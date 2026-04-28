@@ -5,8 +5,8 @@ from dagster import asset, AssetKey
 @asset(
     name="data_transformations",
     deps=[
-        AssetKey("dwh_dimsidonproddimensions"),
-        AssetKey("dwh_factlecturas"),
+        AssetKey(["smartfit", "dwh_dimsidonproddimensions"]),
+        AssetKey(["smartfit", "dwh_factlecturas"]),
     ],
     group_name="smartfit",
     key_prefix=["smartfit"],
