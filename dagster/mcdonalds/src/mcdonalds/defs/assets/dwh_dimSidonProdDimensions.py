@@ -21,7 +21,8 @@ from ..transformations import raw_dimensions
         "spark",
         "dim_sqlserver"
     },
-    group_name="sense_operations",
+    group_name="mcdonalds",
+    key_prefix=["mcdonalds"],
 )
 def dwh_dimsidonproddimensions(
     context: AssetExecutionContext) -> MaterializeResult:

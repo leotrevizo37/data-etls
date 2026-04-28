@@ -8,7 +8,8 @@ from dagster import asset, AssetKey
         AssetKey("dwh_dimsidonproddimensions"),
         AssetKey("dwh_factlecturas"),
     ],
-    group_name="sense_operations",
+    group_name="mcdonalds",
+    key_prefix=["mcdonalds"],
 )
 def data_transformations() -> Optional[Dict[str, Any]]:
     return {"transformations": "magic"}

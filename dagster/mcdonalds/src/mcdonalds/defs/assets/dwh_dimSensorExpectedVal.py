@@ -30,7 +30,8 @@ from ..transformations import sensor_expected_values
         "dim_sqlserver",
         "sqlserver",
     },
-    group_name="sense_operations",
+    group_name="mcdonalds",
+    key_prefix=["mcdonalds"],
 )
 def dwh_dimsensorexpectedval(
     context: AssetExecutionContext) -> MaterializeResult:

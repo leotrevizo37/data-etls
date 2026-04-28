@@ -484,14 +484,17 @@ def upstream_deps_gate(context,
 
 @graph_multi_asset(
     outs={
-        "dwh_factHourlyDeviceStatus": AssetOut(key=AssetKey("dwh_factHourlyDeviceStatus")),
-        "dwh_factReadingsMeasurement": AssetOut(key=AssetKey("dwh_factReadingsMeasurement")),
-        "ctl_IngestionControl" : AssetOut(key=AssetKey("ctl_IngestionControl")),
+        "dwh_factHourlyDeviceStatus": AssetOut(
+            key=AssetKey("dwh_factHourlyDeviceStatus"), key_prefix=["mcdonalds"]),
+        "dwh_factReadingsMeasurement": AssetOut(
+            key=AssetKey("dwh_factReadingsMeasurement"), key_prefix=["mcdonalds"]),
+        "ctl_IngestionControl" : AssetOut(
+            key=AssetKey("ctl_IngestionControl"), key_prefix=["mcdonalds"]),
     },
     ins={
         "data_transformations": AssetIn(key=AssetKey("data_transformations"), dagster_type=Nothing),
     },
-    group_name="sense_operations",
+    group_name="mcdonalds",
 )
 def operations_assets(data_transformations):
     deps = upstream_deps_gate(data_transformations)
