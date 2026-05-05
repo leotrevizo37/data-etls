@@ -51,9 +51,9 @@ def termostatos(
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
-            .withColumn("Anomalies", lit(None))
-            .withColumn("StatusCode", lit(3))
+            .withColumn("Anomalies", lit(1).cast("integer"))
             .withColumn("MeasurementValue", lit(None))
+            .withColumn("MeasurementStdDev", lit(None))
         )
 
         return group_with_guid_df
@@ -61,7 +61,8 @@ def termostatos(
     state_stats_df = stats_calculator(
         base,
         "On/Off Termostato",
-        1,
+        None,
+        None
     )
     if state_stats_df is not None:
         state_stats_df = (
@@ -72,19 +73,20 @@ def termostatos(
                 "SensorTyId",
                 "SensorId",
                 "LocalTimeSpan",
-                "StatusCode",
-                "Promedio",
+                "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
                 "sensor_type",
                 "ReadingsCount",
+                "device_type",
             )
-            .withColumnRenamed("Promedio", "MeasurementValue")
-            .withColumn("Anomalies", lit(None))
         )
 
     temperature_stats_df = stats_calculator(
         base,
         "Temperatura C",
-        24,
+        15,
+        35
     )
     if temperature_stats_df is not None:
         temperature_stats_df = (
@@ -95,12 +97,13 @@ def termostatos(
                 "SensorTyId",
                 "SensorId",
                 "LocalTimeSpan",
-                "StatusCode",
                 "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
                 "sensor_type",
                 "ReadingsCount",
+                "device_type",
             )
-            .withColumn("Anomalies", lit(None))
         )
 
     stats_dfs = [
@@ -124,11 +127,12 @@ def termostatos(
             "SensorTyId",
             "SensorId",
             "LocalTimeSpan",
-            "StatusCode",
             "MeasurementValue",
+            "MeasurementStdDev",
             "Anomalies",
             "sensor_type",
             "ReadingsCount",
+            "device_type",
         )
     )
 
@@ -136,12 +140,20 @@ def termostatos(
         scaffold_base_df
         .join(
             termostatos_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
+            on=[
+                "SensorId",
+                "DeviceId",
+                "LocalTimeSpan",
+                "SensorTyId",
+                "device_type",
+                "LocationId",
+                "sensor_type"
+            ],
             how="left",
         )
     )
 
-    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "StatusCode": 3})
+    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "Anomalies": -1})
 
     if scaffold_enriched.rdd.isEmpty():
         return None
