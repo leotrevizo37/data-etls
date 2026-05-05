@@ -1,6 +1,5 @@
 from typing import Optional
 
-from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.functions import expr, lit
