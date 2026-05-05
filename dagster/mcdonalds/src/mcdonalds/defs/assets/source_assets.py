@@ -24,10 +24,6 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["mcdonalds", "dbo_sublocation_tys"]),
     group_name="mcdonalds",
 )
-dwh_factlecturas = SourceAsset(
-    key=AssetKey(["mcdonalds", "dwh_factlecturas"]),
-    group_name="mcdonalds",
-)
 dbo_ProgramProfileTys = SourceAsset(
     key=AssetKey(["mcdonalds", "dbo_ProgramProfileTys"]),
     group_name="mcdonalds",
