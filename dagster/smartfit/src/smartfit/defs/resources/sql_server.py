@@ -44,7 +44,7 @@ class SqlServerResource:
             + ";Connection Timeout="
             + str(self.connect_timeout)
         )
-        return pyodbc.connect(conn_str)
+        return pyodbc.connect(conn_str, timeout=self.connect_timeout)
 
     def get_watermark(self, ingestion_name: str) -> Optional[datetime]:
         with self._get_connection() as conn:
