@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from dagster import In, Out, op, graph_asset
+from dagster import In, Out, op, graph_asset, MaterializeResult
+from time import perf_counter
 
 from ..resources import SqlServerResource, SparkResource
 
@@ -16,6 +17,7 @@ def _truncate_to_seconds(dt: datetime) -> datetime:
     out=Out(Dict[str, Any]),
 )
 def start_run_and_get_range_op(context) -> Dict[str, Any]:
+    start_time = perf_counter()
     sql: SqlServerResource = context.resources.sqlserver
     ingestion_name = "FactLecturas"
 
@@ -34,6 +36,7 @@ def start_run_and_get_range_op(context) -> Dict[str, Any]:
         "from_utc": from_utc,
         "to_utc": now_utc,
         "original_last_loaded_at": last_loaded_at,
+        "start_time": start_time,
     }
 
 
@@ -61,6 +64,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
     succeeded = False
     error_message: Optional[str] = None
     max_time_span: Optional[datetime] = None
+    row_count = 0
 
     try:
         df = spark_res.read_lecturas_range(from_utc, to_utc)
@@ -68,7 +72,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
             context.log.info("No rows found in Data Lake for window " + str(from_utc) + " to " + str(to_utc))
             succeeded = True
         else:
-            spark_res.write_fact_lecturas_to_sql(df)
+            row_count = spark_res.write_fact_lecturas_to_sql(df)
             max_time_span = spark_res.get_max_time_span(df, "TimeSpan")
             context.log.info("Window loaded into dwh.factLecturas. Max TimeSpan " + str(max_time_span))
             succeeded = True
@@ -84,6 +88,8 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
         "max_time_span": max_time_span,
         "succeeded": succeeded,
         "error_message": error_message,
+        "row_count": row_count,
+        "start_time": window.get("start_time"),
     }
 
 
@@ -92,7 +98,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
     ins={"result": In(Dict[str, Any])},
     out=Out(),
 )
-def finalize_run_op(context, result: Dict[str, Any]) -> None:
+def finalize_run_op(context, result: Dict[str, Any]):
     sql: SqlServerResource = context.resources.sqlserver
     ingestion_name = "FactLecturas"
 
@@ -124,6 +130,16 @@ def finalize_run_op(context, result: Dict[str, Any]) -> None:
         new_last_loaded_at=new_watermark,
         succeeded=succeeded,
         error_message=error_message,
+    )
+
+    start_time = result.get("start_time")
+    elapsed = round(perf_counter() - start_time, 3) if start_time else 0.0
+
+    return MaterializeResult(
+        metadata={
+            "row_count": result.get("row_count", 0),
+            "elapsed_seconds": elapsed,
+        }
     )
 
 
