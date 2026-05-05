@@ -16,6 +16,8 @@ class SqlServerResource:
         connect_timeout: int,
         command_timeout: int,
         driver: str,
+        retries: int,
+        retry_interval: int,
     ) -> None:
         self.host = host
         self.port = port
@@ -25,6 +27,8 @@ class SqlServerResource:
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
         self.driver = driver
+        self.retries = retries
+        self.retry_interval = retry_interval
 
     def _get_connection(self) -> pyodbc.Connection:
         conn_str = (
@@ -43,6 +47,10 @@ class SqlServerResource:
             + ";TrustServerCertificate=yes"
             + ";Connection Timeout="
             + str(self.connect_timeout)
+            + ";ConnectRetryCount="
+            + str(self.retries)
+            + ";ConnectRetryInterval="
+            + str(self.retry_interval)
         )
         return pyodbc.connect(conn_str, timeout=self.connect_timeout)
 
@@ -167,6 +175,8 @@ def sqlserver_resource(_):
     connect_timeout = int(os.getenv("MSSQL_CONNECT_TIMEOUT", "300"))
     command_timeout = int(os.getenv("MSSQL_COMMAND_TIMEOUT", "4500"))
     driver = os.getenv("MSSQL_DRIVER", "ODBC Driver 18 for SQL Server")
+    connect_retry_count = int(os.getenv("MSSQL_CONNECT_RETRY_COUNT", "3"))
+    connect_retry_interval = int(os.getenv("MSSQL_CONNECT_RETRY_INTERVAL", "60"))
     return SqlServerResource(
         host=host,
         port=port,
@@ -176,4 +186,6 @@ def sqlserver_resource(_):
         connect_timeout=connect_timeout,
         command_timeout=command_timeout,
         driver=driver,
+        retries=connect_retry_count,
+        retry_interval=connect_retry_interval,
     )
