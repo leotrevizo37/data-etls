@@ -232,21 +232,6 @@ class SparkResource:
 
         return row_count
 
-    def write_fact_operations_device(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-
-        df_write = df.coalesce(1)
-        row_count = df_write.count()
-
-        df_write.write.jdbc(
-            url=self._build_wh_path()["url"],
-            table="dwh.factHourlyDeviceStatus",
-            mode="append",
-            properties=self._build_wh_path()["properties"],
-        )
-
-        return row_count
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
         if df.rdd.isEmpty():

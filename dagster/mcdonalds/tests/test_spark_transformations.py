@@ -398,7 +398,7 @@ class SparkTransformationsTests(unittest.TestCase):
             {row["LocalTimeSpan"] for row in rows},
             {datetime(2026, 3, 29, 10, 0)},
         )
-        self.assertEqual(len({row["OperationId"] for row in rows}), 1)
+        self.assertEqual(len({row["OperationId"] for row in rows}), 2)
         self.assertEqual({row["StatusCode"] for row in rows}, {1})
         self.assertEqual({row["LocationId"] for row in rows}, {100})
         self.assertEqual(

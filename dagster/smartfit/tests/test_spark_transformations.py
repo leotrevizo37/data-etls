@@ -456,7 +456,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(rows_by_sensor[11]["StatusCode"], 1)
         self.assertEqual(rows_by_sensor[20]["StatusCode"], 1)
         self.assertEqual(rows_by_sensor[21]["StatusCode"], 3)
-        self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+        self.assertEqual(len({row["OperationId"] for row in rows}), 4)
 
     def test_termostatos_scaffolds_missing_sensor_type_stats(self) -> None:
         factlecturas_extended_df = self._readings_df(
@@ -512,7 +512,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(rows[11]["StatusCode"], 3)
         self.assertEqual(rows[11]["ReadingsCount"], 1)
         self.assertAlmostEqual(rows[11]["MeasurementValue"], 23.0)
-        self.assertEqual(len({row["OperationId"] for row in rows.values()}), 1)
+        self.assertEqual(len({row["OperationId"] for row in rows.values()}),2)
 
     def test_build_sensor_expected_values_generates_hvac_and_light_rows(self) -> None:
         dimensions_df = self.spark.createDataFrame(

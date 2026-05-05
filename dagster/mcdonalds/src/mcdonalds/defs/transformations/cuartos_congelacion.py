@@ -51,18 +51,12 @@ def cuartos_congelacion(
                 max_hour
             )
         )
-        group_ids_df = (
-            empty_base_df
-            .select("DeviceId", "LocalTimeSpan")
-            .distinct()
-            .withColumn("OperationId", expr("uuid()"))
-            .persist(StorageLevel.MEMORY_AND_DISK)
-        )
-        _ = group_ids_df.count()
-
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
+            .withColumn(
+                "OperationId",
+                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+            )
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(None))
             .withColumn("StatusCode", lit(3))
@@ -192,19 +186,12 @@ def cuartos_congelacion(
     if scaffold_enriched.rdd.isEmpty():
         return None
 
-    group_ids_df = (
-        scaffold_enriched
-        .select("DeviceId", "LocalTimeSpan")
-        .distinct()
-        .withColumn("OperationId", expr("uuid()"))
-        .persist(StorageLevel.MEMORY_AND_DISK)
-    )
-
-    _ = group_ids_df.count()
-
     group_with_guid_df = (
         scaffold_enriched
-        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+        .withColumn(
+            "OperationId",
+            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+        )
     )
 
     return group_with_guid_df

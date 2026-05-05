@@ -25,12 +25,8 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factReadingsMeasurement
-            PRIMARY KEY CLUSTERED (OperationId, SensorId)
-            WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
-            CONSTRAINT FK_factReadingsMeasurement_factHourlyDeviceStatus
-            FOREIGN KEY (OperationId)
-            REFERENCES dwh.factHourlyDeviceStatus (OperationId)
-            ON DELETE CASCADE
+            PRIMARY KEY CLUSTERED (OperationId)
+            WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
         );
     END;
 GO

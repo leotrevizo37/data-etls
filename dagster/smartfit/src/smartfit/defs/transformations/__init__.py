@@ -8,7 +8,6 @@ __all__ = [
     "raw_dimensions",
     "sensor_expected_values",
     "luces",
-    "factReadingsMeasurement_device",
     "termostatos",
 ]
 
@@ -17,7 +16,6 @@ _MODULE_BY_EXPORT = {
     "raw_dimensions": ".raw_dimensions",
     "sensor_expected_values": ".sensor_expected_values",
     "luces": ".luces",
-    "factReadingsMeasurement_device": ".factReadingsMeasurement_device",
     "termostatos": ".termostatos",
 }
 
