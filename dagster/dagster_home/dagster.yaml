@@ -56,12 +56,12 @@ schedule_storage:
 
 retention:
   schedule:
-    purge_after_days: 10
+    purge_after_days: 5
   sensor:
     purge_after_days:
       skipped: 1
-      success: 7
-      failure: 10
+      success: 5
+      failure: 5
 
 concurrency:
   runs:
