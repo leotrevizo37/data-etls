@@ -2,7 +2,6 @@ import sys
 import unittest
 import warnings
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
