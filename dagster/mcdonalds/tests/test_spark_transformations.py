@@ -30,9 +30,6 @@ from mcdonalds.defs.transformations.sensor_expected_values import (  # noqa: E40
 from mcdonalds.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
-from mcdonalds.defs.transformations.stats_calculator_anomalies import (  # noqa: E402
-    stats_calculator_anomalies,
-)
 from mcdonalds.operations_filters import (  # noqa: E402
     limit_operations_rows_to_closed_hours,
 )

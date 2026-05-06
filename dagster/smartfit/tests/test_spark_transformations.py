@@ -29,9 +29,6 @@ from smartfit.defs.transformations.sensor_expected_values import (  # noqa: E402
 from smartfit.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
-from smartfit.defs.transformations.stats_calculator_anomalies import (  # noqa: E402
-    stats_calculator_anomalies,
-)
 from smartfit.defs.transformations.termostatos import termostatos  # noqa: E402
 from smartfit.operations_filters import (  # noqa: E402
     limit_operations_rows_to_closed_hours,
