@@ -41,10 +41,13 @@ lint-mcdonalds:
 lint-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/smartfit && ruff check src tests"
 
-test-python: test-mcdonalds test-smartfit
+test-python: test-mcdonalds test-smartfit test-cdp
 
 test-mcdonalds:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "cd /opt/dagster/app/mcdonalds && python -m unittest discover tests -p 'test_*.py'"
 
 test-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "cd /opt/dagster/app/smartfit && python -m unittest discover tests -p 'test_*.py'"
+
+test-cdp:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd-cdp -lc "cd /opt/dagster/app/mcdonalds_cdp && python -m unittest discover tests -p 'test_*.py'"
