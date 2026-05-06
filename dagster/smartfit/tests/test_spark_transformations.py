@@ -475,7 +475,6 @@ class SparkTransformationsTests(unittest.TestCase):
             {row["LocalTimeSpan"] for row in rows},
             {datetime(2026, 3, 29, 10, 0)},
         )
-        rows_by_sensor = {row["SensorId"]: row for row in rows}
         self.assertEqual(len({row["OperationId"] for row in rows}), 4)
 
     def test_termostatos_scaffolds_missing_sensor_type_stats(self) -> None:
