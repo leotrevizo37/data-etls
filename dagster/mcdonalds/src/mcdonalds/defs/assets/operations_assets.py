@@ -239,13 +239,14 @@ def build_devices_df_op(
             col("DeviceId"),
             col("LocationId"),
             col("SensorTyId"),
-            col("StatusCode"),
             col("SensorId"),
             col("MeasurementValue"),
+            col("MeasurementStdDev"),
             col("Anomalies"),
             col("LocalTimeSpan"),
             col("ReadingsCount"),
-            col("sensor_type"),
+            col("sensor_type").alias("SensorType"),
+            col("device_type").alias("DeviceType"),
         )
 
         if df.rdd.isEmpty():
@@ -334,9 +335,13 @@ def write_factreadingsmeasurement_op(
                     "OperationId",
                     "SensorId",
                     "SensorTyId",
+                    "DeviceId",
+                    "LocationId",
+                    "DeviceType",
+                    "SensorType",
                     "LocalTimeSpan",
-                    "StatusCode",
                     "MeasurementValue",
+                    "MeasurementStdDev",
                     "ReadingsCount",
                     "Anomalies"
                 )
