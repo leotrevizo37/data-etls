@@ -64,23 +64,15 @@ class SparkResource:
         )
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
+            account_host = account + ".dfs.core.windows.net"
             conf.set(
-                f"fs.azure.account.key.{account}.dfs.core.windows.net",
+                "spark.hadoop.fs.azure.account.key." + account_host,
                 self.adls_account_key,
             )
             conf.set(
-                "fs.abfss.impl",
+                "spark.hadoop.fs.abfss.impl",
                 "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
             )
-            conf.set(
-                "spark.jars.packages",
-                    ",".join([
-                        "org.apache.hadoop:hadoop-azure:3.3.4",
-                        "com.microsoft.azure:azure-storage:8.6.6",
-                        "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
-                    ])
-            )
-        self._spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
         self._spark = (
             SparkSession.builder
@@ -89,6 +81,20 @@ class SparkResource:
             .config(conf=conf)
             .getOrCreate()
         )
+
+        if self.adls_account_name and self.adls_account_key:
+            account_host = self.adls_account_name + ".dfs.core.windows.net"
+            hadoop_conf = self._spark.sparkContext._jsc.hadoopConfiguration()
+
+            hadoop_conf.set(
+                "fs.azure.account.key." + account_host,
+                self.adls_account_key,
+            )
+            hadoop_conf.set(
+                "fs.abfss.impl",
+                "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
+            )
+
         return self._spark
 
     def stop(self) -> None:
@@ -127,6 +133,24 @@ class SparkResource:
         }
         return {"url": url, "properties": properties}
 
+    def _filter_existing_paths(self, spark, paths):
+        jvm = spark._jvm
+        conf = spark._jsc.hadoopConfiguration()
+
+        valid_paths = []
+
+        for p in paths:
+            path_obj = jvm.org.apache.hadoop.fs.Path(p)
+
+            try:
+                fs = path_obj.getFileSystem(conf)
+                if fs.exists(path_obj):
+                    valid_paths.append(p)
+            except Exception as ex:
+                raise RuntimeError("Failed while checking ADLS path: " + p) from ex
+
+        return valid_paths
+
     def read_lecturas_range(self, from_utc: datetime, to_utc: datetime) -> DataFrame:
         spark = self.get_spark()
         base = self._build_adls_path()
@@ -138,21 +162,36 @@ class SparkResource:
             month_str = str(d.month)
             day_str = str(d.day)
             path = (
-                    base
+                    base.rstrip("/")
                     + "/"
                     + year_str
                     + "/"
                     + month_str
                     + "/"
                     + day_str
-                    + "//"
             )
             paths.append(path)
 
         if not paths:
-            return spark.createDataFrame([], schema="ReadId string")
+            raise FileNotFoundError(
+                "No day paths were generated for requested range: "
+                + str(from_utc)
+                + " to "
+                + str(to_utc)
+            )
 
-        df = spark.read.parquet(*paths)
+        valid_paths = self._filter_existing_paths(spark, paths)
+
+        if not valid_paths:
+            raise FileNotFoundError(
+                "No existing ADLS day paths found for requested range: "
+                + str(from_utc)
+                + " to "
+                + str(to_utc)
+            )
+
+        df = spark.read.parquet(*valid_paths)
+
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
