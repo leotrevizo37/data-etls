@@ -1,4 +1,5 @@
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from dagster import In, Out, op, graph_asset, MaterializeResult
@@ -23,7 +24,7 @@ def start_run_and_get_range_op(context) -> Dict[str, Any]:
 
     last_loaded_at = sql.get_watermark(ingestion_name)
     if last_loaded_at is None:
-        last_loaded_at = datetime(2025, 10, 1)
+        last_loaded_at = datetime.utcnow() - timedelta(days=int(os.getenv("FACTLECTURAS_KEEP_DAYS", 15)) + 1)
 
     from_utc = _truncate_to_seconds(last_loaded_at)
     now_utc = _truncate_to_seconds(datetime.utcnow())
