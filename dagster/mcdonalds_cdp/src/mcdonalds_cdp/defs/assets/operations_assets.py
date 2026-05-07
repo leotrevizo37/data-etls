@@ -180,7 +180,7 @@ def load_factlecturas_extended_op(
         spark_res=spark_res,
         sqlserver=sqlserver,
         raw_dimensions=raw_dims_df,
-        fetch_factlecturas_from=window["fetch_from"],
+        window=window,
     )
 
     if factlecturas_extended_df is None:
