@@ -33,9 +33,10 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
 ENV PATH="/opt/mssql-tools18/bin:${PATH}"
 
 COPY dagster/requirements.txt /tmp/requirements.txt
-COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
-COPY dagster/smartfit /opt/dagster/app/smartfit
-COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
 
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
+COPY dagster/smartfit /opt/dagster/app/smartfit
+COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
