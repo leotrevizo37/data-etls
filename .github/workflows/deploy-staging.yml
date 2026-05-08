@@ -7,18 +7,14 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - data-etls-staging
 
     steps:
       - name: Deploy on VM
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST_STAGE }}
-          username: ${{ secrets.VM_USER_STAGE }}
-          key: ${{ secrets.VM_SSH_KEY_STAGE }}
-          passphrase: ${{ secrets.VM_SSH_PASSPHRASE_STAGE }}
-          script: |
-            cd /home/warehouse/data-etls
-            git fetch origin
-            git reset --hard origin/main
-            docker compose --env-file compose-data_etls/.env -f compose-data_etls/docker-compose.yml
+        run: |
+          cd /home/warehouse/data-etls
+          git fetch origin
+          git reset --hard origin/main
+          docker compose --env-file compose-data_etls/.env -f compose-data_etls/docker-compose.yml
