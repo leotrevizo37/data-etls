@@ -219,11 +219,6 @@ def build_devices_df_op(
 
     methods = [
         "maquinas_nieve",
-        "maquinas_soda",
-        "cuartos_refrigeracion",
-        "cuartos_congelacion",
-        "luces",
-        "termostatos",
     ]
 
     for method in methods:
