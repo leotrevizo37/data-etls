@@ -9,7 +9,8 @@ jobs:
   deploy:
     runs-on:
       - self-hosted
-      - data-etls-staging
+      - Linux
+      - X64
 
     steps:
       - name: Deploy on VM
