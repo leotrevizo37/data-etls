@@ -1,0 +1,23 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - stage
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy on VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST_STAGE }}
+          username: ${{ secrets.VM_USER_STAGE }}
+          key: ${{ secrets.VM_SSH_KEY_STAGE }}
+          script: |
+            cd /home/warehouse/data-etls
+            git fetch origin
+            git reset --hard origin/main
+            docker compose --env-file compose-data_etls/.env -f compose-data_etls/docker-compose.yml
