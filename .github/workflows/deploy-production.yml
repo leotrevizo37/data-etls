@@ -11,6 +11,7 @@ jobs:
       - Linux
       - X64
       - data-etls-production
+      - production-deploy
     steps:
       - name: Update repo and restart production containers
         run: |
