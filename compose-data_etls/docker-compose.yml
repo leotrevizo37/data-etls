@@ -131,7 +131,7 @@ services:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: data-dagster-user-code
+    container_name: mcdonalds-dagster-user-code
     <<: *dagster_common
     depends_on:
       sql-init:
