@@ -10,7 +10,11 @@ RUN mkdir -p /opt/spark/jars-extra \
  && curl -fL -o /opt/spark/jars-extra/azure-storage-8.6.6.jar \
       https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar \
  && curl -fL -o /opt/spark/jars-extra/mssql-jdbc-12.6.1.jre11.jar \
-      https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.6.1.jre11/mssql-jdbc-12.6.1.jre11.jar
+      https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.6.1.jre11/mssql-jdbc-12.6.1.jre11.jar \
+ && curl -fL -o /opt/spark/jars-extra/jackson-mapper-asl-1.9.13.jar \
+      https://repo1.maven.org/maven2/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar \
+ && curl -fL -o /opt/spark/jars-extra/jackson-core-asl-1.9.13.jar \
+      https://repo1.maven.org/maven2/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar
 
 ENV SPARK_EXTRA_CLASSPATH=/opt/spark/jars-extra/*
 

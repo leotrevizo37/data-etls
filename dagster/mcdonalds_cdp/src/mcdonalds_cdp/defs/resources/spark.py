@@ -23,6 +23,8 @@ DEFAULT_SPARK_PACKAGES = ",".join(
         "org.apache.hadoop:hadoop-azure-datalake:3.3.4",
         "com.microsoft.azure:azure-storage:8.6.6",
         "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
+        "org.codehaus.jackson:jackson-mapper-asl:1.9.13",
+        "org.codehaus.jackson:jackson-core-asl:1.9.13",
     ]
 )
 
