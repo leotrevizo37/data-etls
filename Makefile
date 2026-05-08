@@ -1,8 +1,8 @@
 SHELL := /bin/bash
 
 PYTHON ?= python
-COMPOSE_FILE := compose-mcdonalds/docker-compose.yml
-ENV_FILE := compose-mcdonalds/.env
+COMPOSE_FILE := compose-data_etls/docker-compose.yml
+ENV_FILE := compose-data_etls/.env
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 
@@ -41,10 +41,13 @@ lint-mcdonalds:
 lint-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/smartfit && ruff check src tests"
 
-test-python: test-mcdonalds test-smartfit
+test-python: test-mcdonalds test-smartfit test-cdp
 
 test-mcdonalds:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "cd /opt/dagster/app/mcdonalds && python -m unittest discover tests -p 'test_*.py'"
 
 test-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "cd /opt/dagster/app/smartfit && python -m unittest discover tests -p 'test_*.py'"
+
+test-cdp:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd-cdp -lc "cd /opt/dagster/app/mcdonalds_cdp && python -m unittest discover tests -p 'test_*.py'"

@@ -16,21 +16,21 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             OperationId UNIQUEIDENTIFIER NOT NULL,
             SensorId UNIQUEIDENTIFIER NOT NULL,
             SensorTyId UNIQUEIDENTIFIER NOT NULL,
+            DeviceId UNIQUEIDENTIFIER NOT NULL,
+            LocationId UNIQUEIDENTIFIER NOT NULL,
+            DeviceType VARCHAR(255) NOT NULL,
+            SensorType VARCHAR(255) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
-            StatusCode SMALLINT NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
+            MeasurementStdDev DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
             ReadingsCount INT NULL,
             ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factReadingsMeasurement
-            PRIMARY KEY CLUSTERED (OperationId, SensorId)
-            WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
-            CONSTRAINT FK_factReadingsMeasurement_factHourlyDeviceStatus
-            FOREIGN KEY (OperationId)
-            REFERENCES dwh.factHourlyDeviceStatus (OperationId)
-            ON DELETE CASCADE
+            PRIMARY KEY CLUSTERED (OperationId)
+            WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
         );
     END;
 GO

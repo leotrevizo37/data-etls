@@ -1,6 +1,5 @@
 from typing import Optional
 
-from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col,
@@ -9,7 +8,7 @@ from pyspark.sql.functions import (
     expr)
 
 from .lecturas_time_hours import lecturas_time_hours
-from .stats_calculator_anomalies import (stats_calculator_anomalies)
+from .stats_calculator import (stats_calculator)
 
 def maquinas_nieve(
         factlecturas_extended_df: DataFrame,
@@ -36,34 +35,26 @@ def maquinas_nieve(
                 max_hour
             )
         )
-        group_ids_df = (
-            empty_base_df
-            .select("DeviceId", "LocalTimeSpan")
-            .distinct()
-            .withColumn("OperationId", expr("uuid()"))
-            .persist(StorageLevel.MEMORY_AND_DISK)
-        )
-        _ = group_ids_df.count()
-
         group_with_guid_df = (
             empty_base_df
-            .join(group_ids_df, on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"], how="left")
+            .withColumn(
+                "OperationId",
+                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+            )
             .withColumn("ReadingsCount", lit(0))
-            .withColumn("Anomalies", lit(None))
-            .withColumn("StatusCode", lit(3))
+            .withColumn("Anomalies", lit(1).cast("integer"))
             .withColumn("MeasurementValue", lit(None))
+            .withColumn("MeasurementStdDev", lit(None))
         )
 
         return group_with_guid_df
 
     maquinas_nieve_df = (
-        stats_calculator_anomalies(
+        stats_calculator(
             base,
             "Corriente",
-            0.28,
             None,
-            240,
-            0.06
+            13,
         )
         .select(
             "DeviceId",
@@ -71,11 +62,12 @@ def maquinas_nieve(
             "SensorTyId",
             "SensorId",
             "LocalTimeSpan",
-            "StatusCode",
             "MeasurementValue",
+            "MeasurementStdDev",
             "Anomalies",
             "sensor_type",
             "ReadingsCount",
+            "device_type",
         )
         .withColumn("LocalTimeSpan", date_trunc("hour", col("LocalTimeSpan")))
     )
@@ -91,32 +83,33 @@ def maquinas_nieve(
         )
         .join(
             maquinas_nieve_df,
-            on=["SensorId", "DeviceId", "LocalTimeSpan", "SensorTyId"],
+            on=[
+                "SensorId",
+                "DeviceId",
+                "LocalTimeSpan",
+                "SensorTyId",
+                "device_type",
+                "LocationId",
+                "sensor_type"
+            ],
             how="left"
         )
     )
 
     scaffold_enriched = (
         scaffold_df
-        .fillna({"ReadingsCount": 0, "StatusCode": 3})
+        .fillna({"ReadingsCount": 0, "Anomalies":-1})
     )
 
     if scaffold_enriched.rdd.isEmpty():
         return None
 
-    group_ids_df = (
-        scaffold_enriched
-        .select("DeviceId", "LocalTimeSpan")
-        .distinct()
-        .withColumn("OperationId", expr("uuid()"))
-        .persist(StorageLevel.MEMORY_AND_DISK)
-    )
-
-    _ = group_ids_df.count()
-
     group_with_guid_df = (
         scaffold_enriched
-        .join(group_ids_df, on=["DeviceId", "LocalTimeSpan"], how="left")
+        .withColumn(
+            "OperationId",
+            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+        )
     )
 
     return group_with_guid_df

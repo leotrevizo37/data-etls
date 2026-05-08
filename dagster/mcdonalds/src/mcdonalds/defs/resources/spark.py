@@ -157,15 +157,16 @@ class SparkResource:
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
 
-    def write_fact_lecturas_to_sql(self, df: DataFrame) -> None:
+    def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
-            return
+            return 0
         df_dedup = df.dropDuplicates(["ReadId"])
         if df_dedup.rdd.isEmpty():
-            return
+            return 0
 
         target_partitions = 4
         df_write = df_dedup.coalesce(target_partitions)
+        row_count = df_write.count()
 
         df_write.write \
             .mode("append") \
@@ -174,6 +175,7 @@ class SparkResource:
             table="dwh.factLecturas",
             properties=self._build_wh_path()["properties"]
         )
+        return row_count
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
@@ -230,21 +232,6 @@ class SparkResource:
 
         return row_count
 
-    def write_fact_operations_device(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-
-        df_write = df.coalesce(1)
-        row_count = df_write.count()
-
-        df_write.write.jdbc(
-            url=self._build_wh_path()["url"],
-            table="dwh.factHourlyDeviceStatus",
-            mode="append",
-            properties=self._build_wh_path()["properties"],
-        )
-
-        return row_count
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
         if df.rdd.isEmpty():

@@ -8,10 +8,11 @@ x-dagster-common: &dagster_common
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
     - ../dagster/smartfit:/opt/dagster/app/smartfit
+    - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
-    - mcdonalds-dagster
+    - data-dagster
   restart: unless-stopped
   logging:
     driver: json-file
@@ -22,11 +23,11 @@ x-dagster-common: &dagster_common
 services:
   sql-init:
     image: mcr.microsoft.com/mssql-tools
-    container_name: mcdonalds-sql-init
+    container_name: data-sql-init
     env_file:
       - .env
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     volumes:
       - ../sql/init:/sql/init:ro
       - ../sql/procedures:/sql/procedures:ro
@@ -47,7 +48,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds smartfit}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds smartfit cdp}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -104,7 +105,7 @@ services:
 
   dagster-postgres:
     image: postgres:16
-    container_name: mcdonalds-dagster-postgres
+    container_name: data-dagster-postgres
     env_file:
       - .env
     environment:
@@ -114,7 +115,7 @@ services:
     volumes:
       - dagster_postgres_data:/var/lib/postgresql/data
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     depends_on:
       sql-init:
         condition: service_completed_successfully
@@ -160,8 +161,8 @@ services:
           "CMD-SHELL",
           "dagster api grpc-health-check -p 4001 -h 127.0.0.1"
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 20s
+      timeout: 25s
       retries: 10
       start_period: 20s
 
@@ -200,20 +201,61 @@ services:
           "dagster api grpc-health-check -p 4002 -h 127.0.0.1"
         ]
       interval: 10s
-      timeout: 5s
+      timeout: 25s
       retries: 10
-      start_period: 20s
+      start_period: 30s
+
+  dagster-user-code-mcd-cdp:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: mcdonalds_cdp-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/mcdonalds_cdp
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/mcdonalds_cdp/src
+      APP_DB: ${CDP_DB:-cdp}
+      DIM_DB: ${CDP_DIM_DB:-cdp}
+      ADLS_CONTAINER_NAME: ${CDP_ADLS_CONTAINER_NAME:-cdp}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+    ports:
+      - "${CDP_USER_CODE_PORT:-4003}:4003"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4003",
+      "-m", "mcdonalds_cdp.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4003 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
 
   dagster-web:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-web
+    container_name: data-dagster-web
     <<: *dagster_common
     depends_on:
       dagster-user-code-mcd:
         condition: service_healthy
       dagster-user-code-smft:
+        condition: service_healthy
+      dagster-user-code-mcd-cdp:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -232,12 +274,14 @@ services:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-daemon
+    container_name: data-dagster-daemon
     <<: *dagster_common
     depends_on:
       dagster-user-code-mcd:
         condition: service_healthy
       dagster-user-code-smft:
+        condition: service_healthy
+      dagster-user-code-mcd-cdp:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -253,7 +297,7 @@ services:
     build:
       context: ..
       dockerfile: spark/Dockerfile
-    container_name: mcdonalds-spark-master
+    container_name: data-spark-master
     depends_on:
       spark-data-init:
         condition: service_completed_successfully
@@ -268,7 +312,7 @@ services:
       - spark-data:/data
     restart: unless-stopped
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     healthcheck:
       test: [
         "CMD-SHELL",
@@ -301,24 +345,24 @@ services:
     volumes:
       - spark-data:/data
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     restart: unless-stopped
 
   spark-data-init:
     image: alpine:3.20
     user: "0:0"
-    container_name: mcdonalds-spark-data-init
+    container_name: spark-data-init
     volumes:
       - spark-data:/data
     command: ["sh", "-c", "mkdir -p /data/dagster_io/spark_dfs && chmod -R 777 /data"]
     restart: "no"
     networks:
-      - mcdonalds-dagster
+      - data-dagster
 
 volumes:
   spark-data:
   dagster_postgres_data:
 
 networks:
-  mcdonalds-dagster:
+  data-dagster:
     driver: bridge

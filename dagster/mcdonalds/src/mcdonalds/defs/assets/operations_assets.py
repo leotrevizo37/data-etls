@@ -18,7 +18,7 @@ from dagster import (
 )
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
-from ..transformations import factlecturas_extended, factReadingsMeasurement_device
+from ..transformations import factlecturas_extended
 from ...operations_filters import limit_operations_rows_to_closed_hours
 from ...operations_window import build_operations_window, resolve_operations_watermark
 
@@ -74,7 +74,7 @@ def start_operations_run_and_get_range_op(
     if not deps:
         deps = " "
 
-    last_loaded_at = sql.get_watermark("HourlyDeviceStatus")
+    last_loaded_at = sql.get_watermark("factReadingsMeasurement")
     if last_loaded_at is None:
         last_loaded_at = datetime(2025, 10, 1)
         context.log.info("Operation tables are empty, "
@@ -83,15 +83,15 @@ def start_operations_run_and_get_range_op(
     window = build_operations_window(last_loaded_at)
     if window["watermark_in_future"]:
         context.log.warning(
-            "HourlyDeviceStatus watermark %s is ahead of current local hour %s. "
+            "factReadingsMeasurement watermark %s is ahead of current local hour %s. "
             "This run will clean future rows and clamp processing to the current local window.",
             window["from_local"],
             window["max_local_hour"],
         )
 
-    sql.mark_run_started("HourlyDeviceStatus")
+    sql.mark_run_started("factReadingsMeasurement")
     context.log.info(
-        "HourlyDeviceStatus local run window from "
+        "factReadingsMeasurement local run window from "
         + str(window["fetch_from"])
         + " to "
         + str(window["max_local_hour"])
@@ -119,21 +119,21 @@ def window_cleanup(
     sqlserver: SqlServerResource = context.resources.sqlserver
 
     context.log.info("Deleting incomplete last period from "
-                     "factHourlyDeviceStatus and factReadingsMeasurement...")
+                     "factReadingsMeasurement...")
     deleted_rows = sqlserver.delete_range(
         schema_name="dwh",
-        table_name="factHourlyDeviceStatus",
+        table_name="factReadingsMeasurement",
         time_column="LocalTimeSpan",
         from_utc=window["delete_from"],
         to_utc=window["delete_to_exclusive"],
     )
     if deleted_rows is None or deleted_rows == 0:
         context.log.info("No rows deleted from "
-                         "dwh.factHourlyDeviceStatus for this period.")
+                         "dwh.factReadingsMeasurement for this period.")
     else:
         context.log.info("Deleted "
                          + str(deleted_rows)
-                         + " rows from dwh.factHourlyDeviceStatus with cascade.")
+                         + " rows from dwh.factReadingsMeasurement.")
 
 @op(
     required_resource_keys={
@@ -239,13 +239,14 @@ def build_devices_df_op(
             col("DeviceId"),
             col("LocationId"),
             col("SensorTyId"),
-            col("StatusCode"),
             col("SensorId"),
             col("MeasurementValue"),
+            col("MeasurementStdDev"),
             col("Anomalies"),
             col("LocalTimeSpan"),
             col("ReadingsCount"),
-            col("sensor_type"),
+            col("sensor_type").alias("SensorType"),
+            col("device_type").alias("DeviceType"),
         )
 
         if df.rdd.isEmpty():
@@ -287,8 +288,7 @@ def build_devices_df_op(
     },
     ins={
         "devices_df": In(DataFrame),
-        "window": In(Dict[str, Any]),
-        "fact_hourly_result": In(Optional[Dict[str, Any]])
+        "window": In(Dict[str, Any])
     },
     out={
         "asset": Out(Nothing),
@@ -298,8 +298,7 @@ def build_devices_df_op(
 def write_factreadingsmeasurement_op(
         context,
         devices_df: DataFrame,
-        window: Dict[str, Any],
-        fact_hourly_result: Optional[Dict[str, Any]] = None) -> Tuple[None, Dict[str, Any]]:
+        window: Dict[str, Any]) -> Tuple[None, Dict[str, Any]]:
     start_time = perf_counter()
     spark_res = context.resources.spark
 
@@ -323,21 +322,6 @@ def write_factreadingsmeasurement_op(
             metadata["error_message"] = error_message
         context.add_output_metadata(metadata, output_name="asset")
 
-    if not fact_hourly_result["succeeded"]:
-        context.log.warning("write_facthourlydevicestatus_op failed")
-        error_message = "write_facthourlydevicestatus_op failed"
-        add_asset_metadata()
-        return (
-            None,
-            {
-                "to_local": window["max_local_hour"],
-                "original_last_loaded_at": window["original_last_loaded_at"],
-                "max_time_span": None,
-                "succeeded": False,
-                "error_message": error_message,
-            },
-    )
-
     try:
         if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
             succeeded = True
@@ -351,9 +335,13 @@ def write_factreadingsmeasurement_op(
                     "OperationId",
                     "SensorId",
                     "SensorTyId",
+                    "DeviceId",
+                    "LocationId",
+                    "DeviceType",
+                    "SensorType",
                     "LocalTimeSpan",
-                    "StatusCode",
                     "MeasurementValue",
+                    "MeasurementStdDev",
                     "ReadingsCount",
                     "Anomalies"
                 )
@@ -378,89 +366,30 @@ def write_factreadingsmeasurement_op(
         },
     )
 
-@op(
-    required_resource_keys={
-        "spark"
-    },
-    ins={
-        "devices_df": In(DataFrame),
-        "window": In(Dict[str, Any]),
-    },
-    out={
-        "asset": Out(Nothing),
-        "result": Out(Dict[str, Any])
-    },
-)
-def write_facthourlydevicestatus_op(
-        context,
-        devices_df: DataFrame,
-        window: Dict[str, Any]) -> Tuple[None, Dict[str, Any]]:
-    spark_res = context.resources.spark
-
-    max_time_span: Optional[datetime] = None
-    succeeded = False
-    error_message: Optional[str] = None
-
-    try:
-        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
-            context.log.info("FactLecturas window was empty")
-            succeeded = True
-        else:
-            aggregated_df = factReadingsMeasurement_device(devices_df)
-            inserted_ = spark_res.write_fact_operations_device(aggregated_df)
-            max_time_span = spark_res.get_max_time_span(aggregated_df, "LocalTimeSpan")
-            succeeded = True
-            if inserted_ == 0:
-                context.log.warning("written 0 rows to factHourlyDeviceStatus")
-    except Exception as ex:
-        error_message = str(ex)
-        context.log.warning(ex)
-        succeeded = False
-
-    return (
-        None,
-        {
-            "to_local": window["max_local_hour"],
-            "original_last_loaded_at": window["original_last_loaded_at"],
-            "max_time_span": max_time_span,
-            "succeeded": succeeded,
-            "error_message": error_message,
-        },
-    )
 
 @op(
     required_resource_keys={
         "sqlserver"
     },
     ins={
-        "hourly_status": In(Dict[str, Any]),
         "hourly_readings": In(Dict[str, Any])
     },
     out=Out(Optional[Dict[str, Any]]),
 )
 def finalize_operations_run_op(
         context,
-        hourly_status: Dict[str, Any],
         hourly_readings: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     sql = context.resources.sqlserver
 
-    succeeded: bool = False
-    error_message: Optional[str] = None
+    succeeded: bool = hourly_readings["succeeded"]
+    error_message: Optional[str] = hourly_readings.get("error_message")
 
-    if hourly_status["succeeded"]:
-        if hourly_readings["succeeded"]:
-            succeeded: bool = True
-        else:
-            error_message: Optional[str] = hourly_readings["error_message"]
-            context.log.warning("error readings: " + str(error_message))
-
-    else:
-        error_message = hourly_status["error_message"]
+    if not succeeded:
         context.log.warning("error readings: " + str(error_message))
 
-    to_local: datetime = hourly_status["to_local"]
-    original_last_loaded_at: datetime = hourly_status["original_last_loaded_at"]
-    max_time_span: Optional[datetime] = hourly_status["max_time_span"]
+    to_local: datetime = hourly_readings["to_local"]
+    original_last_loaded_at: datetime = hourly_readings["original_last_loaded_at"]
+    max_time_span: Optional[datetime] = hourly_readings["max_time_span"]
 
     new_watermark = resolve_operations_watermark(
         succeeded=succeeded,
@@ -472,23 +401,23 @@ def finalize_operations_run_op(
     if not succeeded:
         new_watermark = original_last_loaded_at
         context.log.warning(
-            "HourlyDeviceStatus run failed. Keeping watermark at " + str(new_watermark)
+            "factReadingsMeasurement run failed. Keeping watermark at " + str(new_watermark)
         )
     else:
         if max_time_span is None:
             new_watermark = original_last_loaded_at
             context.log.info(
-                "HourlyDeviceStatus run succeeded with no rows containing real readings. "
+                "factReadingsMeasurement run succeeded with no rows containing real readings. "
                 "Keeping watermark at " + str(new_watermark)
             )
         else:
             new_watermark = max_time_span
             context.log.info(
-                "HourlyDeviceStatus run succeeded. Advancing watermark to " + str(new_watermark)
+                "factReadingsMeasurement run succeeded. Advancing watermark to " + str(new_watermark)
             )
 
     sql.mark_run_completed(
-        ingestion_name="HourlyDeviceStatus",
+        ingestion_name="factReadingsMeasurement",
         new_last_loaded_at=new_watermark,
         succeeded=succeeded,
         error_message=error_message,
@@ -510,8 +439,6 @@ def upstream_deps_gate(context,
 
 @graph_multi_asset(
     outs={
-        "dwh_factHourlyDeviceStatus": AssetOut(
-            key=AssetKey(["mcdonalds", "dwh_factHourlyDeviceStatus"])),
         "dwh_factReadingsMeasurement": AssetOut(
             key=AssetKey(["mcdonalds", "dwh_factReadingsMeasurement"])),
         "ctl_IngestionControl" : AssetOut(
@@ -536,22 +463,15 @@ def operations_assets(data_transformations):
         window= fetch_from_ts,
         dims=raw_dims_df,
         factlecturas_extended_df=factlecturas_extended_df)
-    hourly_status_out = write_facthourlydevicestatus_op(
+    hourly_readings_out = write_factreadingsmeasurement_op(
         devices_df=devices_df,
         window=fetch_from_ts
     )
-    hourly_readings_out = write_factreadingsmeasurement_op(
-        devices_df=devices_df,
-        window=fetch_from_ts,
-        fact_hourly_result=hourly_status_out.result
-    )
     finalize = finalize_operations_run_op(
-        hourly_status=hourly_status_out.result,
         hourly_readings=hourly_readings_out.result
     )
 
     return {
-        "dwh_factHourlyDeviceStatus": hourly_status_out.asset,
         "dwh_factReadingsMeasurement": hourly_readings_out.asset,
         "ctl_IngestionControl": finalize,
     }
