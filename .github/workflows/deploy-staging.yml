@@ -16,6 +16,7 @@ jobs:
           host: ${{ secrets.VM_HOST_STAGE }}
           username: ${{ secrets.VM_USER_STAGE }}
           key: ${{ secrets.VM_SSH_KEY_STAGE }}
+          passphrase: ${{ secrets.VM_SSH_PASSPHRASE_STAGE }}
           script: |
             cd /home/warehouse/data-etls
             git fetch origin
