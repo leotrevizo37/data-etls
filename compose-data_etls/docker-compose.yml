@@ -12,7 +12,7 @@ x-dagster-common: &dagster_common
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
-    - mcdonalds-dagster
+    - data-dagster
   restart: unless-stopped
   logging:
     driver: json-file
@@ -23,11 +23,11 @@ x-dagster-common: &dagster_common
 services:
   sql-init:
     image: mcr.microsoft.com/mssql-tools
-    container_name: mcdonalds-sql-init
+    container_name: data-sql-init
     env_file:
       - .env
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     volumes:
       - ../sql/init:/sql/init:ro
       - ../sql/procedures:/sql/procedures:ro
@@ -105,7 +105,7 @@ services:
 
   dagster-postgres:
     image: postgres:16
-    container_name: mcdonalds-dagster-postgres
+    container_name: data-dagster-postgres
     env_file:
       - .env
     environment:
@@ -115,7 +115,7 @@ services:
     volumes:
       - dagster_postgres_data:/var/lib/postgresql/data
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     depends_on:
       sql-init:
         condition: service_completed_successfully
@@ -131,7 +131,7 @@ services:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-user-code
+    container_name: data-dagster-user-code
     <<: *dagster_common
     depends_on:
       sql-init:
@@ -248,7 +248,7 @@ services:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-web
+    container_name: data-dagster-web
     <<: *dagster_common
     depends_on:
       dagster-user-code-mcd:
@@ -274,7 +274,7 @@ services:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-daemon
+    container_name: data-dagster-daemon
     <<: *dagster_common
     depends_on:
       dagster-user-code-mcd:
@@ -297,7 +297,7 @@ services:
     build:
       context: ..
       dockerfile: spark/Dockerfile
-    container_name: mcdonalds-spark-master
+    container_name: data-spark-master
     depends_on:
       spark-data-init:
         condition: service_completed_successfully
@@ -312,7 +312,7 @@ services:
       - spark-data:/data
     restart: unless-stopped
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     healthcheck:
       test: [
         "CMD-SHELL",
@@ -345,24 +345,24 @@ services:
     volumes:
       - spark-data:/data
     networks:
-      - mcdonalds-dagster
+      - data-dagster
     restart: unless-stopped
 
   spark-data-init:
     image: alpine:3.20
     user: "0:0"
-    container_name: mcdonalds-spark-data-init
+    container_name: spark-data-init
     volumes:
       - spark-data:/data
     command: ["sh", "-c", "mkdir -p /data/dagster_io/spark_dfs && chmod -R 777 /data"]
     restart: "no"
     networks:
-      - mcdonalds-dagster
+      - data-dagster
 
 volumes:
   spark-data:
   dagster_postgres_data:
 
 networks:
-  mcdonalds-dagster:
+  data-dagster:
     driver: bridge
