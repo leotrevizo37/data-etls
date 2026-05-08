@@ -1,11 +1,40 @@
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-
+import glob
 import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+from dagster import resource
+from py4j.protocol import Py4JJavaError
+from pyspark import SparkConf
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max
-from pyspark import SparkConf
-from dagster import resource
+from pyspark.sql.types import (
+    DoubleType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
+
+
+DEFAULT_SPARK_PACKAGES = ",".join(
+    [
+        "org.apache.hadoop:hadoop-azure:3.3.4",
+        "org.apache.hadoop:hadoop-azure-datalake:3.3.4",
+        "com.microsoft.azure:azure-storage:8.6.6",
+        "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
+    ]
+)
+
+LECTURAS_SCHEMA = StructType(
+    [
+        StructField("ReadId", StringType(), True),
+        StructField("TimeSpan", TimestampType(), True),
+        StructField("Value", DoubleType(), True),
+        StructField("SensorId", StringType(), True),
+    ]
+)
+
 
 def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
     current = start.date()
@@ -62,6 +91,18 @@ class SparkResource:
             .setMaster(self.master_url)
             .set("spark.executor.memory", self.executor_mem)
         )
+        jars_dir = os.getenv("SPARK_JARS_DIR", "/opt/spark/jars-extra")
+        extra_classpath = os.getenv("SPARK_EXTRA_CLASSPATH", jars_dir + "/*")
+        local_jars = sorted(glob.glob(jars_dir + "/*.jar"))
+        if local_jars:
+            conf.set("spark.jars", ",".join(local_jars))
+            conf.set("spark.driver.extraClassPath", extra_classpath)
+            conf.set("spark.executor.extraClassPath", extra_classpath)
+        else:
+            spark_packages = os.getenv("SPARK_JARS_PACKAGES", DEFAULT_SPARK_PACKAGES)
+            if spark_packages:
+                conf.set("spark.jars.packages", spark_packages)
+
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
             account_host = account + ".dfs.core.windows.net"
@@ -72,14 +113,6 @@ class SparkResource:
             conf.set(
                 "spark.hadoop.fs.abfss.impl",
                 "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
-            )
-            conf.set(
-                "spark.jars.packages",
-                    ",".join([
-                        "org.apache.hadoop:hadoop-azure:3.3.4",
-                        "com.microsoft.azure:azure-storage:8.6.6",
-                        "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
-                    ])
             )
 
         self._spark = (
@@ -141,9 +174,47 @@ class SparkResource:
         }
         return {"url": url, "properties": properties}
 
-    def _filter_existing_paths(self, spark, paths):
+    def _create_empty_lecturas_dataframe(self, spark: SparkSession) -> DataFrame:
+        return spark.createDataFrame([], LECTURAS_SCHEMA)
+
+    def _is_missing_path_error(self, ex: Exception) -> bool:
+        if isinstance(ex, Py4JJavaError):
+            try:
+                java_exception = ex.java_exception
+                java_class = java_exception.getClass().getName()
+            except Exception:
+                return False
+            return java_class in {
+                "java.io.FileNotFoundException",
+                "org.apache.hadoop.fs.PathNotFoundException",
+                "org.apache.hadoop.fs.FileNotFoundException",
+            }
+
+        message = str(ex)
+        return "FileNotFoundException" in message or "PathNotFoundException" in message
+
+    def _path_has_data_files(self, fs, path_obj) -> bool:
+        try:
+            statuses = fs.listStatus(path_obj)
+        except Exception as ex:
+            if self._is_missing_path_error(ex):
+                return False
+            raise
+
+        for status in statuses:
+            name = status.getPath().getName()
+            if name.startswith("_") or name.startswith("."):
+                continue
+            if status.isDirectory():
+                if self._path_has_data_files(fs, status.getPath()):
+                    return True
+            elif status.isFile():
+                return True
+        return False
+
+    def _filter_existing_paths(self, spark: SparkSession, paths: List[str]) -> List[str]:
         jvm = spark._jvm
-        conf = spark._jsc.hadoopConfiguration()
+        conf = spark.sparkContext._jsc.hadoopConfiguration()
 
         valid_paths = []
 
@@ -152,9 +223,11 @@ class SparkResource:
 
             try:
                 fs = path_obj.getFileSystem(conf)
-                if fs.exists(path_obj):
+                if fs.exists(path_obj) and self._path_has_data_files(fs, path_obj):
                     valid_paths.append(p)
             except Exception as ex:
+                if self._is_missing_path_error(ex):
+                    continue
                 raise RuntimeError("Failed while checking ADLS path: " + p) from ex
 
         return valid_paths
@@ -181,22 +254,12 @@ class SparkResource:
             paths.append(path)
 
         if not paths:
-            raise FileNotFoundError(
-                "No day paths were generated for requested range: "
-                + str(from_utc)
-                + " to "
-                + str(to_utc)
-            )
+            return self._create_empty_lecturas_dataframe(spark)
 
         valid_paths = self._filter_existing_paths(spark, paths)
 
         if not valid_paths:
-            raise FileNotFoundError(
-                "No existing ADLS day paths found for requested range: "
-                + str(from_utc)
-                + " to "
-                + str(to_utc)
-            )
+            return self._create_empty_lecturas_dataframe(spark)
 
         df = spark.read.parquet(*valid_paths)
 

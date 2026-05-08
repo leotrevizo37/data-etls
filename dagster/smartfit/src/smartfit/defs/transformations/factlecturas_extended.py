@@ -1,15 +1,14 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, to_timestamp, from_utc_timestamp
 
 from ..resources import SqlServerResource, SparkResource
+from ...operations_window import OPERATIONS_TIMEZONE, OPERATIONS_TIMEZONE_NAME
 
 
 LOCAL_TIME_SPAN_FORMAT = "yyyy-MM-dd HH:mm:ss"
-OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
 PYTHON_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 def _local_to_utc(local_naive: datetime) -> datetime:
@@ -88,7 +87,7 @@ def factlecturas_extended(
         else:
             dwh_factlecturas_df = dl_df.withColumn(
                 "LocalTimeSpan",
-                from_utc_timestamp(col("TimeSpan"), "America/Ciudad_Juarez")
+                from_utc_timestamp(col("TimeSpan"), OPERATIONS_TIMEZONE_NAME)
             )
     else:
         dwh_factlecturas_df = _restore_local_timespan(
