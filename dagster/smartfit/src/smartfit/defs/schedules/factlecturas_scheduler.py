@@ -47,5 +47,5 @@ fact_lecturas_sched_every_w = ScheduleDefinition(
     job=fact_lecturas_ingestion_job,
     cron_schedule="0 5-16 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.RUNNING,
+    default_status=DefaultScheduleStatus.STOPPED,
 )

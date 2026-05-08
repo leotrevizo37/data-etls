@@ -196,6 +196,7 @@ def load_factlecturas_extended_op(
 
 @op(
     required_resource_keys={
+        "spark",
         "transformation_ops"
     },
     ins={
@@ -210,12 +211,17 @@ def build_devices_df_op(
         window: Dict[str, Any],
         dims: Optional[DataFrame] = None,
         factlecturas_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
+    spark_res: SparkResource = context.resources.spark
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
     union_df: Optional[DataFrame] = None
-    if len(factlecturas_extended_df.columns) <= 1:
-        context.log.warning("Factlecturas_extended_df is empty.")
-        return factlecturas_extended_df
+    if (
+        factlecturas_extended_df is None
+        or len(factlecturas_extended_df.columns) <= 1
+        or factlecturas_extended_df.rdd.isEmpty()
+    ):
+        context.log.info("No source readings found for the current operations window.")
+        return spark_res.create_empty_fact_operations_dataframe()
 
     methods = [
         "maquinas_nieve",
@@ -234,7 +240,12 @@ def build_devices_df_op(
             dims,
             window["fetch_from"],
             window["max_local_hour"],
-        ).select(
+        )
+        if df is None or df.rdd.isEmpty():
+            context.log.info("No rows for method: " + method)
+            continue
+
+        df = df.select(
             col("OperationId"),
             col("DeviceId"),
             col("LocationId"),
@@ -249,10 +260,6 @@ def build_devices_df_op(
             col("device_type").alias("DeviceType"),
         )
 
-        if df.rdd.isEmpty():
-            context.log.info("No rows for method: " + method)
-            continue
-
         if union_df is None:
             union_df = df
         else:
@@ -260,7 +267,7 @@ def build_devices_df_op(
 
     if union_df is None:
         context.log.info("No rows across all transformations.")
-        return factlecturas_extended_df.limit(0)
+        return spark_res.create_empty_fact_operations_dataframe()
 
     limited_df = limit_operations_rows_to_closed_hours(
         union_df,
@@ -273,7 +280,7 @@ def build_devices_df_op(
             "No real readings found in the current operations window. "
             "Skipping scaffold-only rows and keeping the watermark in place."
         )
-        return limited_df.limit(0)
+        return spark_res.create_empty_fact_operations_dataframe()
 
     context.log.info(
         "Latest real operations hour found at %s. "

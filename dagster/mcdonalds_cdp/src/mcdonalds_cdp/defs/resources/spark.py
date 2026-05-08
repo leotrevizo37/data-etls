@@ -10,6 +10,8 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max
 from pyspark.sql.types import (
     DoubleType,
+    IntegerType,
+    LongType,
     StringType,
     StructField,
     StructType,
@@ -34,6 +36,45 @@ LECTURAS_SCHEMA = StructType(
         StructField("TimeSpan", TimestampType(), True),
         StructField("Value", DoubleType(), True),
         StructField("SensorId", StringType(), True),
+    ]
+)
+
+FACTLECTURAS_EXTENDED_SCHEMA = StructType(
+    [
+        StructField("ReadId", StringType(), True),
+        StructField("TimeSpan", TimestampType(), True),
+        StructField("LocalTimeSpan", TimestampType(), True),
+        StructField("Value", DoubleType(), True),
+        StructField("SensorId", StringType(), True),
+        StructField("SensorTyId", StringType(), True),
+        StructField("DeviceId", StringType(), True),
+        StructField("sensor_name", StringType(), True),
+        StructField("sensor_type", StringType(), True),
+        StructField("DeviceTyId", StringType(), True),
+        StructField("SubLocationId", StringType(), True),
+        StructField("device_name", StringType(), True),
+        StructField("device_type", StringType(), True),
+        StructField("SubLocationTyId", StringType(), True),
+        StructField("sublocation_name", StringType(), True),
+        StructField("LocationId", StringType(), True),
+        StructField("sublocation_type", StringType(), True),
+    ]
+)
+
+FACT_OPERATIONS_SCHEMA = StructType(
+    [
+        StructField("OperationId", StringType(), True),
+        StructField("DeviceId", StringType(), True),
+        StructField("LocationId", StringType(), True),
+        StructField("SensorTyId", StringType(), True),
+        StructField("SensorId", StringType(), True),
+        StructField("MeasurementValue", DoubleType(), True),
+        StructField("MeasurementStdDev", DoubleType(), True),
+        StructField("Anomalies", IntegerType(), True),
+        StructField("LocalTimeSpan", TimestampType(), True),
+        StructField("ReadingsCount", LongType(), True),
+        StructField("SensorType", StringType(), True),
+        StructField("DeviceType", StringType(), True),
     ]
 )
 
@@ -414,6 +455,14 @@ class SparkResource:
     def create_emptiness_dataframe(self) -> DataFrame:
         spark = self.get_spark()
         return spark.createDataFrame([(True,)], ["is_empty"])
+
+    def create_empty_factlecturas_extended_dataframe(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.createDataFrame([], FACTLECTURAS_EXTENDED_SCHEMA)
+
+    def create_empty_fact_operations_dataframe(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.createDataFrame([], FACT_OPERATIONS_SCHEMA)
 
 @resource
 def spark_resource(_):

@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional, Tuple
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, to_timestamp, from_utc_timestamp
@@ -29,12 +29,34 @@ def _build_factlecturas_query(fetch_from: Optional[datetime], fetch_to: Optional
     if fetch_from:
         where_clauses.append(f"LocalTimeSpan >= '{fetch_from.strftime(PYTHON_DATETIME_FORMAT)}'")
     if fetch_to:
-        where_clauses.append(f"LocalTimeSpan <= '{fetch_to.strftime(PYTHON_DATETIME_FORMAT)}'")
+        where_clauses.append(f"LocalTimeSpan < '{fetch_to.strftime(PYTHON_DATETIME_FORMAT)}'")
         
     if not where_clauses:
         return "(" + base_query + ") AS src"
         
     return "(" + base_query + " WHERE " + " AND ".join(where_clauses) + ") AS src"
+
+
+def _get_factlecturas_cache_bounds(
+        sqlserver: SqlServerResource) -> Tuple[Optional[datetime], Optional[datetime]]:
+    bounds_query = "FROM dwh.FactLecturas WHERE LocalTimeSpan IS NOT NULL"
+    min_local_ts = sqlserver.fetch_scalar("SELECT MIN(LocalTimeSpan) " + bounds_query)
+    max_local_ts = sqlserver.fetch_scalar("SELECT MAX(LocalTimeSpan) " + bounds_query)
+    return min_local_ts, max_local_ts
+
+
+def _cache_covers_requested_window(
+        cache_min_local_ts: Optional[datetime],
+        cache_max_local_ts: Optional[datetime],
+        fetch_from_local: datetime,
+        fetch_to_local: datetime) -> bool:
+    required_cache_max = fetch_to_local - timedelta(seconds=1)
+    return (
+        cache_min_local_ts is not None
+        and cache_max_local_ts is not None
+        and cache_min_local_ts <= fetch_from_local
+        and cache_max_local_ts >= required_cache_max
+    )
 
 
 def _restore_local_timespan(df: DataFrame) -> DataFrame:
@@ -60,22 +82,28 @@ def factlecturas_extended(
     fetch_to_local: datetime = window["delete_to_exclusive"]
 
     use_datalake = True
+    dwh_factlecturas_df: Optional[DataFrame] = None
     
-    # Dynamic Cache Check: Verify if the requested range is available in SQL
     try:
-        min_ts_df = (
+        min_local_ts, max_local_ts = _get_factlecturas_cache_bounds(sqlserver)
+        use_datalake = not _cache_covers_requested_window(
+            min_local_ts,
+            max_local_ts,
+            fetch_from_local,
+            fetch_to_local,
+        )
+    except Exception as e:
+        print(f"Warning: Failed to verify dwh.FactLecturas cache bounds. Falling back to Data Lake. Error: {e}")
+
+    if not use_datalake:
+        dwh_factlecturas_df = _restore_local_timespan(
             spark.read.format("jdbc")
-            .option("dbtable", "(SELECT MIN(LocalTimeSpan) as min_ts FROM dwh.FactLecturas) AS t")
+            .option("dbtable", _build_factlecturas_query(fetch_from_local, fetch_to_local))
             .options(**sqlserver.get_basic_options())
             .load()
         )
-        min_ts_row = min_ts_df.collect()[0]
-        min_local_ts = min_ts_row.min_ts
-        
-        if min_local_ts is not None and fetch_from_local > min_local_ts:
-            use_datalake = False
-    except Exception as e:
-        print(f"Warning: Failed to verify dwh.FactLecturas min date. Falling back to Data Lake. Error: {e}")
+        if dwh_factlecturas_df.rdd.isEmpty():
+            use_datalake = True
 
     if use_datalake:
         from_utc = _local_to_utc(fetch_from_local)
@@ -89,13 +117,6 @@ def factlecturas_extended(
                 "LocalTimeSpan",
                 from_utc_timestamp(col("TimeSpan"), OPERATIONS_TIMEZONE_NAME)
             )
-    else:
-        dwh_factlecturas_df = _restore_local_timespan(
-            spark.read.format("jdbc")
-            .option("dbtable", _build_factlecturas_query(fetch_from_local, fetch_to_local))
-            .options(**sqlserver.get_basic_options())
-            .load()
-        )
 
     if dwh_factlecturas_df.rdd.isEmpty():
         return None

@@ -57,8 +57,8 @@ def cuartos_congelacion(
             )
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(1).cast("integer"))
-            .withColumn("MeasurementValue", lit(None))
-            .withColumn("MeasurementStdDev", lit(None))
+            .withColumn("MeasurementValue", lit(None).cast("double"))
+            .withColumn("MeasurementStdDev", lit(None).cast("double"))
         )
 
         return group_with_guid_df

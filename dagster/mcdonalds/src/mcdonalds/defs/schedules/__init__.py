@@ -10,6 +10,7 @@ from .factoperations_scheduler import (operations_sched_every_4h,
                                        operations_sched_every_1h,
                                        operations_sched_every_1h_w,
                                        operations_sched_every_w)
+from .fact_lecturas_operations_schedule import fact_lecturas_operations_sched_every_1h_w
 from .cleanup_schedule import cleanup_schedule
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
 
@@ -26,6 +27,7 @@ __all__ = [
     "operations_sched_every_1h",
     "operations_sched_every_1h_w",
     "operations_sched_every_w",
+    "fact_lecturas_operations_sched_every_1h_w",
     "cleanup_schedule",
     "factlecturas_cleanup_schedule",
 ]
