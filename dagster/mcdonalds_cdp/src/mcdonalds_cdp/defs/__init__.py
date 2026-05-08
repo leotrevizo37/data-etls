@@ -27,7 +27,6 @@ def _build_defs() -> Any:
         fact_lecturas_ingestion_job,
         fact_operations_tables_job,
         refresh_dimensions_job,
-        factlecturas_cleanup_job,
     )
     from .resources import (
         dim_sqlserver_resource,
@@ -45,7 +44,6 @@ def _build_defs() -> Any:
         operations_sched_every_2h,
         operations_sched_every_4h,
         operations_sched_every_w,
-        factlecturas_cleanup_schedule,
     )
     from .sensors import (
         dwh_dimsidonproddimensions_sensor,
@@ -57,7 +55,6 @@ def _build_defs() -> Any:
             fact_operations_tables_job,
             refresh_dimensions_job,
             cleanup_job,
-            factlecturas_cleanup_job,
         ],
         resources={
             "sqlserver": sqlserver_resource,
@@ -75,7 +72,6 @@ def _build_defs() -> Any:
             operations_sched_every_1h_w,
             operations_sched_every_2h,
             cleanup_schedule,
-            factlecturas_cleanup_schedule,
         ],
         sensors=[
             dwh_dimsidonproddimensions_sensor,

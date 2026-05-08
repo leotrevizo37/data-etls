@@ -6,5 +6,5 @@ factlecturas_cleanup_schedule = ScheduleDefinition(
     job=factlecturas_cleanup_job,
     cron_schedule="0 3 * * 0",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.RUNNING,
+    default_status=DefaultScheduleStatus.STOPPED,
 )

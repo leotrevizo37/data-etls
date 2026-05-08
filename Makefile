@@ -1,8 +1,8 @@
 SHELL := /bin/bash
 
 PYTHON ?= python
-COMPOSE_FILE := compose-mcdonalds/docker-compose.yml
-ENV_FILE := compose-mcdonalds/.env
+COMPOSE_FILE := compose-data_etls/docker-compose.yml
+ENV_FILE := compose-data_etls/.env
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 

@@ -1,21 +1,21 @@
-# MCDONALDS - Serving Layer ETLs
-Serving layer de procesamiento y preparación de datos destinados al consumo en Power BI para Sidon,
-desarrollado para MCDONALDS, integrando extracción, transformación y carga automatizada.
+# DUMA - Serving Layer ETLs
+Serving layer de procesamiento y preparación de datos destinados al consumo en Power BI y DUMA para Sidon,
+desarrollado para MCDONALDS, MCDONALDS - CENTROS DE POSTRES Y SMARTFIT, integrando extracción, transformación
+y carga automatizada de información y manejo de errores.
 
 [![docker-image.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-docker-image.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-docker-image.yml)
 [![ci-python.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml)
 [![validate-compose.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml)
 [![lint-sql.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml)
 
-# BI serving layer (Dagster + SQL Server)
+# BI serving layer (DUMA)
 
-Se soluciona el problema del small file size mediante una capa relacional en el servidor (10.80), en la base de datos 
-correspondiente a mcdonalds.
+Se busca agilizar el comportamiento y respuestas de herramientas agénticas mediante la preparacion de 
+una caché rápida y constantemente disponible con respecto a consultas lentas a un datalake que encima
+presentarían el problema del small file size. Se soluciona con:
 - SQL Server (esquema T-SQL + stored procedures)
-- Dagster (assets/jobs, scheduling/ejecución)
-
-El proyecto arranca con un docker compose (más detalles de esto a continuación), y se consume en Power BI 
-como cualquier SQL endpoint, en este caso MySQL, pues la base de datos correspondiente al proyecto está en MySQL.
+- Dagster (assets/jobs, scheduling/ejecución, orquestación)
+- Spark (master/workers)
 
 ## Alcance
 
@@ -24,10 +24,11 @@ Este repositorio provee:
 - Un master de Spark corriendo en contenedores.
 - Automatización/Orquestación de un clúster Spark multinodo.
 - Integración con el data lake ADLS.
-- Transformación de parquets del data lake a una tabla relacion (capa de servicio) para consumo de BI.
-
+- Transformación de parquets del data lake a una tabla relacion (capa de servicio).
+- Preparación/transformaciones de datos que alimentan las herramientas agénticas.
+- 
 No objetivos:
-- ETLs complejos, mas allá de las transformaciones correpondientes para cargar en tablas.
+- ETLs complejos, no necesarias para las herramientas agénticas.
 
 ## Estructura del repositorio
 
@@ -38,6 +39,14 @@ No objetivos:
   - `Dockerfile`: imagen de Dagster
   - `requirements.txt`: dependencias de Python
   - `mcdonalds/`: proyecto de Dagster (assets/jobs/resources)
+     - `defs/`: definición del proyecto de Dagster
+     - `tests`: tests unitarios
+  - `mcdonalds_cdp/`: proyecto de Dagster (assets/jobs/resources)
+     - `defs/`: definición del proyecto de Dagster
+     - `tests`: tests unitarios
+  - `smartfit/`: proyecto de Dagster (assets/jobs/resources)
+     - `defs/`: definición del proyecto de Dagster
+     - `tests`: tests unitarios
   - `dagster_home/`: configuración/estado de Dagster
 - `sql/`
   - `init/`: scripts TSQL ejecutados una vez directamente en la base de datos antes de arrancar 
@@ -49,6 +58,7 @@ los servicios (definiciones de tablas, etc)
 
 - Docker Desktop con Docker compose v2 (mínimo)
 - Configurar archivo `.env`
+- Tener sinstaladas funcionalidades make (opcional)
 
 ## Configuración
 
@@ -78,6 +88,11 @@ docker compose --env-file compose-mcdonalds/.env -f compose-mcdonalds/docker-com
 ```bash
 docker compose --env-file compose-mcdonalds/.env -f compose-mcdonalds/docker-compose.yml up -d --scale spark-worker=4
 ```
+### Para testing:
+```bash
+make test-python
+```
+
 ## Para desarrollo local y pruebas
 
 ### Localizarse en la raiz del proyecto dagster
