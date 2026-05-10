@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 import os
@@ -6,6 +6,28 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max
 from pyspark import SparkConf
 from dagster import resource
+from zoneinfo import ZoneInfo
+
+OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
+
+
+def _get_operations_timezone():
+    try:
+        return ZoneInfo(OPERATIONS_TIMEZONE_NAME)
+    except Exception:
+        return timezone(timedelta(hours=-6), name=OPERATIONS_TIMEZONE_NAME)
+
+
+def _coerce_utc_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(microsecond=0)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+def _local_to_utc_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_get_operations_timezone())
+    return _coerce_utc_naive(dt)
 
 def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
     current = start.date()
@@ -156,6 +178,11 @@ class SparkResource:
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
+
+    def read_lecturas_local_range(self, from_local: datetime, to_utc: datetime) -> DataFrame:
+        from_utc = _local_to_utc_naive(from_local)
+        readings_df = self.read_lecturas_range(from_utc, _coerce_utc_naive(to_utc))
+        return readings_df.filter(col("LocalTimeSpan") >= from_local)
 
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():

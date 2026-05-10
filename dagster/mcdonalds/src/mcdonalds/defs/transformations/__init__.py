@@ -4,6 +4,7 @@ from importlib import import_module
 from typing import Any
 
 __all__ = [
+    "datalake_readings_extended",
     "factlecturas_extended",
     "raw_dimensions",
     "sensor_expected_values",
@@ -16,6 +17,7 @@ __all__ = [
 ]
 
 _MODULE_BY_EXPORT = {
+    "datalake_readings_extended": ".datalake_readings_extended",
     "factlecturas_extended": ".factlecturas_extended",
     "raw_dimensions": ".raw_dimensions",
     "sensor_expected_values": ".sensor_expected_values",
