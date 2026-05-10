@@ -18,4 +18,4 @@ jobs:
           cd /srv/data-etls-production
           git fetch origin
           git reset --hard origin/main
-          docker compose --env-file compose-data_etls/.env -f compose-data_etls/docker-compose.yml up -d -build
+          docker compose --env-file compose-data_etls/.env -f compose-data_etls/docker-compose.yml up -d --build
