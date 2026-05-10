@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, upper
 
 from ..resources import SparkResource
 
@@ -22,7 +22,9 @@ def datalake_readings_extended(
         datalake_readings_df
         .alias("rd")
         .join(
-            raw_dimensions.alias("dim"), on="SensorId", how="left"
+            raw_dimensions.alias("dim"),
+            upper(col("rd.SensorId").cast("string")) == upper(col("dim.SensorId").cast("string")),
+            how="left"
         )
         .select(
             col("rd.ReadId"),
