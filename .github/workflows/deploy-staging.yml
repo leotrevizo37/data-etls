@@ -32,7 +32,7 @@ jobs:
           test -n "${STAGING_ENV_FILE:-}"
 
           umask 077
-          printf '%s\n' "STAGING_ENV_FILE" > compose-data_etls/.env.next
+          printf '%s\n' "$STAGING_ENV_FILE" > compose-data_etls/.env.next
 
           docker compose \
             --env-file compose-data_etls/.env.next \
