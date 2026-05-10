@@ -37,6 +37,7 @@ jobs:
           docker compose \
             --env-file compose-data_etls/.env.next \
             -f compose-data_etls/docker-compose.yml \
+            -f compose-data_etls/docker-compose.staging.yml \
             config --quiet
 
           cp compose-data_etls/.env compose-data_etls/.env.backup 2>/dev/null || true
@@ -45,4 +46,5 @@ jobs:
           docker compose \
             --env-file compose-data_etls/.env \
             -f compose-data_etls/docker-compose.yml \
+            -f compose-data_etls/docker-compose.staging.yml \
             up -d --build
