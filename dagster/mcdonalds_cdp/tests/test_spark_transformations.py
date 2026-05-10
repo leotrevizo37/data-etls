@@ -209,6 +209,56 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 67.5)
 
+    def test_stats_calculator_counts_sales_above_threshold(self) -> None:
+        base = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Corriente",
+                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
+                    "Value": 7.0,
+                    "device_type": "MÃ¡quina de nieve",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Corriente",
+                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 20),
+                    "Value": 7.1,
+                    "device_type": "MÃ¡quina de nieve",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Corriente",
+                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
+                    "Value": 8.0,
+                    "device_type": "MÃ¡quina de nieve",
+                    "device_name": "A/C Rooftop 1",
+                },
+            ]
+        )
+
+        result = stats_calculator(
+            base,
+            sensor_type="Corriente",
+            max_expected_value=13,
+            sales_threshold=7,
+        )
+
+        row = result.collect()[0]
+
+        self.assertEqual(row["Sales"], 2)
+
     def test_stats_calculator_returns_none_when_sensor_type_is_absent(self) -> None:
         base = self._readings_df(
             [
@@ -415,6 +465,9 @@ class SparkTransformationsTests(unittest.TestCase):
             {row["sensor_type"] for row in rows},
             {"Corriente"},
         )
+        sales_by_sensor = {row["SensorId"]: row["Sales"] for row in rows}
+        self.assertEqual(sales_by_sensor[10], 0)
+        self.assertEqual(sales_by_sensor[11], 2)
 
 
     def test_limit_operations_rows_to_closed_hours_removes_future_rows(self) -> None:

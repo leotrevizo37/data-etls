@@ -1,11 +1,34 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 import os
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
 from pyspark import SparkConf
 from dagster import resource
+from zoneinfo import ZoneInfo
+
+OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
+
+
+def _get_operations_timezone():
+    try:
+        return ZoneInfo(OPERATIONS_TIMEZONE_NAME)
+    except Exception:
+        return timezone(timedelta(hours=-6), name=OPERATIONS_TIMEZONE_NAME)
+
+
+def _coerce_utc_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(microsecond=0)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+def _local_to_utc_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_get_operations_timezone())
+    return _coerce_utc_naive(dt)
 
 def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
     current = start.date()
@@ -15,6 +38,16 @@ def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
         days.append(datetime(current.year, current.month, current.day))
         current = current + timedelta(days=1)
     return days
+
+LECTURAS_SCHEMA = StructType(
+    [
+        StructField("ReadId", StringType(), True),
+        StructField("TimeSpan", TimestampType(), True),
+        StructField("LocalTimeSpan", TimestampType(), True),
+        StructField("Value", DoubleType(), True),
+        StructField("SensorId", StringType(), True),
+    ]
+)
 
 class SparkResource:
     def __init__(
@@ -89,6 +122,17 @@ class SparkResource:
             .config(conf=conf)
             .getOrCreate()
         )
+        if self.adls_account_name and self.adls_account_key:
+            account = self.adls_account_name
+            hadoop_conf = self._spark._jsc.hadoopConfiguration()
+            hadoop_conf.set(
+                f"fs.azure.account.key.{account}.dfs.core.windows.net",
+                self.adls_account_key,
+            )
+            hadoop_conf.set(
+                "fs.abfss.impl",
+                "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
+            )
         return self._spark
 
     def stop(self) -> None:
@@ -127,6 +171,34 @@ class SparkResource:
         }
         return {"url": url, "properties": properties}
 
+    def _has_readable_files(self, path: str) -> bool:
+        spark = self.get_spark()
+        j_path = spark._jvm.org.apache.hadoop.fs.Path(path)
+        fs = j_path.getFileSystem(spark._jsc.hadoopConfiguration())
+        if not fs.exists(j_path):
+            return False
+
+        pending = [j_path]
+        while pending:
+            current_path = pending.pop()
+            for status in fs.listStatus(current_path):
+                name = status.getPath().getName()
+                if status.isDirectory():
+                    pending.append(status.getPath())
+                elif name.lower().endswith(".parquet"):
+                    return True
+        return False
+
+    def _existing_readable_paths(self, paths: List[str]) -> List[str]:
+        existing_paths = []
+        for path in paths:
+            if self._has_readable_files(path):
+                existing_paths.append(path)
+        return existing_paths
+
+    def _empty_lecturas_dataframe(self) -> DataFrame:
+        return self.get_spark().createDataFrame([], LECTURAS_SCHEMA)
+
     def read_lecturas_range(self, from_utc: datetime, to_utc: datetime) -> DataFrame:
         spark = self.get_spark()
         base = self._build_adls_path()
@@ -150,12 +222,21 @@ class SparkResource:
             paths.append(path)
 
         if not paths:
-            return spark.createDataFrame([], schema="ReadId string")
+            return self._empty_lecturas_dataframe()
 
-        df = spark.read.parquet(*paths)
+        existing_paths = self._existing_readable_paths(paths)
+        if not existing_paths:
+            return self._empty_lecturas_dataframe()
+
+        df = spark.read.parquet(*existing_paths)
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
+
+    def read_lecturas_local_range(self, from_local: datetime, to_utc: datetime) -> DataFrame:
+        from_utc = _local_to_utc_naive(from_local)
+        readings_df = self.read_lecturas_range(from_utc, _coerce_utc_naive(to_utc))
+        return readings_df.filter(col("LocalTimeSpan") >= from_local)
 
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():

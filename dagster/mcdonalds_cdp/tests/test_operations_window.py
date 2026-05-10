@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from datetime import datetime, timezone
@@ -16,6 +17,15 @@ if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
 class BuildOperationsWindowTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_overlap = os.environ.pop("FACTREADINGS_OVERLAP_HOURS", None)
+
+    def tearDown(self) -> None:
+        if self._original_overlap is not None:
+            os.environ["FACTREADINGS_OVERLAP_HOURS"] = self._original_overlap
+        else:
+            os.environ.pop("FACTREADINGS_OVERLAP_HOURS", None)
+
     def test_uses_local_hour_boundary_for_operational_window(self) -> None:
         now = datetime(2026, 3, 29, 16, 35, tzinfo=OPERATIONS_TIMEZONE)
         last_loaded_at = datetime(2026, 3, 29, 14, 17)
@@ -57,6 +67,15 @@ class BuildOperationsWindowTests(unittest.TestCase):
             window["fetch_from"],
             datetime(2025, 9, 30, 13, 0),
         )
+
+    def test_uses_configured_factreadings_overlap_hours(self) -> None:
+        os.environ["FACTREADINGS_OVERLAP_HOURS"] = "3"
+        now = datetime(2026, 3, 29, 16, 35, tzinfo=OPERATIONS_TIMEZONE)
+        last_loaded_at = datetime(2026, 3, 29, 14, 17)
+
+        window = build_operations_window(last_loaded_at, now=now)
+
+        self.assertEqual(window["fetch_from"], datetime(2026, 3, 29, 12, 0))
 
 
 class CurrentOperationalHourStartTests(unittest.TestCase):

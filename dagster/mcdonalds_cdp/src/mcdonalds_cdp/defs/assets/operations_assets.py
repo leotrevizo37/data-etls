@@ -18,7 +18,7 @@ from dagster import (
 )
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
-from ..transformations import factlecturas_extended
+from ..transformations import datalake_readings_extended
 from ...operations_filters import limit_operations_rows_to_closed_hours
 from ...operations_window import build_operations_window, resolve_operations_watermark
 
@@ -159,8 +159,7 @@ def load_raw_dimensions_op(
 
 @op(
     required_resource_keys={
-        "spark",
-        "sqlserver"
+        "spark"
     },
     ins={
         "raw_dims_df": In(DataFrame),
@@ -168,31 +167,30 @@ def load_raw_dimensions_op(
     },
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
 )
-def load_factlecturas_extended_op(
+def load_datalake_readings_extended_op(
         context: OpExecutionContext,
         raw_dims_df: DataFrame,
         window: Dict[str, Any]) -> DataFrame:
     spark_res: SparkResource = context.resources.spark
-    sqlserver: SqlServerResource = context.resources.sqlserver
-    context.log.info("Joining factLecuras data period with dimensions table...")
+    context.log.info("Joining datalake readings period with dimensions table...")
 
-    factlecturas_extended_df = factlecturas_extended(
+    readings_extended_df = datalake_readings_extended(
         spark_res=spark_res,
-        sqlserver=sqlserver,
         raw_dimensions=raw_dims_df,
-        fetch_factlecturas_from=window["fetch_from"],
+        fetch_readings_from=window["fetch_from"],
+        fetch_readings_to=window["read_to_utc"],
     )
 
-    if factlecturas_extended_df is None:
+    if readings_extended_df is None:
         _df: DataFrame = spark_res.create_emptiness_dataframe()
-        context.log.warning("FactLecturas table is empty.")
+        context.log.warning("Data Lake readings are empty.")
         return _df
-    elif factlecturas_extended_df.rdd.isEmpty():
+    elif readings_extended_df.rdd.isEmpty():
         _df: DataFrame = spark_res.create_emptiness_dataframe()
-        context.log.warning("FactLecturas table is empty.")
+        context.log.warning("Data Lake readings are empty.")
         return _df
 
-    return factlecturas_extended_df
+    return readings_extended_df
 
 @op(
     required_resource_keys={
@@ -201,7 +199,7 @@ def load_factlecturas_extended_op(
     ins={
         "window": In(Dict[str, Any]),
         "dims": In(Optional[DataFrame]),
-        "factlecturas_extended_df": In(Optional[DataFrame])
+        "readings_extended_df": In(Optional[DataFrame])
     },
     out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
 )
@@ -209,13 +207,13 @@ def build_devices_df_op(
         context: OpExecutionContext,
         window: Dict[str, Any],
         dims: Optional[DataFrame] = None,
-        factlecturas_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
+        readings_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
     union_df: Optional[DataFrame] = None
-    if len(factlecturas_extended_df.columns) <= 1:
-        context.log.warning("Factlecturas_extended_df is empty.")
-        return factlecturas_extended_df
+    if len(readings_extended_df.columns) <= 1:
+        context.log.warning("Readings_extended_df is empty.")
+        return readings_extended_df
 
     methods = [
         "maquinas_nieve",
@@ -225,7 +223,7 @@ def build_devices_df_op(
         context.log.info("Materializing dataframe for method: " + method)
         fn = getattr(transformation_ops, method)
         df = fn(
-            factlecturas_extended_df,
+            readings_extended_df,
             dims,
             window["fetch_from"],
             window["max_local_hour"],
@@ -238,6 +236,7 @@ def build_devices_df_op(
             col("MeasurementValue"),
             col("MeasurementStdDev"),
             col("Anomalies"),
+            col("Sales"),
             col("LocalTimeSpan"),
             col("ReadingsCount"),
             col("sensor_type").alias("SensorType"),
@@ -255,7 +254,7 @@ def build_devices_df_op(
 
     if union_df is None:
         context.log.info("No rows across all transformations.")
-        return factlecturas_extended_df.limit(0)
+        return readings_extended_df.limit(0)
 
     limited_df = limit_operations_rows_to_closed_hours(
         union_df,
@@ -338,7 +337,8 @@ def write_factreadingsmeasurement_op(
                     "MeasurementValue",
                     "MeasurementStdDev",
                     "ReadingsCount",
-                    "Anomalies"
+                    "Anomalies",
+                    "Sales"
                 )
             )
             max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
@@ -450,14 +450,14 @@ def operations_assets(data_transformations):
     fetch_from_ts = start_operations_run_and_get_range_op(deps)
     cleaning = window_cleanup(fetch_from_ts)
     raw_dims_df = load_raw_dimensions_op(cleaning)
-    factlecturas_extended_df = load_factlecturas_extended_op(
+    readings_extended_df = load_datalake_readings_extended_op(
         raw_dims_df=raw_dims_df,
         window=fetch_from_ts
     )
     devices_df = build_devices_df_op(
         window= fetch_from_ts,
         dims=raw_dims_df,
-        factlecturas_extended_df=factlecturas_extended_df)
+        readings_extended_df=readings_extended_df)
     hourly_readings_out = write_factreadingsmeasurement_op(
         devices_df=devices_df,
         window=fetch_from_ts

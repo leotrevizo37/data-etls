@@ -31,6 +31,7 @@ services:
     volumes:
       - ../sql/init:/sql/init:ro
       - ../sql/procedures:/sql/procedures:ro
+      - ../sql/user_codes:/sql/user_codes:ro
     command:
       - sh
       - -c
@@ -48,7 +49,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds smartfit cdp}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -90,6 +91,26 @@ services:
             done
 
             for f in /sql/procedures/*.sql; do
+              [ -e "$$f" ] || continue
+              echo "==> [$$APP_DB] $$f"
+              "$$SQLCMD" \
+                  -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                  -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
+                  -d"$$APP_DB" \
+                  -b -i "$$f"
+            done
+
+            for f in /sql/user_codes/"$$USER_CODE"/init/*.sql; do
+              [ -e "$$f" ] || continue
+              echo "==> [$$APP_DB] $$f"
+              "$$SQLCMD" \
+                  -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
+                  -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
+                  -d"$$APP_DB" \
+                  -b -i "$$f"
+            done
+
+            for f in /sql/user_codes/"$$USER_CODE"/procedures/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
               "$$SQLCMD" \
@@ -143,6 +164,7 @@ services:
       APP_DB: ${MCDONALDS_DB:-mcdonalds}
       DIM_DB: ${MCDONALDS_DIM_DB:-mcdonalds}
       ADLS_CONTAINER_NAME: ${MCDONALDS_ADLS_CONTAINER_NAME:-mcdonalds}
+      FACTREADINGS_OVERLAP_HOURS: ${MCDONALDS_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
@@ -182,6 +204,7 @@ services:
       APP_DB: ${SMARTFIT_DB:-smartfit}
       DIM_DB: ${SMARTFIT_DIM_DB:-smartfit}
       ADLS_CONTAINER_NAME: ${SMARTFIT_ADLS_CONTAINER_NAME:-smartfit}
+      FACTREADINGS_OVERLAP_HOURS: ${SMARTFIT_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
@@ -221,6 +244,7 @@ services:
       APP_DB: ${CDP_DB:-cdp}
       DIM_DB: ${CDP_DIM_DB:-cdp}
       ADLS_CONTAINER_NAME: ${CDP_ADLS_CONTAINER_NAME:-cdp}
+      FACTREADINGS_OVERLAP_HOURS: ${CDP_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       MSSQL_HOST: ${MSSQL_HOST}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_USER: ${MSSQL_USER}
