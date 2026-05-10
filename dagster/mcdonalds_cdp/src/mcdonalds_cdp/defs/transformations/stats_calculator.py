@@ -15,7 +15,8 @@ def stats_calculator(
         base: DataFrame,
         sensor_type: Optional[str] = "Corriente",
         min_expected_value: Optional[float] = None,
-        max_expected_value: Optional[float] = None
+        max_expected_value: Optional[float] = None,
+        sales_threshold: Optional[float] = None
 ) -> Optional[DataFrame]:
 
     base = (
@@ -43,6 +44,12 @@ def stats_calculator(
     if anomaly_cond is not None:
         agg_exprs.append(
             spark_sum(spark_when(anomaly_cond, 1).otherwise(0)).alias("out_of_range_count")
+        )
+    if sales_threshold is not None:
+        agg_exprs.append(
+            spark_sum(
+                spark_when(col("Value") > lit(sales_threshold), 1).otherwise(0)
+            ).cast("integer").alias("Sales")
         )
 
     stats_df = (
