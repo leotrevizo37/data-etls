@@ -122,6 +122,17 @@ class SparkResource:
             .config(conf=conf)
             .getOrCreate()
         )
+        if self.adls_account_name and self.adls_account_key:
+            account = self.adls_account_name
+            hadoop_conf = self._spark._jsc.hadoopConfiguration()
+            hadoop_conf.set(
+                f"fs.azure.account.key.{account}.dfs.core.windows.net",
+                self.adls_account_key,
+            )
+            hadoop_conf.set(
+                "fs.abfss.impl",
+                "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
+            )
         return self._spark
 
     def stop(self) -> None:
