@@ -1,6 +1,6 @@
-IF COL_LENGTH(N'dwh.factReadingsMeasurement', N'sales') IS NULL
+IF COL_LENGTH(N'dwh.factReadingsMeasurement', N'Sales') IS NULL
     BEGIN
         ALTER TABLE dwh.factReadingsMeasurement
-        ADD sales INT NULL;
+        ADD Sales INT NULL;
     END;
 GO

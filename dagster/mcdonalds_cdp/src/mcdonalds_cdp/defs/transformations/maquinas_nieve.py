@@ -45,6 +45,7 @@ def maquinas_nieve(
             .withColumn("Anomalies", lit(1).cast("integer"))
             .withColumn("MeasurementValue", lit(None))
             .withColumn("MeasurementStdDev", lit(None))
+            .withColumn("Sales", lit(0).cast("integer"))
         )
 
         return group_with_guid_df
@@ -55,6 +56,7 @@ def maquinas_nieve(
             "Corriente",
             None,
             13,
+            7,
         )
         .select(
             "DeviceId",
@@ -65,6 +67,7 @@ def maquinas_nieve(
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
+            "Sales",
             "sensor_type",
             "ReadingsCount",
             "device_type",
@@ -98,7 +101,7 @@ def maquinas_nieve(
 
     scaffold_enriched = (
         scaffold_df
-        .fillna({"ReadingsCount": 0, "Anomalies":-1})
+        .fillna({"ReadingsCount": 0, "Anomalies":-1, "Sales": 0})
     )
 
     if scaffold_enriched.rdd.isEmpty():

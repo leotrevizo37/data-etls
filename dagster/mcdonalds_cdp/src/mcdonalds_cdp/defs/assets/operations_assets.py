@@ -236,6 +236,7 @@ def build_devices_df_op(
             col("MeasurementValue"),
             col("MeasurementStdDev"),
             col("Anomalies"),
+            col("Sales"),
             col("LocalTimeSpan"),
             col("ReadingsCount"),
             col("sensor_type").alias("SensorType"),
@@ -336,7 +337,8 @@ def write_factreadingsmeasurement_op(
                     "MeasurementValue",
                     "MeasurementStdDev",
                     "ReadingsCount",
-                    "Anomalies"
+                    "Anomalies",
+                    "Sales"
                 )
             )
             max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
