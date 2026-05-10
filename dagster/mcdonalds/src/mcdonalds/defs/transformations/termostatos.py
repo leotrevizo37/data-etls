@@ -42,10 +42,6 @@ def termostatos(
             )
         )
 
-        empty_base_df = (
-            empty_base_df.join(dimensions_df, on=["DeviceId", "SensorId"], how="left")
-        )
-
         group_with_guid_df = (
             empty_base_df
             .withColumn(
