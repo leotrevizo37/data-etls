@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from dagster import In, Out, op, graph_asset, MaterializeResult
+from pyspark import StorageLevel
 from time import perf_counter
 
 from ..resources import SqlServerResource, SparkResource
@@ -68,6 +69,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
 
     try:
         df = spark_res.read_lecturas_range(from_utc, to_utc)
+        df = df.persist(StorageLevel.MEMORY_AND_DISK)
         if df.rdd.isEmpty():
             context.log.info("No rows found in Data Lake for window " + str(from_utc) + " to " + str(to_utc))
             succeeded = True

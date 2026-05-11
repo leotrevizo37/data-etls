@@ -5,7 +5,7 @@ import os
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
-from pyspark import SparkConf
+from pyspark import SparkConf, StorageLevel
 from dagster import resource
 from zoneinfo import ZoneInfo
 
@@ -246,7 +246,7 @@ class SparkResource:
             return 0
 
         target_partitions = 4
-        df_write = df_dedup.coalesce(target_partitions)
+        df_write = df_dedup.coalesce(target_partitions).persist(StorageLevel.MEMORY_AND_DISK)
         row_count = df_write.count()
 
         df_write.write \
