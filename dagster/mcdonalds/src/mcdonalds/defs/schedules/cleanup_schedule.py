@@ -8,7 +8,7 @@ cleanup_schedule = ScheduleDefinition(
     run_config={
         "ops": {
             "mcdonalds__cleanup_old_runs": {
-                "config": {"keep_days": 10, "batch_size": 200}
+                "config": {"keep_days": 4, "batch_size": 10}
             }
         }
     },
