@@ -38,11 +38,11 @@ def _build_defs() -> Any:
     from .schedules import (
         cleanup_schedule,
         fact_lecturas_sched_every_1h,
-        fact_lecturas_sched_every_2h,
+        fact_lecturas_sched_every_6h,
         fact_lecturas_sched_every_w,
+        factlecturas_cleanup_schedule,
         operations_sched_every_1h_w,
-        operations_sched_every_2h,
-        operations_sched_every_4h,
+        operations_sched_every_6h,
         operations_sched_every_w,
     )
     from .sensors import (
@@ -64,13 +64,13 @@ def _build_defs() -> Any:
             "spark_df_io_manager": spark_df_io_manager,
         },
         schedules=[
-            fact_lecturas_sched_every_2h,
+            fact_lecturas_sched_every_6h,
             fact_lecturas_sched_every_w,
             fact_lecturas_sched_every_1h,
-            operations_sched_every_4h,
+            factlecturas_cleanup_schedule,
             operations_sched_every_w,
             operations_sched_every_1h_w,
-            operations_sched_every_2h,
+            operations_sched_every_6h,
             cleanup_schedule,
         ],
         sensors=[
