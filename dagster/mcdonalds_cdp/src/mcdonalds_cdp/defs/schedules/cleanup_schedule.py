@@ -7,7 +7,7 @@ cleanup_schedule = ScheduleDefinition(
     cron_schedule="0 0 * * 1-5",
     run_config={
         "ops": {
-            "mcdonalds__cleanup_old_runs": {
+            "mcdonalds_cdp__cleanup_old_runs": {
                 "config": {"keep_days": 10, "batch_size": 200}
             }
         }
