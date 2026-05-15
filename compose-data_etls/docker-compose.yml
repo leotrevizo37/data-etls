@@ -9,6 +9,7 @@ x-dagster-common: &dagster_common
     - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
     - ../dagster/smartfit:/opt/dagster/app/smartfit
     - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
+    - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -262,6 +263,46 @@ services:
         [
           "CMD-SHELL",
           "dagster api grpc-health-check -p 4003 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
+  dagster-user-code-bafar-poc-gabinete:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: bafar_poc_gabinete-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/bafar_poc_gabinete
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/bafar_poc_gabinete/src
+      APP_DB: ${GABINETE_DB:-cdp}
+      DIM_DB: ${GABINETE_DIM_DB:-cdp}
+      ADLS_CONTAINER_NAME: ${GABINETE_ADLS_CONTAINER_NAME:-cdp}
+      FACTREADINGS_OVERLAP_HOURS: ${GABINETE_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+    ports:
+      - "${GABINETE_USER_CODE_PORT:-4004}:4004"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4004",
+      "-m", "bafar_poc_gabinete.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4004 -h 127.0.0.1"
         ]
       interval: 20s
       timeout: 25s
