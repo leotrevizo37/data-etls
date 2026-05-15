@@ -28,6 +28,7 @@ jobs:
           pip install -e mcdonalds
           pip install -e smartfit
           pip install -e mcdonalds_cdp
+          pip install -e bafar_poc_gabinete
 
       - name: Ruff
         run: ruff check .

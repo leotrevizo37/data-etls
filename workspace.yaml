@@ -11,3 +11,7 @@ load_from:
       host: mcdonalds_cdp-dagster-user-code
       port: 4003
       location_name: mcdonalds_cdp
+  - grpc_server:
+      host: bafar_poc_gabinete-dagster-user-code
+      port: 4004
+      location_name: bafar_poc_gabinete
