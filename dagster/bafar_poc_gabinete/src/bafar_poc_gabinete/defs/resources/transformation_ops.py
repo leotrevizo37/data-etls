@@ -2,7 +2,6 @@ from typing import Optional
 
 from ..transformations import (raw_dimensions,
                                factlecturas_extended,
-                               factReadingsMeasurement_device,
                                gabinete)
 from ..resources import (SqlServerResource,
                          SparkResource,
@@ -24,8 +23,6 @@ class TransformationOps:
             raw_dimensions,
             fetch_factlecturas_from
         )
-    def factReadingsMeasurement_device(self, df:DataFrame) -> Optional[DataFrame]:
-        return factReadingsMeasurement_device(df)
     def raw_dimensions(
             self,
             spark_res: SparkResource,
