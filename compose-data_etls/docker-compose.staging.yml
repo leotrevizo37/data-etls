@@ -29,6 +29,7 @@ services:
   spark-worker:
     command: ["sh", "-c", "sleep infinity"]
     restart: "no"
+    profiles: ["disabled"]
 
   spark-data-init:
     restart: "no"
