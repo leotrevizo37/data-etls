@@ -1,3 +1,34 @@
 services:
+  sql-init:
+    restart: "no"
+
+  dagster-postgres:
+    restart: "no"
+
+  dagster-user-code-mcd:
+    restart: "no"
+
+  dagster-user-code-smft:
+    restart: "no"
+
+  dagster-user-code-mcd-cdp:
+    restart: "no"
+
+  dagster-user-code-bafar-poc-gabinete:
+    restart: "no"
+
+  dagster-web:
+    restart: "no"
+
   dagster-daemon:
+    restart: "no"
+
+  spark-master:
+    restart: "no"
+
+  spark-worker:
     command: ["sh", "-c", "sleep infinity"]
+    restart: "no"
+
+  spark-data-init:
+    restart: "no"
