@@ -21,7 +21,6 @@ services:
     restart: "no"
 
   dagster-daemon:
-    command: ["sh", "-c", "sleep infinity"]
     restart: "no"
 
   spark-master:
