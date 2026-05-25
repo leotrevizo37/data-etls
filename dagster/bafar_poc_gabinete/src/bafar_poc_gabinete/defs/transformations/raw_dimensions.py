@@ -184,7 +184,7 @@ def raw_dimensions(
         )
     )
 
-    if sensors_devices_locations_df.rdd.isEmpty():
+    if sensors_devices_locations_df.limit(1).count() == 0:
         return None
 
     return sensors_devices_locations_df

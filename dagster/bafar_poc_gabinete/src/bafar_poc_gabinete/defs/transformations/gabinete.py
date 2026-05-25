@@ -19,7 +19,7 @@ def gabinete(
     if scaffold_base_df is None:
         return None
 
-    if base.rdd.isEmpty():
+    if base.limit(1).count() == 0:
         group_with_guid_df = (
             scaffold_base_df
             .withColumn(
@@ -131,7 +131,7 @@ def gabinete(
 
     scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "Anomalies": -1})
 
-    if scaffold_enriched.rdd.isEmpty():
+    if scaffold_enriched.limit(1).count() == 0:
         return None
 
     group_with_guid_df = (

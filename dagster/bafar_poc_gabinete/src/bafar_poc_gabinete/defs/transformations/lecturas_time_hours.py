@@ -6,7 +6,8 @@ from pyspark.sql.functions import (
     sequence,
     expr,
     lit,
-    to_timestamp)
+    to_timestamp,
+    broadcast)
 
 
 def lecturas_time_hours(
@@ -29,7 +30,7 @@ def lecturas_time_hours(
 
     sensors_df = base.select("SensorId", "DeviceId", "SensorTyId", "sensor_type", "device_type", "LocationId").distinct()
 
-    skeleton_df = sensors_df.crossJoin(hours_df)
+    skeleton_df = sensors_df.crossJoin(broadcast(hours_df))
 
     current_df = (
         skeleton_df
@@ -37,7 +38,7 @@ def lecturas_time_hours(
         .withColumnRenamed("HourStart", "LocalTimeSpan")
     )
 
-    if current_df.rdd.isEmpty():
+    if current_df.limit(1).count() == 0:
         return None
 
     return current_df

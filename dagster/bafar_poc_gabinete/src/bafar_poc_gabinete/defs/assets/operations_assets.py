@@ -13,6 +13,7 @@ from dagster import (
     Nothing,
     OpExecutionContext,
     Out,
+    RetryPolicy,
     graph_multi_asset,
     op,
 )
@@ -45,7 +46,7 @@ def _current_operational_hour_start() -> datetime:
 
 
 def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
-    if devices_df.rdd.isEmpty() or "ReadingsCount" not in devices_df.columns:
+    if "ReadingsCount" not in devices_df.columns:
         return None
 
     latest_row = (
@@ -65,6 +66,7 @@ def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
         "deps": In(Optional[str])
     },
     out=Out(Dict[str, Any]),
+    retry_policy=RetryPolicy(max_retries=3, delay=15),
 )
 def start_operations_run_and_get_range_op(
         context,
@@ -112,6 +114,7 @@ def start_operations_run_and_get_range_op(
         "window": In(Dict[str, Any])
     },
     out=Out(Optional[str]),
+    retry_policy=RetryPolicy(max_retries=2, delay=20),
 )
 def window_cleanup(
         context: OpExecutionContext,
@@ -143,6 +146,7 @@ def window_cleanup(
         "cleaning": In(Optional[str])
     },
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    retry_policy=RetryPolicy(max_retries=2, delay=15),
 )
 def load_raw_dimensions_op(
         context: OpExecutionContext,
@@ -166,6 +170,7 @@ def load_raw_dimensions_op(
         "window": In(Dict[str, Any])
     },
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    retry_policy=RetryPolicy(max_retries=2, delay=20),
 )
 def load_datalake_readings_extended_op(
         context: OpExecutionContext,
@@ -185,7 +190,7 @@ def load_datalake_readings_extended_op(
         _df: DataFrame = spark_res.create_emptiness_dataframe()
         context.log.warning("Data Lake readings are empty.")
         return _df
-    elif readings_extended_df.rdd.isEmpty():
+    elif readings_extended_df.limit(1).count() == 0:
         _df: DataFrame = spark_res.create_emptiness_dataframe()
         context.log.warning("Data Lake readings are empty.")
         return _df
@@ -202,6 +207,7 @@ def load_datalake_readings_extended_op(
         "readings_extended_df": In(Optional[DataFrame])
     },
     out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
+    retry_policy=RetryPolicy(max_retries=1, delay=10),
 )
 def build_devices_df_op(
         context: OpExecutionContext,
@@ -248,7 +254,7 @@ def build_devices_df_op(
             col("device_type").alias("DeviceType"),
         )
 
-        if df.rdd.isEmpty():
+        if df.limit(1).count() == 0:
             context.log.info("No rows for method: " + method)
             continue
 
@@ -293,6 +299,7 @@ def build_devices_df_op(
         "asset": Out(Nothing),
         "result": Out(Dict[str, Any])
     },
+    retry_policy=RetryPolicy(max_retries=2, delay=30),
 )
 def write_factreadingsmeasurement_op(
         context,
@@ -322,7 +329,7 @@ def write_factreadingsmeasurement_op(
         context.add_output_metadata(metadata, output_name="asset")
 
     try:
-        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
+        if len(devices_df.columns) <= 1 or devices_df.limit(1).count() == 0:
             succeeded = True
         else:
             rows_with_readings_count_gt_0 = devices_df.filter(
@@ -374,6 +381,7 @@ def write_factreadingsmeasurement_op(
         "hourly_readings": In(Dict[str, Any])
     },
     out=Out(Optional[Dict[str, Any]]),
+    retry_policy=RetryPolicy(max_retries=3, delay=15),
 )
 def finalize_operations_run_op(
         context,

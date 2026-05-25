@@ -84,6 +84,7 @@ class SparkResource:
         self.jdbc_driver = jdbc_driver
         self.jdbc_password = jdbc_password
         self._spark: Optional[SparkSession] = None
+        self._df_store: Dict[str, Any] = {}
 
     def get_spark(self) -> SparkSession:
         if self._spark is not None:
@@ -113,8 +114,6 @@ class SparkResource:
                         "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
                     ])
             )
-        self._spark = SparkSession.builder.config(conf=conf).getOrCreate()
-
         self._spark = (
             SparkSession.builder
             .appName(self.app_name)
@@ -134,6 +133,23 @@ class SparkResource:
                 "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
             )
         return self._spark
+
+    def store_df(self, key: str, df: "DataFrame") -> "DataFrame":
+        """Persiste el DataFrame en Spark y lo materializa inmediatamente.
+        Sin .count(), persist() es lazy: el plan se re-ejecutaría desde el
+        origen (JDBC/ADLS) cada vez que un op downstream lo use, lo que en
+        multi-nodo puede causar un loop de executors al intentar computar
+        para un broadcast o join antes de que el cache esté listo.
+        """
+        df = df.persist(StorageLevel.MEMORY_AND_DISK)
+        df.count()  # fuerza la ejecución del plan UNA sola vez y rellena el cache
+        self._df_store[key] = df
+        return df
+
+
+    def load_df(self, key: str) -> Optional["DataFrame"]:
+        """Recupera un DataFrame previamente almacenado por store_df."""
+        return self._df_store.get(key)
 
     def stop(self) -> None:
         if self._spark is not None:
@@ -239,15 +255,11 @@ class SparkResource:
         return readings_df.filter(col("LocalTimeSpan") >= from_local)
 
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-        df_dedup = df.dropDuplicates(["ReadId"])
-        if df_dedup.rdd.isEmpty():
-            return 0
-
-        target_partitions = 4
-        df_write = df_dedup.coalesce(target_partitions).persist(StorageLevel.MEMORY_AND_DISK)
+        df_write = df.dropDuplicates(["ReadId"]).coalesce(4).persist(StorageLevel.MEMORY_AND_DISK)
         row_count = df_write.count()
+        if row_count == 0:
+            df_write.unpersist()
+            return 0
 
         df_write.write \
             .mode("append") \
@@ -256,12 +268,10 @@ class SparkResource:
             table="dwh.factLecturas",
             properties=self._build_wh_path()["properties"]
         )
+        df_write.unpersist()
         return row_count
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-
         try:
             max_df = self._spark.read.jdbc(
                 url=self._build_wh_path()["url"],
@@ -273,15 +283,13 @@ class SparkResource:
         except Exception:
             max_ts = None
 
-        df_filtered = df
-        if max_ts is not None:
-            df_filtered = df_filtered.filter(col("LocalTimeSpan") >= max_ts)
+        df_filtered = df if max_ts is None else df.filter(col("LocalTimeSpan") >= max_ts)
 
-        if df_filtered.rdd.isEmpty():
-            return 0
-
-        df_write = df_filtered.coalesce(4)
+        df_write = df_filtered.coalesce(4).persist(StorageLevel.MEMORY_AND_DISK)
         row_count = df_write.count()
+        if row_count == 0:
+            df_write.unpersist()
+            return 0
 
         df_write.write.jdbc(
             url=self._build_wh_path()["url"],
@@ -294,15 +302,15 @@ class SparkResource:
                 "batchsize": "500",
             },
         )
-
+        df_write.unpersist()
         return row_count
 
     def write_fact_operations(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-
-        df_write = df.coalesce(1)
+        df_write = df.coalesce(1).persist(StorageLevel.MEMORY_AND_DISK)
         row_count = df_write.count()
+        if row_count == 0:
+            df_write.unpersist()
+            return 0
 
         df_write.write.jdbc(
             url=self._build_wh_path()["url"],
@@ -310,27 +318,20 @@ class SparkResource:
             mode="append",
             properties=self._build_wh_path()["properties"],
         )
-
+        df_write.unpersist()
         return row_count
 
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
-        if df.rdd.isEmpty():
-            return None
         row = df.agg(spark_max(time_span_type).alias("max_ts")).collect()[0]
-        max_ts = row.max_ts
-        if max_ts is None:
-            return None
-        return max_ts
+        return row.max_ts if row.max_ts is not None else None
 
     def write_dim_prod_dimensions(self, df: DataFrame) -> Optional[int]:
-        if df.rdd.isEmpty():
-            return None
-        df_dedup = df.dropDuplicates(["SensorId"])
-        if df_dedup.rdd.isEmpty():
+        df_write = df.dropDuplicates(["SensorId"]).coalesce(2).persist(StorageLevel.MEMORY_AND_DISK)
+        row_count = df_write.count()
+        if row_count == 0:
+            df_write.unpersist()
             return 0
-
-        df_write = df_dedup.coalesce(2)
 
         df_write.write \
             .mode("append") \
@@ -339,13 +340,10 @@ class SparkResource:
             table="dwh.dimSidonProdDimensions",
             properties=self._build_wh_path()["properties"]
         )
-
-        return df_write.count()
+        df_write.unpersist()
+        return row_count
 
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
-
         df_write = df.dropDuplicates(
             [
                 "SensorId",
@@ -356,10 +354,10 @@ class SparkResource:
                 "min_expected_value",
                 "max_expected_value",
             ]
-        ).coalesce(2)
+        ).coalesce(2).persist(StorageLevel.MEMORY_AND_DISK)
         row_count = df_write.count()
-
         if row_count == 0:
+            df_write.unpersist()
             return 0
 
         df_write.write.jdbc(
@@ -368,7 +366,7 @@ class SparkResource:
             mode="append",
             properties=self._build_wh_path()["properties"],
         )
-
+        df_write.unpersist()
         return row_count
 
     def read_dim_prod_dimensions(self) -> DataFrame:
