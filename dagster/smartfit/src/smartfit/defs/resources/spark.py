@@ -30,6 +30,7 @@ def _local_to_utc_naive(dt: datetime) -> datetime:
         dt = dt.replace(tzinfo=_get_operations_timezone())
     return _coerce_utc_naive(dt)
 
+
 def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
     current = start.date()
     last = end.date()
@@ -67,6 +68,9 @@ class SparkResource:
         jdbc_user: str,
         jdbc_driver: str,
         jdbc_password: str,
+        jdbc_write_num_chunks: int,
+        jdbc_write_target_partitions: int,
+        jdbc_write_batch_size: int,
     ) -> None:
         self.master_url = master_url
         self.app_name = app_name
@@ -83,6 +87,9 @@ class SparkResource:
         self.jdbc_user = jdbc_user
         self.jdbc_driver = jdbc_driver
         self.jdbc_password = jdbc_password
+        self.jdbc_write_num_chunks = jdbc_write_num_chunks
+        self.jdbc_write_target_partitions = jdbc_write_target_partitions
+        self.jdbc_write_batch_size = jdbc_write_batch_size
         self._spark: Optional[SparkSession] = None
 
     def get_spark(self) -> SparkSession:
@@ -171,6 +178,55 @@ class SparkResource:
         }
         return {"url": url, "properties": properties}
 
+    def _write_jdbc_in_chunks(
+        self,
+        df: DataFrame,
+        table: str,
+        chunk_column: str,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> int:
+        wh = self._build_wh_path()
+        url = wh["url"]
+        write_properties = dict(properties or wh["properties"])
+        write_properties.pop("batchsize", None)
+
+        df_chunked = (
+            df
+            .selectExpr("*", f"pmod(hash(`{chunk_column}`), {self.jdbc_write_num_chunks}) as __chunk_id")
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+
+        try:
+            row_count = df_chunked.count()
+            if row_count == 0:
+                return 0
+
+            for chunk_id in range(self.jdbc_write_num_chunks):
+                df_chunk = (
+                    df_chunked
+                    .filter(f"__chunk_id = {chunk_id}")
+                    .drop("__chunk_id")
+                    .coalesce(self.jdbc_write_target_partitions)
+                )
+                if df_chunk.rdd.isEmpty():
+                    continue
+
+                (
+                    df_chunk.write
+                    .mode("append")
+                    .format("jdbc")
+                    .option("url", url)
+                    .option("dbtable", table)
+                    .option("batchsize", str(self.jdbc_write_batch_size))
+                    .option("isolationLevel", "READ_COMMITTED")
+                    .options(**write_properties)
+                    .save()
+                )
+        finally:
+            df_chunked.unpersist()
+
+        return row_count
+
     def _has_readable_files(self, path: str) -> bool:
         spark = self.get_spark()
         j_path = spark._jvm.org.apache.hadoop.fs.Path(path)
@@ -245,18 +301,11 @@ class SparkResource:
         if df_dedup.rdd.isEmpty():
             return 0
 
-        target_partitions = 4
-        df_write = df_dedup.coalesce(target_partitions).persist(StorageLevel.MEMORY_AND_DISK)
-        row_count = df_write.count()
-
-        df_write.write \
-            .mode("append") \
-            .jdbc(
-            url=self._build_wh_path()["url"],
+        return self._write_jdbc_in_chunks(
+            df_dedup,
             table="dwh.factLecturas",
-            properties=self._build_wh_path()["properties"]
+            chunk_column="ReadId",
         )
-        return row_count
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
@@ -280,38 +329,26 @@ class SparkResource:
         if df_filtered.rdd.isEmpty():
             return 0
 
-        df_write = df_filtered.coalesce(4)
-        row_count = df_write.count()
-
-        df_write.write.jdbc(
-            url=self._build_wh_path()["url"],
+        return self._write_jdbc_in_chunks(
+            df_filtered,
             table="dwh.factReadingsMeasurement",
-            mode="append",
+            chunk_column="OperationId",
             properties={
                 "user": self.jdbc_user,
                 "password": self.jdbc_password,
                 "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                "batchsize": "500",
             },
         )
-
-        return row_count
 
     def write_fact_operations(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
             return 0
 
-        df_write = df.coalesce(1)
-        row_count = df_write.count()
-
-        df_write.write.jdbc(
-            url=self._build_wh_path()["url"],
+        return self._write_jdbc_in_chunks(
+            df,
             table="dwh.factReadingsMeasurement",
-            mode="append",
-            properties=self._build_wh_path()["properties"],
+            chunk_column="OperationId",
         )
-
-        return row_count
 
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
@@ -330,17 +367,11 @@ class SparkResource:
         if df_dedup.rdd.isEmpty():
             return 0
 
-        df_write = df_dedup.coalesce(2)
-
-        df_write.write \
-            .mode("append") \
-            .jdbc(
-            url=self._build_wh_path()["url"],
+        return self._write_jdbc_in_chunks(
+            df_dedup,
             table="dwh.dimSidonProdDimensions",
-            properties=self._build_wh_path()["properties"]
+            chunk_column="SensorId",
         )
-
-        return df_write.count()
 
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
         if df.rdd.isEmpty():
@@ -356,20 +387,13 @@ class SparkResource:
                 "min_expected_value",
                 "max_expected_value",
             ]
-        ).coalesce(2)
-        row_count = df_write.count()
-
-        if row_count == 0:
-            return 0
-
-        df_write.write.jdbc(
-            url=self._build_wh_path()["url"],
-            table="dwh.dimSensorExpectedVal",
-            mode="append",
-            properties=self._build_wh_path()["properties"],
         )
 
-        return row_count
+        return self._write_jdbc_in_chunks(
+            df_write,
+            table="dwh.dimSensorExpectedVal",
+            chunk_column="SensorId",
+        )
 
     def read_dim_prod_dimensions(self) -> DataFrame:
         spark = self.get_spark()
@@ -401,6 +425,9 @@ def spark_resource(_):
     jdbc_user = os.getenv("MSSQL_USER", "")
     jdbc_driver = os.getenv("MSSQL_DRIVER", "")
     jdbc_password = os.getenv("MSSQL_PASSWORD", "")
+    jdbc_write_num_chunks = int(os.getenv("JDBC_WRITE_NUM_CHUNKS", "5"))
+    jdbc_write_target_partitions = int(os.getenv("JDBC_WRITE_TARGET_PARTITIONS", "2"))
+    jdbc_write_batch_size = int(os.getenv("JDBC_WRITE_BATCH_SIZE", "10"))
     spark_res = SparkResource(
         master_url=master_url,
         app_name=app_name,
@@ -417,6 +444,9 @@ def spark_resource(_):
         jdbc_user=jdbc_user,
         jdbc_driver=jdbc_driver,
         jdbc_password=jdbc_password,
+        jdbc_write_num_chunks=jdbc_write_num_chunks,
+        jdbc_write_target_partitions=jdbc_write_target_partitions,
+        jdbc_write_batch_size=jdbc_write_batch_size,
     )
     try:
         yield spark_res

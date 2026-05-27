@@ -170,7 +170,7 @@ def load_raw_dimensions_op(
 
 @op(
     required_resource_keys={
-        "spark"
+        "spark",
     },
     ins={
         "raw_dims_df": In(DataFrame),
@@ -297,7 +297,8 @@ def build_devices_df_op(
 
 @op(
     required_resource_keys={
-        "spark"
+        "spark",
+        "sqlserver",
     },
     ins={
         "devices_df": In(DataFrame),
@@ -322,6 +323,23 @@ def write_factreadingsmeasurement_op(
     succeeded = False
     error_message: Optional[str] = None
 
+    sqlserver: SqlServerResource = context.resources.sqlserver
+    retry_number = getattr(context, "retry_number", 0)
+
+    def cleanup_partial_write() -> None:
+        deleted_rows = sqlserver.delete_range(
+            schema_name="dwh",
+            table_name="factReadingsMeasurement",
+            time_column="LocalTimeSpan",
+            from_utc=window["delete_from"],
+            to_utc=window["delete_to_exclusive"],
+        )
+        context.log.info(
+            "Deleted "
+            + str(deleted_rows or 0)
+            + " partial factReadingsMeasurement rows before retry."
+        )
+
     def add_asset_metadata() -> None:
         metadata: Dict[str, Any] = {
             "row_count": inserted,
@@ -337,6 +355,9 @@ def write_factreadingsmeasurement_op(
         context.add_output_metadata(metadata, output_name="asset")
 
     try:
+        if retry_number > 0:
+            cleanup_partial_write()
+
         if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
             succeeded = True
         else:
@@ -366,7 +387,13 @@ def write_factreadingsmeasurement_op(
     except Exception as ex:
         error_message = str(ex)
         succeeded = False
-        retry_number = getattr(context, "retry_number", 0)
+        try:
+            cleanup_partial_write()
+        except Exception as cleanup_ex:
+            context.log.warning(
+                "Could not clean partial factReadingsMeasurement rows before retry: %s",
+                cleanup_ex,
+            )
         if retry_number < OPERATIONS_MAX_RETRIES:
             context.log.warning(
                 "factReadingsMeasurement write failed on attempt %s of %s. "
