@@ -1,6 +1,7 @@
 import sys
 import unittest
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 
 
@@ -8,13 +9,12 @@ PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
-from smartfit.factlecturas_backfill import (
-    build_backfill_window,
-    build_daily_backfill_window,
-    build_sensor_backfill_request,
-    normalize_sensor_ids,
-    parse_utc_datetime,
-)
+factlecturas_backfill = import_module("smartfit.factlecturas_backfill")
+build_backfill_window = factlecturas_backfill.build_backfill_window
+build_daily_backfill_window = factlecturas_backfill.build_daily_backfill_window
+build_sensor_backfill_request = factlecturas_backfill.build_sensor_backfill_request
+normalize_sensor_ids = factlecturas_backfill.normalize_sensor_ids
+parse_utc_datetime = factlecturas_backfill.parse_utc_datetime
 
 
 class FactLecturasBackfillTests(unittest.TestCase):
