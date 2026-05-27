@@ -4,6 +4,10 @@ from .refresh_dimensions_job import refresh_dimensions_job
 from .refresh_sensor_expected_values_job import refresh_sensor_expected_values_job
 from .cleanup_job import cleanup_job
 from .factlecturas_cleanup_job import factlecturas_cleanup_job
+from .factlecturas_backfill_jobs import (
+    fact_lecturas_backfill_daily_job,
+    fact_lecturas_sensor_backfill_job,
+)
 
 __all__ = [
     "fact_lecturas_ingestion_job",
@@ -12,4 +16,6 @@ __all__ = [
     "refresh_sensor_expected_values_job",
     "cleanup_job",
     "factlecturas_cleanup_job",
+    "fact_lecturas_backfill_daily_job",
+    "fact_lecturas_sensor_backfill_job",
 ]
