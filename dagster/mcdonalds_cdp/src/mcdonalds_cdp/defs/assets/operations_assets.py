@@ -13,6 +13,8 @@ from dagster import (
     Nothing,
     OpExecutionContext,
     Out,
+    RetryPolicy,
+    RetryRequested,
     graph_multi_asset,
     op,
 )
@@ -24,6 +26,12 @@ from ...operations_window import build_operations_window, resolve_operations_wat
 
 
 OPERATIONS_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
+OPERATIONS_MAX_RETRIES = 3
+OPERATIONS_RETRY_DELAY_SECONDS = 60
+OPERATIONS_RETRY_POLICY = RetryPolicy(
+    max_retries=OPERATIONS_MAX_RETRIES,
+    delay=OPERATIONS_RETRY_DELAY_SECONDS,
+)
 
 def _truncate_to_seconds(dt: datetime) -> datetime:
     return dt.replace(microsecond=0)
@@ -65,6 +73,7 @@ def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
         "deps": In(Optional[str])
     },
     out=Out(Dict[str, Any]),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def start_operations_run_and_get_range_op(
         context,
@@ -112,6 +121,7 @@ def start_operations_run_and_get_range_op(
         "window": In(Dict[str, Any])
     },
     out=Out(Optional[str]),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def window_cleanup(
         context: OpExecutionContext,
@@ -143,6 +153,7 @@ def window_cleanup(
         "cleaning": In(Optional[str])
     },
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def load_raw_dimensions_op(
         context: OpExecutionContext,
@@ -166,6 +177,7 @@ def load_raw_dimensions_op(
         "window": In(Dict[str, Any])
     },
     out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def load_datalake_readings_extended_op(
         context: OpExecutionContext,
@@ -202,6 +214,7 @@ def load_datalake_readings_extended_op(
         "readings_extended_df": In(Optional[DataFrame])
     },
     out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def build_devices_df_op(
         context: OpExecutionContext,
@@ -288,6 +301,7 @@ def build_devices_df_op(
         "asset": Out(Nothing),
         "result": Out(Dict[str, Any])
     },
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def write_factreadingsmeasurement_op(
         context,
@@ -347,6 +361,18 @@ def write_factreadingsmeasurement_op(
     except Exception as ex:
         error_message = str(ex)
         succeeded = False
+        retry_number = getattr(context, "retry_number", 0)
+        if retry_number < OPERATIONS_MAX_RETRIES:
+            context.log.warning(
+                "factReadingsMeasurement write failed on attempt %s of %s. "
+                "Retrying operation.",
+                retry_number + 1,
+                OPERATIONS_MAX_RETRIES + 1,
+            )
+            raise RetryRequested(
+                max_retries=OPERATIONS_MAX_RETRIES,
+                seconds_to_wait=OPERATIONS_RETRY_DELAY_SECONDS,
+            ) from ex
 
     add_asset_metadata()
 
@@ -370,6 +396,7 @@ def write_factreadingsmeasurement_op(
         "hourly_readings": In(Dict[str, Any])
     },
     out=Out(Optional[Dict[str, Any]]),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def finalize_operations_run_op(
         context,
@@ -422,7 +449,8 @@ def finalize_operations_run_op(
     ins={
         "deps": In(Optional[Dict[str, Any]])
     },
-    out=Out(Optional[str])
+    out=Out(Optional[str]),
+    retry_policy=OPERATIONS_RETRY_POLICY,
 )
 def upstream_deps_gate(context,
                        deps:Optional[Dict[str, Any]] = None) -> Optional[str]:
