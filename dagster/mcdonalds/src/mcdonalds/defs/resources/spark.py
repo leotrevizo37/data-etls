@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 
 import os
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, max as spark_max
+from pyspark.sql.functions import col, max as spark_max, upper
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
 from pyspark import SparkConf, StorageLevel
 from dagster import resource
@@ -288,6 +288,20 @@ class SparkResource:
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
+
+    def read_lecturas_backfill_range(
+        self,
+        from_utc: datetime,
+        to_utc: datetime,
+        sensor_ids: Optional[List[str]] = None,
+    ) -> DataFrame:
+        df = self.read_lecturas_range(from_utc, to_utc)
+        df = df.filter(col("TimeSpan") < to_utc)
+        if sensor_ids:
+            normalized_sensor_ids = [str(sensor_id).upper() for sensor_id in sensor_ids]
+            df = df.filter(upper(col("SensorId").cast("string")).isin(*normalized_sensor_ids))
+
+        return df
 
     def read_lecturas_local_range(self, from_local: datetime, to_utc: datetime) -> DataFrame:
         from_utc = _local_to_utc_naive(from_local)

@@ -24,7 +24,9 @@ def _build_defs() -> Any:
     )
     from .jobs import (
         cleanup_job,
+        fact_lecturas_backfill_daily_job,
         fact_lecturas_ingestion_job,
+        fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         refresh_dimensions_job,
     )
@@ -52,6 +54,8 @@ def _build_defs() -> Any:
     return Definitions(
         jobs=[
             fact_lecturas_ingestion_job,
+            fact_lecturas_backfill_daily_job,
+            fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             refresh_dimensions_job,
             cleanup_job,
