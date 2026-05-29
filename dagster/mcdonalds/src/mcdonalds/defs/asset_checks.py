@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-from dagster import AssetCheckResult, AssetKey, asset_check
+from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, asset_check
 
 
 PROJECT_NAME = "mcdonalds"
 MIN_REAL_READINGS_RATIO = 0.6
+TARGET_REAL_READINGS_RATIO = 0.66
 
 FACTREADINGS_ASSET_KEY = AssetKey([PROJECT_NAME, "dwh_factReadingsMeasurement"])
 OPERATIONS_CONTROL_ASSET_KEY = AssetKey([PROJECT_NAME, "ctl_IngestionControl"])
@@ -90,14 +91,22 @@ def _build_real_readings_ratio_result(
         _coerce_int(_metadata_value(metadata, "rows_with_readings_count_gt_0")) or 0
     )
     ratio = rows_with_readings / row_count if row_count else 0.0
+    passed = ratio >= TARGET_REAL_READINGS_RATIO
+    severity = (
+        AssetCheckSeverity.ERROR
+        if ratio < MIN_REAL_READINGS_RATIO
+        else AssetCheckSeverity.WARN
+    )
 
     return AssetCheckResult(
-        passed=bool(row_count > 0 and ratio > MIN_REAL_READINGS_RATIO),
+        passed=bool(row_count > 0 and passed),
+        severity=severity,
         metadata={
             "row_count": row_count,
             "rows_with_readings_count_gt_0": rows_with_readings,
             "ratio": round(ratio, 4),
             "minimum_ratio": MIN_REAL_READINGS_RATIO,
+            "target_ratio": TARGET_REAL_READINGS_RATIO,
         },
     )
 
@@ -110,6 +119,7 @@ def _build_local_window_order_result(
     return AssetCheckResult(
         passed=bool(from_local is not None and to_local is not None
                     and to_local > from_local),
+        severity=AssetCheckSeverity.WARN,
         metadata={
             "from_local": str(from_local),
             "to_local": str(to_local),
@@ -137,6 +147,7 @@ def _build_to_local_gte_max_time_span_result(
 
     return AssetCheckResult(
         passed=bool(passed),
+        severity=AssetCheckSeverity.WARN,
         metadata={
             "to_local": str(to_local),
             "max_time_span": str(max_time_span),
@@ -154,6 +165,7 @@ def _build_original_lte_to_local_result(
     return AssetCheckResult(
         passed=bool(original_last_loaded_at is not None and to_local is not None
                     and original_last_loaded_at <= to_local),
+        severity=AssetCheckSeverity.WARN,
         metadata={
             "original_last_loaded_at": str(original_last_loaded_at),
             "to_local": str(to_local),
@@ -167,6 +179,7 @@ def _build_factlecturas_row_count_result(
 
     return AssetCheckResult(
         passed=bool(row_count > 0),
+        severity=AssetCheckSeverity.WARN,
         metadata={"row_count": row_count},
     )
 
@@ -181,6 +194,7 @@ def _build_factlecturas_original_lte_to_utc_result(
     return AssetCheckResult(
         passed=bool(original_last_loaded_at is not None and to_utc is not None
                     and original_last_loaded_at <= to_utc),
+        severity=AssetCheckSeverity.WARN,
         metadata={
             "original_last_loaded_at": str(original_last_loaded_at),
             "to_utc": str(to_utc),
