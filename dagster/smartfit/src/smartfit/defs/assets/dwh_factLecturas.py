@@ -175,6 +175,8 @@ def finalize_run_op(context, result: Dict[str, Any]):
         metadata={
             "row_count": result.get("row_count", 0),
             "elapsed_seconds": elapsed,
+            "to_utc": str(to_utc),
+            "original_last_loaded_at": str(original_last_loaded_at),
         }
     )
 
