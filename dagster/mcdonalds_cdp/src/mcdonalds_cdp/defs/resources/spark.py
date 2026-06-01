@@ -10,6 +10,8 @@ from dagster import resource
 from zoneinfo import ZoneInfo
 
 OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
+HADOOP_AWS_PACKAGE = "org.apache.hadoop:hadoop-aws:3.4.1"
+MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
 
 
 def _get_operations_timezone():
@@ -61,6 +63,13 @@ class SparkResource:
         adls_container_name: str,
         adls_base_path: str,
         adls_account_key: Optional[str],
+        ozone_s3_endpoint: str,
+        ozone_s3_region: str,
+        ozone_s3_access_key: Optional[str],
+        ozone_s3_secret_key: Optional[str],
+        ozone_s3_path_style_access: str,
+        ozone_s3_bucket_probe: str,
+        ozone_s3_change_detection_mode: str,
         jdbc_host: str,
         jdbc_port: int,
         jdbc_database: str,
@@ -80,6 +89,13 @@ class SparkResource:
         self.adls_container_name = adls_container_name
         self.adls_base_path = adls_base_path
         self.adls_account_key = adls_account_key
+        self.ozone_s3_endpoint = ozone_s3_endpoint
+        self.ozone_s3_region = ozone_s3_region
+        self.ozone_s3_access_key = ozone_s3_access_key
+        self.ozone_s3_secret_key = ozone_s3_secret_key
+        self.ozone_s3_path_style_access = ozone_s3_path_style_access
+        self.ozone_s3_bucket_probe = ozone_s3_bucket_probe
+        self.ozone_s3_change_detection_mode = ozone_s3_change_detection_mode
         self.jdbc_host = jdbc_host
         self.jdbc_port = jdbc_port
         self.jdbc_database = jdbc_database
@@ -91,6 +107,47 @@ class SparkResource:
         self.jdbc_write_batch_size = jdbc_write_batch_size
         self._spark: Optional[SparkSession] = None
 
+    def _ozone_s3_enabled(self) -> bool:
+        return bool(self.ozone_s3_endpoint)
+
+    def _spark_packages(self) -> List[str]:
+        packages = []
+        if self.adls_account_name and self.adls_account_key:
+            packages.extend([
+                "org.apache.hadoop:hadoop-azure:3.3.4",
+                "com.microsoft.azure:azure-storage:8.6.6",
+                MSSQL_JDBC_PACKAGE,
+            ])
+        if self._ozone_s3_enabled():
+            packages.append(HADOOP_AWS_PACKAGE)
+        return packages
+
+    def _build_ozone_s3_options(self) -> Dict[str, str]:
+        if not self._ozone_s3_enabled():
+            return {}
+
+        options = {
+            "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            "fs.s3a.endpoint": self.ozone_s3_endpoint,
+            "fs.s3a.path.style.access": self.ozone_s3_path_style_access,
+            "fs.s3a.bucket.probe": self.ozone_s3_bucket_probe,
+            "fs.s3a.change.detection.mode": self.ozone_s3_change_detection_mode,
+            "fs.s3a.connection.ssl.enabled": (
+                "false"
+                if self.ozone_s3_endpoint.lower().startswith("http://")
+                else "true"
+            ),
+        }
+        if self.ozone_s3_region:
+            options["fs.s3a.endpoint.region"] = self.ozone_s3_region
+        if self.ozone_s3_access_key and self.ozone_s3_secret_key:
+            options["fs.s3a.access.key"] = self.ozone_s3_access_key
+            options["fs.s3a.secret.key"] = self.ozone_s3_secret_key
+            options["fs.s3a.aws.credentials.provider"] = (
+                "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+            )
+        return options
+
     def get_spark(self) -> SparkSession:
         if self._spark is not None:
             return self._spark
@@ -101,6 +158,12 @@ class SparkResource:
             .setMaster(self.master_url)
             .set("spark.executor.memory", self.executor_mem)
         )
+        packages = self._spark_packages()
+        if packages:
+            conf.set("spark.jars.packages", ",".join(packages))
+        for key, value in self._build_ozone_s3_options().items():
+            conf.set("spark.hadoop." + key, value)
+
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
             conf.set(
@@ -113,11 +176,7 @@ class SparkResource:
             )
             conf.set(
                 "spark.jars.packages",
-                    ",".join([
-                        "org.apache.hadoop:hadoop-azure:3.3.4",
-                        "com.microsoft.azure:azure-storage:8.6.6",
-                        "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
-                    ])
+                ",".join(packages)
             )
         self._spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
@@ -139,6 +198,8 @@ class SparkResource:
                 "fs.abfss.impl",
                 "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
             )
+        for key, value in self._build_ozone_s3_options().items():
+            self._spark._jsc.hadoopConfiguration().set(key, value)
         return self._spark
 
     def stop(self) -> None:
@@ -432,6 +493,16 @@ def spark_resource(_):
     adls_container_name = os.getenv("ADLS_CONTAINER_NAME", "")
     adls_base_path = os.getenv("ADLS_BASE_PATH", "")
     adls_account_key = os.getenv("ADLS_ACCOUNT_KEY")
+    ozone_s3_endpoint = os.getenv("OZONE_S3_ENDPOINT", "")
+    ozone_s3_region = os.getenv("OZONE_S3_REGION", "us-east-1")
+    ozone_s3_access_key = os.getenv("OZONE_S3_ACCESS_KEY")
+    ozone_s3_secret_key = os.getenv("OZONE_S3_SECRET_KEY")
+    ozone_s3_path_style_access = os.getenv("OZONE_S3_PATH_STYLE_ACCESS", "true")
+    ozone_s3_bucket_probe = os.getenv("OZONE_S3_BUCKET_PROBE", "0")
+    ozone_s3_change_detection_mode = os.getenv(
+        "OZONE_S3_CHANGE_DETECTION_MODE",
+        "none",
+    )
     jdbc_host = os.getenv("MSSQL_HOST", "localhost")
     jdbc_port = int(os.getenv("MSSQL_PORT", "1433"))
     jdbc_database = os.getenv("APP_DB", "")
@@ -451,6 +522,13 @@ def spark_resource(_):
         adls_container_name=adls_container_name,
         adls_base_path=adls_base_path,
         adls_account_key=adls_account_key,
+        ozone_s3_endpoint=ozone_s3_endpoint,
+        ozone_s3_region=ozone_s3_region,
+        ozone_s3_access_key=ozone_s3_access_key,
+        ozone_s3_secret_key=ozone_s3_secret_key,
+        ozone_s3_path_style_access=ozone_s3_path_style_access,
+        ozone_s3_bucket_probe=ozone_s3_bucket_probe,
+        ozone_s3_change_detection_mode=ozone_s3_change_detection_mode,
         jdbc_host=jdbc_host,
         jdbc_port=jdbc_port,
         jdbc_database=jdbc_database,
