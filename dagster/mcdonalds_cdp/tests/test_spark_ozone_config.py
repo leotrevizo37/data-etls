@@ -14,24 +14,33 @@ def _install_optional_stubs() -> None:
         try:
             import dagster as dagster_module
         except Exception:
-            dagster_module = None
-    if dagster_module is None or not hasattr(dagster_module, "resource"):
-        dagster = types.ModuleType("dagster")
+            dagster_module = types.ModuleType("dagster")
+            dagster_module.__path__ = [str(PROJECT_ROOT.parent)]
+            sys.modules["dagster"] = dagster_module
+    if not hasattr(dagster_module, "__path__"):
+        dagster_module.__path__ = [str(PROJECT_ROOT.parent)]
 
-        class _DagsterBase:
-            pass
+    class _DagsterBase:
+        pass
 
-        def _decorator(*_args, **_kwargs):
-            def _wrap(fn):
-                return fn
-            return _wrap
+    def _decorator(*_args, **_kwargs):
+        def _wrap(fn):
+            return fn
+        return _wrap
 
-        dagster.IOManager = _DagsterBase
-        dagster.InputContext = _DagsterBase
-        dagster.OutputContext = _DagsterBase
-        dagster.io_manager = _decorator
-        dagster.resource = lambda fn=None, **kwargs: fn if fn else _decorator(**kwargs)
-        sys.modules["dagster"] = dagster
+    def _resource(fn=None, **kwargs):
+        return fn if fn else _decorator(**kwargs)
+
+    if not hasattr(dagster_module, "IOManager"):
+        dagster_module.IOManager = _DagsterBase
+    if not hasattr(dagster_module, "InputContext"):
+        dagster_module.InputContext = _DagsterBase
+    if not hasattr(dagster_module, "OutputContext"):
+        dagster_module.OutputContext = _DagsterBase
+    if not hasattr(dagster_module, "io_manager"):
+        dagster_module.io_manager = _decorator
+    if not hasattr(dagster_module, "resource"):
+        dagster_module.resource = _resource
 
     if "pyspark" not in sys.modules and importlib.util.find_spec("pyspark") is None:
         pyspark = types.ModuleType("pyspark")
