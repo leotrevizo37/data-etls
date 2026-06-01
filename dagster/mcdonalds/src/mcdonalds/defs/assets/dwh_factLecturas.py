@@ -80,7 +80,7 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
     try:
         df = spark_res.read_lecturas_range(from_utc, to_utc)
         df = df.persist(StorageLevel.MEMORY_AND_DISK)
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             context.log.info("No rows found in Data Lake for window " + str(from_utc) + " to " + str(to_utc))
             succeeded = True
         else:

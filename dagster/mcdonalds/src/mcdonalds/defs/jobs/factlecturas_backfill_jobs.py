@@ -64,7 +64,7 @@ def _load_factlecturas_window(
     row_count = 0
     max_time_span = None
     try:
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             context.log.info(
                 "No FactLecturas rows found for backfill window %s to %s.",
                 from_utc,

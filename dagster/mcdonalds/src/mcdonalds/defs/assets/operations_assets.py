@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, max as spark_max
+from pyspark import StorageLevel
 from dagster import (
     AssetIn,
     AssetKey,
@@ -53,7 +54,7 @@ def _current_operational_hour_start() -> datetime:
 
 
 def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
-    if devices_df.rdd.isEmpty() or "ReadingsCount" not in devices_df.columns:
+    if "ReadingsCount" not in devices_df.columns or len(devices_df.head(1)) == 0:
         return None
 
     latest_row = (
@@ -197,10 +198,6 @@ def load_datalake_readings_extended_op(
         _df: DataFrame = spark_res.create_emptiness_dataframe()
         context.log.warning("Data Lake readings are empty.")
         return _df
-    elif readings_extended_df.rdd.isEmpty():
-        _df: DataFrame = spark_res.create_emptiness_dataframe()
-        context.log.warning("Data Lake readings are empty.")
-        return _df
 
     return readings_extended_df
 
@@ -227,6 +224,8 @@ def build_devices_df_op(
     if len(readings_extended_df.columns) <= 1:
         context.log.warning("Readings_extended_df is empty.")
         return readings_extended_df
+
+    readings_extended_df = readings_extended_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     methods = [
         "maquinas_nieve",
@@ -260,7 +259,7 @@ def build_devices_df_op(
             col("device_type").alias("DeviceType"),
         )
 
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             context.log.info("No rows for method: " + method)
             continue
 
@@ -271,6 +270,7 @@ def build_devices_df_op(
 
     if union_df is None:
         context.log.info("No rows across all transformations.")
+        readings_extended_df.unpersist()
         return readings_extended_df.limit(0)
 
     limited_df = limit_operations_rows_to_closed_hours(
@@ -284,6 +284,7 @@ def build_devices_df_op(
             "No real readings found in the current operations window. "
             "Skipping scaffold-only rows and keeping the watermark in place."
         )
+        readings_extended_df.unpersist()
         return limited_df.limit(0)
 
     context.log.info(
@@ -291,7 +292,9 @@ def build_devices_df_op(
         "Rows scaffolded beyond that hour will not be materialized.",
         latest_real_local_hour,
     )
-    return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+    result_df = limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+    readings_extended_df.unpersist()
+    return result_df
 
 @op(
     required_resource_keys={
@@ -356,7 +359,7 @@ def write_factreadingsmeasurement_op(
         if retry_number > 0:
             cleanup_partial_write()
 
-        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
+        if len(devices_df.columns) <= 1 or len(devices_df.head(1)) == 0:
             succeeded = True
         else:
             rows_with_readings_count_gt_0 = devices_df.filter(

@@ -269,7 +269,7 @@ class SparkResource:
                     .drop("__chunk_id")
                     .coalesce(self.jdbc_write_target_partitions)
                 )
-                if df_chunk.rdd.isEmpty():
+                if len(df_chunk.head(1)) == 0:
                     continue
 
                 (
@@ -370,10 +370,8 @@ class SparkResource:
         return readings_df.filter(col("LocalTimeSpan") >= from_local)
 
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
         df_dedup = df.dropDuplicates(["ReadId"])
-        if df_dedup.rdd.isEmpty():
+        if len(df_dedup.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -383,8 +381,6 @@ class SparkResource:
         )
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
 
         try:
             max_df = self._spark.read.jdbc(
@@ -401,7 +397,7 @@ class SparkResource:
         if max_ts is not None:
             df_filtered = df_filtered.filter(col("LocalTimeSpan") >= max_ts)
 
-        if df_filtered.rdd.isEmpty():
+        if len(df_filtered.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -416,8 +412,6 @@ class SparkResource:
         )
 
     def write_fact_operations(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
 
         return self._write_jdbc_in_chunks(
             df,
@@ -427,8 +421,6 @@ class SparkResource:
 
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
-        if df.rdd.isEmpty():
-            return None
         row = df.agg(spark_max(time_span_type).alias("max_ts")).collect()[0]
         max_ts = row.max_ts
         if max_ts is None:
@@ -436,10 +428,8 @@ class SparkResource:
         return max_ts
 
     def write_dim_prod_dimensions(self, df: DataFrame) -> Optional[int]:
-        if df.rdd.isEmpty():
-            return None
         df_dedup = df.dropDuplicates(["SensorId"])
-        if df_dedup.rdd.isEmpty():
+        if len(df_dedup.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -449,7 +439,7 @@ class SparkResource:
         )
 
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             return 0
 
         df_write = df.dropDuplicates(

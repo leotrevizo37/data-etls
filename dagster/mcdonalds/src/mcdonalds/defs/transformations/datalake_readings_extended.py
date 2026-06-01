@@ -47,7 +47,7 @@ def datalake_readings_extended(
         )
     )
 
-    if readings_extended_df.rdd.isEmpty():
+    if len(readings_extended_df.head(1)) == 0:
         return None
 
     return readings_extended_df
