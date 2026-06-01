@@ -46,14 +46,23 @@ def _install_optional_stubs() -> None:
         pyspark = types.ModuleType("pyspark")
 
         class _SparkConf:
-            def setAppName(self, *_args):
+            def __init__(self):
+                self._settings = {}
+
+            def setAppName(self, app_name):
+                self._settings["spark.app.name"] = app_name
                 return self
 
-            def setMaster(self, *_args):
+            def setMaster(self, master):
+                self._settings["spark.master"] = master
                 return self
 
-            def set(self, *_args):
+            def set(self, key, value):
+                self._settings[key] = str(value)
                 return self
+
+            def get(self, key, default=None):
+                return self._settings.get(key, default)
 
         class _StorageLevel:
             MEMORY_AND_DISK = object()
@@ -123,6 +132,9 @@ spark_df_io_manager_module = _load_module(
 )
 HADOOP_AWS_PACKAGE = spark_module.HADOOP_AWS_PACKAGE
 MSSQL_JDBC_PACKAGE = spark_module.MSSQL_JDBC_PACKAGE
+build_executor_cores = spark_module._build_executor_cores
+build_spark_resource_profile = spark_module._build_spark_resource_profile
+spark_master_available_resources = spark_module._spark_master_available_resources
 SparkResource = spark_module.SparkResource
 SparkDataFrameParquetIOManager = (
     spark_df_io_manager_module.SparkDataFrameParquetIOManager
@@ -137,13 +149,20 @@ class _Context:
 def _spark_resource(
         ozone_s3_endpoint: str = "",
         adls_account_name: str = "",
-        adls_account_key: str | None = None) -> SparkResource:
+        adls_account_key: str | None = None,
+        master_url: str = "local[1]",
+        executor_mem: str = "1G",
+        executor_cores: int = 1,
+        app_name: str = "spark-ozone-config-test",
+        job_type: str = "default",
+        **resource_kwargs) -> SparkResource:
     return SparkResource(
-        master_url="local[1]",
+        master_url=master_url,
         worker_mem="1G",
-        executor_mem="1G",
-        executor_cores=1,
-        app_name="spark-ozone-config-test",
+        executor_mem=executor_mem,
+        executor_cores=executor_cores,
+        app_name=app_name,
+        job_type=job_type,
         adls_account_name=adls_account_name,
         adls_container_name="container",
         adls_base_path="base",
@@ -164,6 +183,7 @@ def _spark_resource(
         jdbc_write_num_chunks=1,
         jdbc_write_target_partitions=1,
         jdbc_write_batch_size=1,
+        **resource_kwargs,
     )
 
 
@@ -210,6 +230,104 @@ class SparkOzoneConfigTests(unittest.TestCase):
             "s3a://mcdonalds-etl/dagster_io/spark_dfs/mcdonalds_cdp/"
             "run-id/op-name/result",
         )
+
+    def test_spark_master_available_resources_uses_alive_workers_only(self) -> None:
+        resources = spark_master_available_resources(
+            {
+                "workers": [
+                    {"state": "ALIVE", "coresFree": 2, "memoryFree": 2048},
+                    {"state": "DEAD", "coresFree": 8, "memoryFree": 8192},
+                    {"state": "ALIVE", "coresFree": 1, "memoryFree": "1g"},
+                ]
+            }
+        )
+
+        self.assertEqual(resources, {"cores_free": 3, "memory_free_mb": 3072})
+
+    def test_spark_resource_profile_uses_job_type_overrides(self) -> None:
+        profile = build_spark_resource_profile(
+            "lecturas",
+            {
+                "SPARK_LECTURAS_MIN_CORES": "3",
+                "SPARK_LECTURAS_MIN_MEMORY_MB": "4096",
+                "SPARK_LECTURAS_CORES_MAX": "4",
+            },
+        )
+
+        self.assertEqual(profile["name"], "lecturas")
+        self.assertEqual(profile["min_cores"], 3)
+        self.assertEqual(profile["min_memory_mb"], 4096)
+        self.assertEqual(profile["cores_max"], 4)
+
+    def test_legacy_worker_cores_fallback_does_not_exceed_profile_cap(self) -> None:
+        profile = build_spark_resource_profile("lecturas", {})
+
+        executor_cores = build_executor_cores(
+            profile,
+            {"SPARK_WORKER_CORES": "4"},
+        )
+
+        self.assertEqual(executor_cores, 2)
+
+    def test_spark_app_context_uses_dagster_run_tags(self) -> None:
+        class _Run:
+            job_name = "fact_lecturas_ingestion_job"
+            run_id = "abcdef123456"
+            tags = {"user_code": "mcdonalds_cdp", "job_type": "lecturas"}
+
+        class _InitContext:
+            dagster_run = _Run()
+
+        context = spark_module._build_spark_app_context(
+            _InitContext(),
+            default_app_name="FactLecturasIngestion",
+            default_user_code="mcdonalds_cdp",
+        )
+
+        self.assertEqual(context["job_type"], "lecturas")
+        self.assertEqual(
+            context["app_name"],
+            "mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+        )
+
+    def test_wait_for_spark_capacity_fails_when_cluster_is_full(self) -> None:
+        spark_res = _spark_resource(
+            master_url="spark://spark-master:7077",
+            job_type="lecturas",
+            resource_wait_seconds=0,
+        )
+        spark_res._fetch_spark_master_status = lambda: {
+            "workers": [{"state": "ALIVE", "coresFree": 1, "memoryFree": 4096}]
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "Insufficient Spark resources"):
+            spark_res._wait_for_spark_capacity()
+
+    def test_spark_conf_sets_resource_limits_and_app_name(self) -> None:
+        spark_res = _spark_resource(
+            master_url="spark://spark-master:7077",
+            executor_mem="2G",
+            executor_cores=1,
+            app_name="mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+            job_type="lecturas",
+            driver_host="10.0.0.5",
+            driver_port="17001",
+            block_manager_port="17101",
+        )
+
+        conf = spark_res._build_spark_conf()
+
+        self.assertEqual(
+            conf.get("spark.app.name"),
+            "mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+        )
+        self.assertEqual(conf.get("spark.executor.memory"), "2G")
+        self.assertEqual(conf.get("spark.executor.cores"), "1")
+        self.assertEqual(conf.get("spark.cores.max"), "2")
+        self.assertEqual(conf.get("spark.driver.host"), "10.0.0.5")
+        self.assertEqual(conf.get("spark.driver.bindAddress"), "0.0.0.0")
+        self.assertEqual(conf.get("spark.driver.port"), "17001")
+        self.assertEqual(conf.get("spark.blockManager.port"), "17101")
 
 
 if __name__ == "__main__":
