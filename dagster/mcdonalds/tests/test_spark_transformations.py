@@ -423,6 +423,59 @@ class SparkTransformationsTests(unittest.TestCase):
             {"Corriente", SODA_PRESSURE_SENSOR},
         )
 
+    def test_maquinas_soda_scaffolds_empty_readings_with_zero_counts(self) -> None:
+        readings_schema = StructType(
+            [
+                StructField("DeviceId", IntegerType(), True),
+                StructField("SensorId", IntegerType(), True),
+                StructField("LocationId", IntegerType(), True),
+                StructField("SensorTyId", IntegerType(), True),
+                StructField("sensor_type", StringType(), True),
+                StructField("device_type", StringType(), True),
+                StructField("LocalTimeSpan", TimestampType(), True),
+                StructField("Value", DoubleType(), True),
+                StructField("device_name", StringType(), True),
+            ]
+        )
+        factlecturas_extended_df = self.spark.createDataFrame([], readings_schema)
+        dimensions_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Corriente",
+                    "device_type": SODA_DEVICE_TYPE,
+                    "device_name": "Soda 1",
+                },
+                {
+                    "DeviceId": 1,
+                    "SensorId": 11,
+                    "LocationId": 100,
+                    "SensorTyId": 201,
+                    "sensor_type": SODA_PRESSURE_SENSOR,
+                    "device_type": SODA_DEVICE_TYPE,
+                    "device_name": "Soda 1",
+                },
+            ]
+        )
+
+        result = maquinas_soda(
+            factlecturas_extended_df,
+            dimensions_df,
+            "2026-03-29 10:00:00",
+            "2026-03-29 10:00:00",
+        )
+
+        rows = result.orderBy("SensorId").collect()
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["SensorId"] for row in rows}, {10, 11})
+        self.assertEqual({row["ReadingsCount"] for row in rows}, {0})
+        self.assertEqual({row["Anomalies"] for row in rows}, {1})
+        self.assertTrue(all(row["MeasurementValue"] is None for row in rows))
+
     def test_build_sensor_expected_values_generates_hvac_and_light_rows(self) -> None:
         dimensions_df = self.spark.createDataFrame(
             [

@@ -227,74 +227,73 @@ def build_devices_df_op(
 
     readings_extended_df = readings_extended_df.persist(StorageLevel.MEMORY_AND_DISK)
 
-    methods = [
-        "maquinas_nieve",
-        "maquinas_soda",
-        "cuartos_refrigeracion",
-        "cuartos_congelacion",
-        "luces",
-        "termostatos",
-    ]
+    try:
+        methods = [
+            "maquinas_nieve",
+            "maquinas_soda",
+            "cuartos_refrigeracion",
+            "cuartos_congelacion",
+            "luces",
+            "termostatos",
+        ]
 
-    for method in methods:
-        context.log.info("Materializing dataframe for method: " + method)
-        fn = getattr(transformation_ops, method)
-        df = fn(
-            readings_extended_df,
-            dims,
-            window["fetch_from"],
-            window["max_local_hour"],
-        ).select(
-            col("OperationId"),
-            col("DeviceId"),
-            col("LocationId"),
-            col("SensorTyId"),
-            col("SensorId"),
-            col("MeasurementValue"),
-            col("MeasurementStdDev"),
-            col("Anomalies"),
-            col("LocalTimeSpan"),
-            col("ReadingsCount"),
-            col("sensor_type").alias("SensorType"),
-            col("device_type").alias("DeviceType"),
-        )
+        for method in methods:
+            context.log.info("Materializing dataframe for method: " + method)
+            fn = getattr(transformation_ops, method)
+            df = fn(
+                readings_extended_df,
+                dims,
+                window["fetch_from"],
+                window["max_local_hour"],
+            ).select(
+                col("OperationId"),
+                col("DeviceId"),
+                col("LocationId"),
+                col("SensorTyId"),
+                col("SensorId"),
+                col("MeasurementValue"),
+                col("MeasurementStdDev"),
+                col("Anomalies"),
+                col("LocalTimeSpan"),
+                col("ReadingsCount"),
+                col("sensor_type").alias("SensorType"),
+                col("device_type").alias("DeviceType"),
+            )
 
-        if len(df.head(1)) == 0:
-            context.log.info("No rows for method: " + method)
-            continue
+            if len(df.head(1)) == 0:
+                context.log.info("No rows for method: " + method)
+                continue
+
+            if union_df is None:
+                union_df = df
+            else:
+                union_df = union_df.unionByName(df)
 
         if union_df is None:
-            union_df = df
-        else:
-            union_df = union_df.unionByName(df)
+            context.log.info("No rows across all transformations.")
+            return readings_extended_df.limit(0)
 
-    if union_df is None:
-        context.log.info("No rows across all transformations.")
-        readings_extended_df.unpersist()
-        return readings_extended_df.limit(0)
-
-    limited_df = limit_operations_rows_to_closed_hours(
-        union_df,
-        window["max_local_hour"],
-    )
-    latest_real_local_hour = _get_latest_real_local_hour(limited_df)
-
-    if latest_real_local_hour is None:
-        context.log.info(
-            "No real readings found in the current operations window. "
-            "Skipping scaffold-only rows and keeping the watermark in place."
+        limited_df = limit_operations_rows_to_closed_hours(
+            union_df,
+            window["max_local_hour"],
         )
-        readings_extended_df.unpersist()
-        return limited_df.limit(0)
+        latest_real_local_hour = _get_latest_real_local_hour(limited_df)
 
-    context.log.info(
-        "Latest real operations hour found at %s. "
-        "Rows scaffolded beyond that hour will not be materialized.",
-        latest_real_local_hour,
-    )
-    result_df = limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
-    readings_extended_df.unpersist()
-    return result_df
+        if latest_real_local_hour is None:
+            context.log.info(
+                "No real readings found in the current operations window. "
+                "Skipping scaffold-only rows and keeping the watermark in place."
+            )
+            return limited_df.limit(0)
+
+        context.log.info(
+            "Latest real operations hour found at %s. "
+            "Rows scaffolded beyond that hour will not be materialized.",
+            latest_real_local_hour,
+        )
+        return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+    finally:
+        readings_extended_df.unpersist()
 
 @op(
     required_resource_keys={
