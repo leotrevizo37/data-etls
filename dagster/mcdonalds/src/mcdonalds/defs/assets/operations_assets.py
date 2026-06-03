@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lit, max as spark_max
+from pyspark import StorageLevel
 from dagster import (
     AssetIn,
     AssetKey,
@@ -53,7 +54,7 @@ def _current_operational_hour_start() -> datetime:
 
 
 def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
-    if devices_df.rdd.isEmpty() or "ReadingsCount" not in devices_df.columns:
+    if "ReadingsCount" not in devices_df.columns or len(devices_df.head(1)) == 0:
         return None
 
     latest_row = (
@@ -197,10 +198,6 @@ def load_datalake_readings_extended_op(
         _df: DataFrame = spark_res.create_emptiness_dataframe()
         context.log.warning("Data Lake readings are empty.")
         return _df
-    elif readings_extended_df.rdd.isEmpty():
-        _df: DataFrame = spark_res.create_emptiness_dataframe()
-        context.log.warning("Data Lake readings are empty.")
-        return _df
 
     return readings_extended_df
 
@@ -228,70 +225,75 @@ def build_devices_df_op(
         context.log.warning("Readings_extended_df is empty.")
         return readings_extended_df
 
-    methods = [
-        "maquinas_nieve",
-        "maquinas_soda",
-        "cuartos_refrigeracion",
-        "cuartos_congelacion",
-        "luces",
-        "termostatos",
-    ]
+    readings_extended_df = readings_extended_df.persist(StorageLevel.MEMORY_AND_DISK)
 
-    for method in methods:
-        context.log.info("Materializing dataframe for method: " + method)
-        fn = getattr(transformation_ops, method)
-        df = fn(
-            readings_extended_df,
-            dims,
-            window["fetch_from"],
-            window["max_local_hour"],
-        ).select(
-            col("OperationId"),
-            col("DeviceId"),
-            col("LocationId"),
-            col("SensorTyId"),
-            col("SensorId"),
-            col("MeasurementValue"),
-            col("MeasurementStdDev"),
-            col("Anomalies"),
-            col("LocalTimeSpan"),
-            col("ReadingsCount"),
-            col("sensor_type").alias("SensorType"),
-            col("device_type").alias("DeviceType"),
-        )
+    try:
+        methods = [
+            "maquinas_nieve",
+            "maquinas_soda",
+            "cuartos_refrigeracion",
+            "cuartos_congelacion",
+            "luces",
+            "termostatos",
+        ]
 
-        if df.rdd.isEmpty():
-            context.log.info("No rows for method: " + method)
-            continue
+        for method in methods:
+            context.log.info("Materializing dataframe for method: " + method)
+            fn = getattr(transformation_ops, method)
+            df = fn(
+                readings_extended_df,
+                dims,
+                window["fetch_from"],
+                window["max_local_hour"],
+            ).select(
+                col("OperationId"),
+                col("DeviceId"),
+                col("LocationId"),
+                col("SensorTyId"),
+                col("SensorId"),
+                col("MeasurementValue"),
+                col("MeasurementStdDev"),
+                col("Anomalies"),
+                col("LocalTimeSpan"),
+                col("ReadingsCount"),
+                col("sensor_type").alias("SensorType"),
+                col("device_type").alias("DeviceType"),
+            )
+
+            if len(df.head(1)) == 0:
+                context.log.info("No rows for method: " + method)
+                continue
+
+            if union_df is None:
+                union_df = df
+            else:
+                union_df = union_df.unionByName(df)
 
         if union_df is None:
-            union_df = df
-        else:
-            union_df = union_df.unionByName(df)
+            context.log.info("No rows across all transformations.")
+            return readings_extended_df.limit(0)
 
-    if union_df is None:
-        context.log.info("No rows across all transformations.")
-        return readings_extended_df.limit(0)
-
-    limited_df = limit_operations_rows_to_closed_hours(
-        union_df,
-        window["max_local_hour"],
-    )
-    latest_real_local_hour = _get_latest_real_local_hour(limited_df)
-
-    if latest_real_local_hour is None:
-        context.log.info(
-            "No real readings found in the current operations window. "
-            "Skipping scaffold-only rows and keeping the watermark in place."
+        limited_df = limit_operations_rows_to_closed_hours(
+            union_df,
+            window["max_local_hour"],
         )
-        return limited_df.limit(0)
+        latest_real_local_hour = _get_latest_real_local_hour(limited_df)
 
-    context.log.info(
-        "Latest real operations hour found at %s. "
-        "Rows scaffolded beyond that hour will not be materialized.",
-        latest_real_local_hour,
-    )
-    return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+        if latest_real_local_hour is None:
+            context.log.info(
+                "No real readings found in the current operations window. "
+                "Skipping scaffold-only rows and keeping the watermark in place."
+            )
+            return limited_df.limit(0)
+
+        context.log.info(
+            "Latest real operations hour found at %s. "
+            "Rows scaffolded beyond that hour will not be materialized.",
+            latest_real_local_hour,
+        )
+        return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+    finally:
+        readings_extended_df.unpersist()
 
 @op(
     required_resource_keys={
@@ -356,7 +358,7 @@ def write_factreadingsmeasurement_op(
         if retry_number > 0:
             cleanup_partial_write()
 
-        if devices_df.rdd.isEmpty() or len(devices_df.columns) <= 1:
+        if len(devices_df.columns) <= 1 or len(devices_df.head(1)) == 0:
             succeeded = True
         else:
             rows_with_readings_count_gt_0 = devices_df.filter(

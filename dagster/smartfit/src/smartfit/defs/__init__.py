@@ -37,6 +37,7 @@ def _build_defs() -> Any:
         fact_operations_tables_job,
         refresh_dimensions_job,
         refresh_sensor_expected_values_job,
+        spark_df_io_manager_healthcheck_job,
     )
     from .resources import (
         dim_sqlserver_resource,
@@ -68,6 +69,7 @@ def _build_defs() -> Any:
             fact_operations_tables_job,
             refresh_dimensions_job,
             refresh_sensor_expected_values_job,
+            spark_df_io_manager_healthcheck_job,
             cleanup_job,
         ],
         resources={

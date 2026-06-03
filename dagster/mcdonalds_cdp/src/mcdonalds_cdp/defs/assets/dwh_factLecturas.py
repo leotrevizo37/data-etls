@@ -77,10 +77,11 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
     row_count = 0
     retry_number = getattr(context, "retry_number", 0)
 
+    df = None
     try:
         df = spark_res.read_lecturas_range(from_utc, to_utc)
         df = df.persist(StorageLevel.MEMORY_AND_DISK)
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             context.log.info("No rows found in Data Lake for window " + str(from_utc) + " to " + str(to_utc))
             succeeded = True
         else:
@@ -115,6 +116,9 @@ def delete_and_load_window_op(context, window: Dict[str, Any]) -> Dict[str, Any]
                 seconds_to_wait=FACTLECTURAS_RETRY_DELAY_SECONDS,
             ) from ex
         succeeded = False
+    finally:
+        if df is not None:
+            df.unpersist()
 
     return {
         "from_utc": from_utc,

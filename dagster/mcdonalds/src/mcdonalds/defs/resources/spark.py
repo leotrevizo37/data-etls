@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
+import json
 import os
+import time
+from urllib.request import urlopen
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max, upper
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
@@ -10,6 +13,19 @@ from dagster import resource
 from zoneinfo import ZoneInfo
 
 OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
+HADOOP_AWS_PACKAGE = "org.apache.hadoop:hadoop-aws:3.4.1"
+MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
+DEFAULT_SPARK_MASTER_STATUS_URL = "http://spark-master:8080/json/"
+DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
+DEFAULT_SPARK_RESOURCE_POLL_SECONDS = 10
+DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
+DEFAULT_SPARK_RESOURCE_PROFILES = {
+    "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
+    "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
+    "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+}
 
 
 def _get_operations_timezone():
@@ -40,6 +56,143 @@ def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
         current = current + timedelta(days=1)
     return days
 
+
+def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> int:
+    raw = (env or os.environ).get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
+
+
+def _coerce_memory_mb(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    text = str(value).strip().lower()
+    if not text:
+        return 0
+    try:
+        if text.endswith("g"):
+            return int(float(text[:-1]) * 1024)
+        if text.endswith("m"):
+            return int(float(text[:-1]))
+        return int(float(text))
+    except ValueError:
+        return 0
+
+
+def _normalize_spark_profile(job_type: str) -> str:
+    profile_name = (job_type or "default").strip().lower()
+    if profile_name not in DEFAULT_SPARK_RESOURCE_PROFILES:
+        return "default"
+    return profile_name
+
+
+def _build_spark_resource_profile(
+    job_type: str,
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    profile_name = _normalize_spark_profile(job_type)
+    defaults = DEFAULT_SPARK_RESOURCE_PROFILES[profile_name]
+    prefix = f"SPARK_{profile_name.upper()}_"
+
+    return {
+        "name": profile_name,
+        "min_cores": _env_int(f"{prefix}MIN_CORES", defaults["min_cores"], env),
+        "min_memory_mb": _env_int(
+            f"{prefix}MIN_MEMORY_MB",
+            defaults["min_memory_mb"],
+            env,
+        ),
+        "cores_max": _env_int(f"{prefix}CORES_MAX", defaults["cores_max"], env),
+    }
+
+
+def _build_executor_cores(
+    resource_profile: Dict[str, Any],
+    env: Optional[Dict[str, str]] = None,
+) -> int:
+    current_env = env or os.environ
+    if current_env.get("SPARK_EXECUTOR_CORES"):
+        return _env_int("SPARK_EXECUTOR_CORES", 1, current_env)
+
+    legacy_worker_cores = _env_int("SPARK_WORKER_CORES", 1, current_env)
+    return max(1, min(legacy_worker_cores, int(resource_profile["cores_max"])))
+
+
+def _spark_master_available_resources(master_status: Dict[str, Any]) -> Dict[str, int]:
+    cores_free = 0
+    memory_free_mb = 0
+
+    for worker in master_status.get("workers", []):
+        if str(worker.get("state", "")).upper() != "ALIVE":
+            continue
+        cores_free += int(worker.get("coresFree") or 0)
+        memory_free_mb += _coerce_memory_mb(worker.get("memoryFree"))
+
+    return {"cores_free": cores_free, "memory_free_mb": memory_free_mb}
+
+
+def _has_spark_capacity(
+    available: Dict[str, int],
+    resource_profile: Dict[str, Any],
+) -> bool:
+    return (
+        available["cores_free"] >= resource_profile["min_cores"]
+        and available["memory_free_mb"] >= resource_profile["min_memory_mb"]
+    )
+
+
+def _clean_app_name_part(value: str, fallback: str) -> str:
+    cleaned = str(value or fallback).strip().replace("/", "-")
+    return cleaned or fallback
+
+
+def _short_run_id(run_id: str) -> str:
+    return _clean_app_name_part(run_id, "manual")[:8]
+
+
+def _build_spark_app_name(user_code: str, job_name: str, run_id: str) -> str:
+    return "/".join(
+        [
+            _clean_app_name_part(user_code, "unknown_user_code"),
+            _clean_app_name_part(job_name, "unknown_job"),
+            _short_run_id(run_id),
+        ]
+    )
+
+
+def _build_spark_app_context(
+    init_context: Any,
+    default_app_name: str,
+    default_user_code: str,
+) -> Dict[str, str]:
+    dagster_run = getattr(init_context, "dagster_run", None)
+    tags = dict(getattr(dagster_run, "tags", {}) or {})
+    job_name = (
+        getattr(dagster_run, "job_name", "")
+        or os.getenv("SPARK_JOB_NAME", default_app_name)
+    )
+    run_id = getattr(dagster_run, "run_id", "") or os.getenv("SPARK_RUN_ID", "manual")
+    user_code = tags.get("user_code") or os.getenv("SPARK_USER_CODE", default_user_code)
+    job_type = tags.get("job_type") or os.getenv("SPARK_JOB_TYPE", "default")
+    if tags.get("backfill"):
+        job_type = "backfill"
+
+    return {
+        "user_code": user_code,
+        "job_name": job_name,
+        "job_type": job_type,
+        "run_id": _short_run_id(run_id),
+        "app_name": _build_spark_app_name(user_code, job_name, run_id),
+    }
+
+
 LECTURAS_SCHEMA = StructType(
     [
         StructField("ReadId", StringType(), True),
@@ -62,6 +215,13 @@ class SparkResource:
         adls_container_name: str,
         adls_base_path: str,
         adls_account_key: Optional[str],
+        ozone_s3_endpoint: str,
+        ozone_s3_region: str,
+        ozone_s3_access_key: Optional[str],
+        ozone_s3_secret_key: Optional[str],
+        ozone_s3_path_style_access: str,
+        ozone_s3_bucket_probe: str,
+        ozone_s3_change_detection_mode: str,
         jdbc_host: str,
         jdbc_port: int,
         jdbc_database: str,
@@ -71,16 +231,47 @@ class SparkResource:
         jdbc_write_num_chunks: int,
         jdbc_write_target_partitions: int,
         jdbc_write_batch_size: int,
+        user_code: str = "",
+        job_name: str = "",
+        job_type: str = "default",
+        run_id: str = "",
+        master_status_url: str = DEFAULT_SPARK_MASTER_STATUS_URL,
+        resource_wait_seconds: int = DEFAULT_SPARK_RESOURCE_WAIT_SECONDS,
+        resource_poll_seconds: int = DEFAULT_SPARK_RESOURCE_POLL_SECONDS,
+        driver_host: str = "",
+        driver_bind_address: str = "",
+        driver_port: str = "",
+        block_manager_port: str = "",
+        resource_profile: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.master_url = master_url
         self.app_name = app_name
         self.worker_mem = worker_mem
         self.executor_mem = executor_mem
         self.executor_cores = executor_cores
+        self.user_code = user_code
+        self.job_name = job_name
+        self.job_type = job_type
+        self.run_id = run_id
+        self.master_status_url = master_status_url
+        self.resource_wait_seconds = resource_wait_seconds
+        self.resource_poll_seconds = resource_poll_seconds
+        self.driver_host = driver_host
+        self.driver_bind_address = driver_bind_address
+        self.driver_port = driver_port
+        self.block_manager_port = block_manager_port
+        self.resource_profile = resource_profile or _build_spark_resource_profile(job_type)
         self.adls_account_name = adls_account_name
         self.adls_container_name = adls_container_name
         self.adls_base_path = adls_base_path
         self.adls_account_key = adls_account_key
+        self.ozone_s3_endpoint = ozone_s3_endpoint
+        self.ozone_s3_region = ozone_s3_region
+        self.ozone_s3_access_key = ozone_s3_access_key
+        self.ozone_s3_secret_key = ozone_s3_secret_key
+        self.ozone_s3_path_style_access = ozone_s3_path_style_access
+        self.ozone_s3_bucket_probe = ozone_s3_bucket_probe
+        self.ozone_s3_change_detection_mode = ozone_s3_change_detection_mode
         self.jdbc_host = jdbc_host
         self.jdbc_port = jdbc_port
         self.jdbc_database = jdbc_database
@@ -92,16 +283,73 @@ class SparkResource:
         self.jdbc_write_batch_size = jdbc_write_batch_size
         self._spark: Optional[SparkSession] = None
 
-    def get_spark(self) -> SparkSession:
-        if self._spark is not None:
-            return self._spark
+    def _ozone_s3_enabled(self) -> bool:
+        return bool(self.ozone_s3_endpoint)
 
+    def _spark_packages(self) -> List[str]:
+        packages = []
+        if self.adls_account_name and self.adls_account_key:
+            packages.extend([
+                "org.apache.hadoop:hadoop-azure:3.3.4",
+                "com.microsoft.azure:azure-storage:8.6.6",
+                MSSQL_JDBC_PACKAGE,
+            ])
+        if self._ozone_s3_enabled():
+            packages.append(HADOOP_AWS_PACKAGE)
+        return packages
+
+    def _build_ozone_s3_options(self) -> Dict[str, str]:
+        if not self._ozone_s3_enabled():
+            return {}
+
+        options = {
+            "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            "fs.s3a.endpoint": self.ozone_s3_endpoint,
+            "fs.s3a.path.style.access": self.ozone_s3_path_style_access,
+            "fs.s3a.bucket.probe": self.ozone_s3_bucket_probe,
+            "fs.s3a.change.detection.mode": self.ozone_s3_change_detection_mode,
+            "fs.s3a.connection.ssl.enabled": (
+                "false"
+                if self.ozone_s3_endpoint.lower().startswith("http://")
+                else "true"
+            ),
+        }
+        if self.ozone_s3_region:
+            options["fs.s3a.endpoint.region"] = self.ozone_s3_region
+        if self.ozone_s3_access_key and self.ozone_s3_secret_key:
+            options["fs.s3a.access.key"] = self.ozone_s3_access_key
+            options["fs.s3a.secret.key"] = self.ozone_s3_secret_key
+            options["fs.s3a.aws.credentials.provider"] = (
+                "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+            )
+        return options
+
+    def _build_spark_conf(self) -> SparkConf:
         conf = (
             SparkConf()
             .setAppName(self.app_name)
             .setMaster(self.master_url)
             .set("spark.executor.memory", self.executor_mem)
+            .set("spark.executor.cores", str(self.executor_cores))
+            .set("spark.cores.max", str(self.resource_profile["cores_max"]))
         )
+        if self.driver_host:
+            conf.set("spark.driver.host", self.driver_host)
+            conf.set(
+                "spark.driver.bindAddress",
+                self.driver_bind_address or DEFAULT_SPARK_DRIVER_BIND_ADDRESS,
+            )
+        if self.driver_port:
+            conf.set("spark.driver.port", str(self.driver_port))
+        if self.block_manager_port:
+            conf.set("spark.blockManager.port", str(self.block_manager_port))
+
+        packages = self._spark_packages()
+        if packages:
+            conf.set("spark.jars.packages", ",".join(packages))
+        for key, value in self._build_ozone_s3_options().items():
+            conf.set("spark.hadoop." + key, value)
+
         if self.adls_account_name and self.adls_account_key:
             account = self.adls_account_name
             conf.set(
@@ -114,18 +362,57 @@ class SparkResource:
             )
             conf.set(
                 "spark.jars.packages",
-                    ",".join([
-                        "org.apache.hadoop:hadoop-azure:3.3.4",
-                        "com.microsoft.azure:azure-storage:8.6.6",
-                        "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11",
-                    ])
+                ",".join(packages)
             )
-        self._spark = SparkSession.builder.config(conf=conf).getOrCreate()
+        return conf
+
+    def _fetch_spark_master_status(self) -> Dict[str, Any]:
+        with urlopen(self.master_status_url, timeout=5) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def _wait_for_spark_capacity(self) -> None:
+        if self.master_url.lower().startswith("local"):
+            return
+        if not self.master_status_url:
+            raise RuntimeError("SPARK_MASTER_STATUS_URL is required for Spark capacity checks.")
+
+        deadline = time.monotonic() + max(self.resource_wait_seconds, 0)
+        last_available = {"cores_free": 0, "memory_free_mb": 0}
+
+        while True:
+            try:
+                master_status = self._fetch_spark_master_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    "Could not read Spark master status from "
+                    f"{self.master_status_url}: {exc}"
+                ) from exc
+
+            last_available = _spark_master_available_resources(master_status)
+            if _has_spark_capacity(last_available, self.resource_profile):
+                return
+
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "Insufficient Spark resources for "
+                    f"job_type={self.job_type!r}: required "
+                    f"{self.resource_profile['min_cores']} cores and "
+                    f"{self.resource_profile['min_memory_mb']} MB free memory; "
+                    f"available {last_available['cores_free']} cores and "
+                    f"{last_available['memory_free_mb']} MB free memory."
+                )
+
+            time.sleep(max(self.resource_poll_seconds, 1))
+
+    def get_spark(self) -> SparkSession:
+        if self._spark is not None:
+            return self._spark
+
+        self._wait_for_spark_capacity()
+        conf = self._build_spark_conf()
 
         self._spark = (
             SparkSession.builder
-            .appName(self.app_name)
-            .master(self.master_url)
             .config(conf=conf)
             .getOrCreate()
         )
@@ -140,6 +427,8 @@ class SparkResource:
                 "fs.abfss.impl",
                 "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem",
             )
+        for key, value in self._build_ozone_s3_options().items():
+            self._spark._jsc.hadoopConfiguration().set(key, value)
         return self._spark
 
     def stop(self) -> None:
@@ -208,7 +497,7 @@ class SparkResource:
                     .drop("__chunk_id")
                     .coalesce(self.jdbc_write_target_partitions)
                 )
-                if df_chunk.rdd.isEmpty():
+                if len(df_chunk.head(1)) == 0:
                     continue
 
                 (
@@ -309,10 +598,8 @@ class SparkResource:
         return readings_df.filter(col("LocalTimeSpan") >= from_local)
 
     def write_fact_lecturas_to_sql(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
         df_dedup = df.dropDuplicates(["ReadId"])
-        if df_dedup.rdd.isEmpty():
+        if len(df_dedup.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -322,8 +609,6 @@ class SparkResource:
         )
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
 
         try:
             max_df = self._spark.read.jdbc(
@@ -340,7 +625,7 @@ class SparkResource:
         if max_ts is not None:
             df_filtered = df_filtered.filter(col("LocalTimeSpan") >= max_ts)
 
-        if df_filtered.rdd.isEmpty():
+        if len(df_filtered.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -355,8 +640,6 @@ class SparkResource:
         )
 
     def write_fact_operations(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
-            return 0
 
         return self._write_jdbc_in_chunks(
             df,
@@ -366,8 +649,6 @@ class SparkResource:
 
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
-        if df.rdd.isEmpty():
-            return None
         row = df.agg(spark_max(time_span_type).alias("max_ts")).collect()[0]
         max_ts = row.max_ts
         if max_ts is None:
@@ -375,10 +656,8 @@ class SparkResource:
         return max_ts
 
     def write_dim_prod_dimensions(self, df: DataFrame) -> Optional[int]:
-        if df.rdd.isEmpty():
-            return None
         df_dedup = df.dropDuplicates(["SensorId"])
-        if df_dedup.rdd.isEmpty():
+        if len(df_dedup.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
@@ -388,7 +667,7 @@ class SparkResource:
         )
 
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
-        if df.rdd.isEmpty():
+        if len(df.head(1)) == 0:
             return 0
 
         df_write = df.dropDuplicates(
@@ -423,16 +702,47 @@ class SparkResource:
         return spark.createDataFrame([(True,)], ["is_empty"])
 
 @resource
-def spark_resource(_):
+def spark_resource(init_context):
     master_url = os.getenv("SPARK_MASTER_URL", "spark://spark-master:7077")
-    app_name = os.getenv("SPARK_APP_NAME", "FactLecturasIngestion")
+    default_app_name = os.getenv("SPARK_APP_NAME", "FactLecturasIngestion")
+    default_user_code = __name__.split(".")[0]
+    app_context = _build_spark_app_context(
+        init_context,
+        default_app_name=default_app_name,
+        default_user_code=default_user_code,
+    )
+    resource_profile = _build_spark_resource_profile(app_context["job_type"])
     worker_mem = os.getenv("SPARK_WORKER_MEM", "4G")
     executor_mem = os.getenv("SPARK_EXECUTOR_MEM", "3G")
-    executor_cores = int(os.getenv("SPARK_WORKER_CORES", "2"))
+    executor_cores = _build_executor_cores(resource_profile)
+    master_status_url = os.getenv(
+        "SPARK_MASTER_STATUS_URL",
+        DEFAULT_SPARK_MASTER_STATUS_URL,
+    )
+    resource_wait_seconds = int(
+        os.getenv("SPARK_RESOURCE_WAIT_SECONDS", str(DEFAULT_SPARK_RESOURCE_WAIT_SECONDS))
+    )
+    resource_poll_seconds = int(
+        os.getenv("SPARK_RESOURCE_POLL_SECONDS", str(DEFAULT_SPARK_RESOURCE_POLL_SECONDS))
+    )
+    driver_host = os.getenv("SPARK_DRIVER_HOST", "")
+    driver_bind_address = os.getenv("SPARK_DRIVER_BIND_ADDRESS", "")
+    driver_port = os.getenv("SPARK_DRIVER_PORT", "")
+    block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
     adls_account_name = os.getenv("ADLS_ACCOUNT_NAME", "")
     adls_container_name = os.getenv("ADLS_CONTAINER_NAME", "")
     adls_base_path = os.getenv("ADLS_BASE_PATH", "")
     adls_account_key = os.getenv("ADLS_ACCOUNT_KEY")
+    ozone_s3_endpoint = os.getenv("OZONE_S3_ENDPOINT", "")
+    ozone_s3_region = os.getenv("OZONE_S3_REGION", "us-east-1")
+    ozone_s3_access_key = os.getenv("OZONE_S3_ACCESS_KEY")
+    ozone_s3_secret_key = os.getenv("OZONE_S3_SECRET_KEY")
+    ozone_s3_path_style_access = os.getenv("OZONE_S3_PATH_STYLE_ACCESS", "true")
+    ozone_s3_bucket_probe = os.getenv("OZONE_S3_BUCKET_PROBE", "0")
+    ozone_s3_change_detection_mode = os.getenv(
+        "OZONE_S3_CHANGE_DETECTION_MODE",
+        "none",
+    )
     jdbc_host = os.getenv("MSSQL_HOST", "localhost")
     jdbc_port = int(os.getenv("MSSQL_PORT", "1433"))
     jdbc_database = os.getenv("APP_DB", "")
@@ -444,14 +754,33 @@ def spark_resource(_):
     jdbc_write_batch_size = int(os.getenv("JDBC_WRITE_BATCH_SIZE", "100"))
     spark_res = SparkResource(
         master_url=master_url,
-        app_name=app_name,
+        app_name=app_context["app_name"],
         worker_mem=worker_mem,
         executor_mem=executor_mem,
         executor_cores=executor_cores,
+        user_code=app_context["user_code"],
+        job_name=app_context["job_name"],
+        job_type=app_context["job_type"],
+        run_id=app_context["run_id"],
+        master_status_url=master_status_url,
+        resource_wait_seconds=resource_wait_seconds,
+        resource_poll_seconds=resource_poll_seconds,
+        driver_host=driver_host,
+        driver_bind_address=driver_bind_address,
+        driver_port=driver_port,
+        block_manager_port=block_manager_port,
+        resource_profile=resource_profile,
         adls_account_name=adls_account_name,
         adls_container_name=adls_container_name,
         adls_base_path=adls_base_path,
         adls_account_key=adls_account_key,
+        ozone_s3_endpoint=ozone_s3_endpoint,
+        ozone_s3_region=ozone_s3_region,
+        ozone_s3_access_key=ozone_s3_access_key,
+        ozone_s3_secret_key=ozone_s3_secret_key,
+        ozone_s3_path_style_access=ozone_s3_path_style_access,
+        ozone_s3_bucket_probe=ozone_s3_bucket_probe,
+        ozone_s3_change_detection_mode=ozone_s3_change_detection_mode,
         jdbc_host=jdbc_host,
         jdbc_port=jdbc_port,
         jdbc_database=jdbc_database,
