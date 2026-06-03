@@ -134,6 +134,7 @@ HADOOP_AWS_PACKAGE = spark_module.HADOOP_AWS_PACKAGE
 MSSQL_JDBC_PACKAGE = spark_module.MSSQL_JDBC_PACKAGE
 build_executor_cores = spark_module._build_executor_cores
 build_spark_resource_profile = spark_module._build_spark_resource_profile
+build_spark_retry_conf = spark_module._build_spark_retry_conf
 spark_master_available_resources = spark_module._spark_master_available_resources
 SparkResource = spark_module.SparkResource
 SparkDataFrameParquetIOManager = (
@@ -259,6 +260,26 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_memory_mb"], 4096)
         self.assertEqual(profile["cores_max"], 4)
 
+    def test_sensor_expected_values_profile_uses_heavier_defaults(self) -> None:
+        profile = build_spark_resource_profile("sensor_expected_values", {})
+
+        self.assertEqual(profile["name"], "sensor_expected_values")
+        self.assertEqual(profile["min_cores"], 2)
+        self.assertEqual(profile["min_memory_mb"], 2048)
+        self.assertEqual(profile["cores_max"], 2)
+
+    def test_spark_retry_policy_uses_defaults_and_env_overrides(self) -> None:
+        policy = build_spark_retry_conf(
+            {
+                "SPARK_TASK_MAX_FAILURES": "6",
+                "SPARK_SHUFFLE_IO_RETRY_WAIT": "20s",
+            }
+        )
+
+        self.assertEqual(policy["spark.task.maxFailures"], "6")
+        self.assertEqual(policy["spark.stage.maxConsecutiveAttempts"], "8")
+        self.assertEqual(policy["spark.shuffle.io.retryWait"], "20s")
+
     def test_legacy_worker_cores_fallback_does_not_exceed_profile_cap(self) -> None:
         profile = build_spark_resource_profile("lecturas", {})
 
@@ -328,6 +349,9 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(conf.get("spark.driver.bindAddress"), "0.0.0.0")
         self.assertEqual(conf.get("spark.driver.port"), "17001")
         self.assertEqual(conf.get("spark.blockManager.port"), "17101")
+        self.assertEqual(conf.get("spark.task.maxFailures"), "8")
+        self.assertEqual(conf.get("spark.shuffle.io.maxRetries"), "10")
+        self.assertEqual(conf.get("spark.network.timeout"), "800s")
 
 
 if __name__ == "__main__":

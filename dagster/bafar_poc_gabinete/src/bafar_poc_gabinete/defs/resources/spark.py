@@ -23,9 +23,18 @@ DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
+    "sensor_expected_values": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+}
+SPARK_RETRY_POLICY_ENV = {
+    "spark.task.maxFailures": ("SPARK_TASK_MAX_FAILURES", "8"),
+    "spark.stage.maxConsecutiveAttempts": ("SPARK_STAGE_MAX_CONSECUTIVE_ATTEMPTS", "8"),
+    "spark.shuffle.io.maxRetries": ("SPARK_SHUFFLE_IO_MAX_RETRIES", "10"),
+    "spark.shuffle.io.retryWait": ("SPARK_SHUFFLE_IO_RETRY_WAIT", "10s"),
+    "spark.network.timeout": ("SPARK_NETWORK_TIMEOUT", "800s"),
+    "spark.executor.heartbeatInterval": ("SPARK_EXECUTOR_HEARTBEAT_INTERVAL", "60s"),
 }
 
 def _get_operations_timezone():
@@ -65,6 +74,14 @@ def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> i
         return int(raw)
     except ValueError as exc:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
+
+
+def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    current_env = env or os.environ
+    return {
+        spark_key: current_env.get(env_key) or default
+        for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
+    }
 
 
 def _coerce_memory_mb(value: Any) -> int:
@@ -344,6 +361,9 @@ class SparkResource:
         if self.block_manager_port:
             conf.set("spark.blockManager.port", str(self.block_manager_port))
 
+        for key, value in _build_spark_retry_conf().items():
+            conf.set(key, value)
+
         packages = self._spark_packages()
         if packages:
             conf.set("spark.jars.packages", ",".join(packages))
@@ -473,6 +493,7 @@ class SparkResource:
         table: str,
         chunk_column: str,
         properties: Optional[Dict[str, str]] = None,
+        storage_level: StorageLevel = StorageLevel.MEMORY_AND_DISK,
     ) -> int:
         wh = self._build_wh_path()
         url = wh["url"]
@@ -482,7 +503,7 @@ class SparkResource:
         df_chunked = (
             df
             .selectExpr("*", f"pmod(hash(`{chunk_column}`), {self.jdbc_write_num_chunks}) as __chunk_id")
-            .persist(StorageLevel.MEMORY_AND_DISK)
+            .persist(storage_level)
         )
 
         try:
@@ -667,9 +688,6 @@ class SparkResource:
         )
 
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
-        if len(df.head(1)) == 0:
-            return 0
-
         df_write = df.dropDuplicates(
             [
                 "SensorId",
@@ -686,6 +704,7 @@ class SparkResource:
             df_write,
             table="dwh.dimSensorExpectedVal",
             chunk_column="SensorId",
+            storage_level=StorageLevel.DISK_ONLY,
         )
 
     def read_dim_prod_dimensions(self) -> DataFrame:
