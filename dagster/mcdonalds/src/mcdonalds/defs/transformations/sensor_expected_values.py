@@ -207,7 +207,6 @@ def build_hvac_expected_values(
     hvac_programs_df: DataFrame,
     dimensions_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
     active_dimensions = dimensions_df.filter(F.coalesce(F.col("Active"), F.lit(False)))
     hvac_dimensions = active_dimensions.filter(F.col("device_type").isin(*HVAC_DEVICE_TYPES))
 
@@ -242,9 +241,6 @@ def build_hvac_expected_values(
             ),
         )
     )
-
-    if programs_prepared.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
 
     ordered_window = Window.partitionBy("device_id", "scheduled_days").orderBy("time_ts")
     grouped_window = Window.partitionBy("device_id", "scheduled_days")
@@ -349,7 +345,6 @@ def build_lights_expected_values(
     lights_programs_df: DataFrame,
     dimensions_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
     active_dimensions = dimensions_df.filter(F.coalesce(F.col("Active"), F.lit(False)))
     lights_dimensions = active_dimensions.filter(
         (F.col("device_type") == F.lit(LIGHT_DEVICE_TYPE))
@@ -408,9 +403,6 @@ def build_lights_expected_values(
         )
     )
 
-    if lights_parsed.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
-
     ordered_window = Window.partitionBy("sensor_id").orderBy("week_order")
 
     lights_paired = (
@@ -463,8 +455,6 @@ def build_sensor_expected_values_from_dataframes(
     group_has_schedules_df: DataFrame,
     group_has_sensors_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
-
     hvac_expected_values = build_hvac_expected_values(
         build_hvac_programs(
             program_profiles_df,
@@ -503,9 +493,6 @@ def build_sensor_expected_values_from_dataframes(
             ]
         )
     )
-
-    if combined.rdd.isEmpty():
-        return _empty_final_expected_values_df(spark)
 
     return (
         combined.select(
