@@ -476,6 +476,15 @@ def finalize_operations_run_op(
         succeeded=succeeded,
         error_message=error_message,
     )
+    metadata: Dict[str, Any] = {
+        "succeeded": succeeded,
+        "to_local": str(to_local),
+        "max_time_span": str(max_time_span) if max_time_span else None,
+        "original_last_loaded_at": str(original_last_loaded_at),
+    }
+    if error_message:
+        metadata["error_message"] = error_message
+    context.add_output_metadata(metadata)
 
 @op(
     ins={

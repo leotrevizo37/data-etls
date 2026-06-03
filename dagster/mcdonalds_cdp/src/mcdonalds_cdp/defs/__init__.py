@@ -10,6 +10,7 @@ __all__ = ["defs"]
 def _build_defs() -> Any:
     from dagster import Definitions
 
+    from .asset_checks import quality_asset_checks
     from .assets import (
         cleanup_old_runs,
         dbo_devices,
@@ -94,6 +95,7 @@ def _build_defs() -> Any:
             dwh_dimsidonproddimensions,
             cleanup_old_runs,
         ],
+        asset_checks=quality_asset_checks,
     )
 
 
