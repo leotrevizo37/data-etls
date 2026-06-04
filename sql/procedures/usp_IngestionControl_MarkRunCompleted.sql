@@ -23,8 +23,8 @@ BEGIN
 
     UPDATE ctl.IngestionControl WITH (ROWLOCK, UPDLOCK)
     SET
-        LastLoadedAt =
-        CASE
+        LastLoadedAt
+        = CASE
             WHEN @Succeeded = 1 THEN @NewLastLoadedAt
             ELSE LastLoadedAt
         END,
