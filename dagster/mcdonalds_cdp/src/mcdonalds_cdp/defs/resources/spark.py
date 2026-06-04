@@ -146,10 +146,11 @@ def _spark_master_available_resources(master_status: Dict[str, Any]) -> Dict[str
     memory_free_mb = 0
 
     for worker in master_status.get("workers", []):
-        if str(worker.get("state", "")).upper() != "ALIVE":
+        w = {k.lower(): v for k, v in worker.items()}
+        if str(w.get("state", "")).upper() != "ALIVE":
             continue
-        cores_free += int(worker.get("coresFree") or 0)
-        memory_free_mb += _coerce_memory_mb(worker.get("memoryFree"))
+        cores_free += int(w.get("coresfree") or 0)
+        memory_free_mb += _coerce_memory_mb(w.get("memoryfree"))
 
     return {"cores_free": cores_free, "memory_free_mb": memory_free_mb}
 
