@@ -245,6 +245,19 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         self.assertEqual(resources, {"cores_free": 3, "memory_free_mb": 3072})
 
+    def test_spark_master_available_resources_handles_lowercase_keys(self) -> None:
+        resources = spark_master_available_resources(
+            {
+                "workers": [
+                    {"state": "ALIVE", "coresfree": 4, "memoryfree": 6144},
+                    {"state": "DEAD", "coresfree": 2, "memoryfree": 2048},
+                    {"state": "ALIVE", "coresfree": 4, "memoryfree": 6144},
+                ]
+            }
+        )
+
+        self.assertEqual(resources, {"cores_free": 8, "memory_free_mb": 12288})
+
     def test_spark_resource_profile_uses_job_type_overrides(self) -> None:
         profile = build_spark_resource_profile(
             "lecturas",
