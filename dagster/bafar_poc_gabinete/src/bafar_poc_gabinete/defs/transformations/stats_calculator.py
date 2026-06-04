@@ -77,7 +77,7 @@ def stats_calculator(
         .withColumnRenamed("Val_std", "MeasurementStdDev")
     )
 
-    if stats_current_df.rdd.isEmpty():
+    if len(stats_current_df.head(1)) == 0:
         return None
 
     return stats_current_df

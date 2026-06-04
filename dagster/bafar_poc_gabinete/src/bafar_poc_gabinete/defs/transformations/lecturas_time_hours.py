@@ -37,7 +37,7 @@ def lecturas_time_hours(
         .withColumnRenamed("HourStart", "LocalTimeSpan")
     )
 
-    if current_df.rdd.isEmpty():
+    if len(current_df.head(1)) == 0:
         return None
 
     return current_df

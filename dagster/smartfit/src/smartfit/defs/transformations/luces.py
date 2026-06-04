@@ -17,7 +17,7 @@ def luces(
         .filter(col("device_type") == "Luminaria")
     )
 
-    if base.rdd.isEmpty():
+    if len(base.head(1)) == 0:
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
@@ -111,9 +111,6 @@ def luces(
         scaffold_df
         .fillna({"ReadingsCount": 0, "Anomalies": -1})
     )
-
-    if scaffold_enriched.rdd.isEmpty():
-        return None
 
     group_with_guid_df = (
         scaffold_enriched

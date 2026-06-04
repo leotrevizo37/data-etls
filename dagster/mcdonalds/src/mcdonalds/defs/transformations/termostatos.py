@@ -2,6 +2,7 @@ from typing import Optional
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col,lit, expr
+from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
@@ -23,7 +24,7 @@ def termostatos(
         )
     )
 
-    if base.rdd.isEmpty():
+    if len(base.head(1)) == 0:
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
@@ -55,6 +56,8 @@ def termostatos(
         )
 
         return group_with_guid_df
+
+    base = base.persist(StorageLevel.MEMORY_AND_DISK)
 
     state_stats_df = (
         stats_calculator(
@@ -115,6 +118,8 @@ def termostatos(
         )
     )
 
+    base.unpersist()
+
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
@@ -151,8 +156,6 @@ def termostatos(
         .fillna({"ReadingsCount": 0, "Anomalies": -1})
     )
 
-    if scaffold_enriched.rdd.isEmpty():
-        return None
 
     group_with_guid_df = (
         scaffold_enriched

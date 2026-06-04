@@ -281,7 +281,6 @@ def build_hvac_expected_values(
     hvac_programs_df: DataFrame,
     dimensions_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
     active_dimensions = dimensions_df.filter(F.coalesce(F.col("Active"), F.lit(False)))
     hvac_dimensions = active_dimensions.filter(_is_hvac_device_type("device_type"))
 
@@ -317,18 +316,12 @@ def build_hvac_expected_values(
         )
     )
 
-    if programs_prepared.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
-
     programs_by_day = _prefer_more_specific_schedule(
         _expand_schedule_days(programs_prepared, "scheduled_days"),
         ["device_id", "day_number"],
         "time_value",
         "scheduled_days",
     )
-
-    if programs_by_day.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
 
     ordered_window = Window.partitionBy("device_id", "day_number").orderBy("time_ts")
     grouped_window = Window.partitionBy("device_id", "day_number")
@@ -429,7 +422,6 @@ def build_lights_expected_values(
     lights_programs_df: DataFrame,
     dimensions_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
     active_dimensions = dimensions_df.filter(F.coalesce(F.col("Active"), F.lit(False)))
     lights_dimensions = active_dimensions.filter(
         (F.col("device_type") == F.lit(LIGHT_DEVICE_TYPE))
@@ -477,18 +469,12 @@ def build_lights_expected_values(
         )
     )
 
-    if lights_parsed.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
-
     lights_by_day = _prefer_more_specific_schedule(
         _expand_schedule_days(lights_parsed, "days_candidate"),
         ["sensor_id", "day_number"],
         "start_time_candidate",
         "days_candidate",
     )
-
-    if lights_by_day.rdd.isEmpty():
-        return _empty_internal_expected_values_df(spark)
 
     ordered_window = Window.partitionBy("sensor_id", "day_number").orderBy("minute_of_day")
 
@@ -539,8 +525,6 @@ def build_sensor_expected_values_from_dataframes(
     group_has_schedules_df: DataFrame,
     group_has_sensors_df: DataFrame,
 ) -> DataFrame:
-    spark = dimensions_df.sparkSession
-
     hvac_expected_values = build_hvac_expected_values(
         build_hvac_programs(
             program_profiles_df,
@@ -579,9 +563,6 @@ def build_sensor_expected_values_from_dataframes(
             ]
         )
     )
-
-    if combined.rdd.isEmpty():
-        return _empty_final_expected_values_df(spark)
 
     return (
         combined.select(

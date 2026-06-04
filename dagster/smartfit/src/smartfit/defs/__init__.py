@@ -10,6 +10,7 @@ __all__ = ["defs"]
 def _build_defs() -> Any:
     from dagster import Definitions
 
+    from .asset_checks import quality_asset_checks
     from .assets import (
         cleanup_old_runs,
         dbo_GroupHasSchedules,
@@ -31,10 +32,13 @@ def _build_defs() -> Any:
     )
     from .jobs import (
         cleanup_job,
+        fact_lecturas_backfill_daily_job,
         fact_lecturas_ingestion_job,
+        fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         refresh_dimensions_job,
         refresh_sensor_expected_values_job,
+        spark_df_io_manager_healthcheck_job,
     )
     from .resources import (
         dim_sqlserver_resource,
@@ -61,9 +65,12 @@ def _build_defs() -> Any:
     return Definitions(
         jobs=[
             fact_lecturas_ingestion_job,
+            fact_lecturas_backfill_daily_job,
+            fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             refresh_dimensions_job,
             refresh_sensor_expected_values_job,
+            spark_df_io_manager_healthcheck_job,
             cleanup_job,
         ],
         resources={
@@ -106,6 +113,7 @@ def _build_defs() -> Any:
             dwh_dimsensorexpectedval,
             cleanup_old_runs,
         ],
+        asset_checks=quality_asset_checks,
     )
 
 

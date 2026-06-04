@@ -6,6 +6,7 @@ from pyspark.sql.functions import (
     date_trunc,
     lit,
     expr)
+from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
@@ -25,7 +26,7 @@ def maquinas_soda(
         )
     )
 
-    if base.rdd.isEmpty():
+    if len(base.head(1)) == 0:
         empty_base_df = (
             lecturas_time_hours(
                 dimensions_df.filter(
@@ -52,6 +53,8 @@ def maquinas_soda(
         )
 
         return group_with_guid_df
+
+    base = base.persist(StorageLevel.MEMORY_AND_DISK)
 
     current_stats_df = (
         stats_calculator(
@@ -115,6 +118,8 @@ def maquinas_soda(
         )
     )
 
+    base.unpersist()
+
     scaffold_df = (
         lecturas_time_hours(
             dimensions_df.filter(
@@ -147,8 +152,6 @@ def maquinas_soda(
         .fillna({"ReadingsCount": 0, "Anomalies": -1})
     )
 
-    if scaffold_enriched.rdd.isEmpty():
-        return None
 
     group_with_guid_df = (
         scaffold_enriched
