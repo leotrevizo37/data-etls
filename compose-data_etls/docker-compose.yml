@@ -396,11 +396,19 @@ services:
         condition: service_completed_successfully
     command: [
       "/opt/spark/bin/spark-class",
-      "org.apache.spark.deploy.master.Master"
+      "org.apache.spark.deploy.master.Master",
+      "--port",
+      "${SPARK_MASTER_PORT:-7077}",
+      "--webui-port",
+      "8080"
     ]
+    environment:
+      SPARK_MASTER_PORT: ${SPARK_MASTER_PORT:-7077}
+      SPARK_MASTER_WEBUI_PORT: 8080
+      SPARK_PUBLIC_DNS: ${SPARK_MASTER_PUBLIC_DNS:-spark-master}
     ports:
       - "${SPARK_MASTER_UI_PORT:-8080}:8080"
-      - "${SPARK_MASTER_PORT:-7077}:7077"
+      - "${SPARK_MASTER_PORT:-7077}:${SPARK_MASTER_PORT:-7077}"
     volumes:
       - spark-data:/data
     restart: unless-stopped
@@ -409,7 +417,7 @@ services:
     healthcheck:
       test: [
         "CMD-SHELL",
-        "python3 -c 'import os,socket; host=os.popen(\"hostname -i\").read().strip().split()[0]; s=socket.socket(); s.settimeout(2); s.connect((host,7077)); s.close()'"
+        "python3 -c 'import os,socket; host=os.popen(\"hostname -i\").read().strip().split()[0]; port=int(os.environ.get(\"SPARK_MASTER_PORT\", \"7077\")); s=socket.socket(); s.settimeout(2); s.connect((host,port)); s.close()'"
       ]
       interval: 10s
       timeout: 5s
@@ -433,7 +441,7 @@ services:
       [
         "/opt/spark/bin/spark-class",
         "org.apache.spark.deploy.worker.Worker",
-        "spark://spark-master:7077"
+        "spark://spark-master:${SPARK_MASTER_PORT:-7077}"
       ]
     volumes:
       - spark-data:/data
