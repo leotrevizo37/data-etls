@@ -48,7 +48,7 @@ class IndexMaintenanceTests(unittest.TestCase):
         timezone = _schedule_keyword(SCHEDULE_FILE, "execution_timezone")
         status = _schedule_keyword(SCHEDULE_FILE, "default_status")
 
-        self.assertEqual(ast.literal_eval(cron), "15 4 * * 0")
+        self.assertEqual(ast.literal_eval(cron), "40 4 * * 0")
         self.assertEqual(ast.literal_eval(timezone), "America/Ciudad_Juarez")
         self.assertEqual(status.attr, "RUNNING")
 

@@ -27,16 +27,9 @@ BEGIN
             RETURN;
         END;
 
-    IF @ReorganizeThreshold IS NULL
-        OR @RebuildThreshold IS NULL
-        OR @ReorganizeThreshold < 0
-        OR @RebuildThreshold <= @ReorganizeThreshold
+    IF @ReorganizeThreshold IS NULL OR @RebuildThreshold IS NULL OR @ReorganizeThreshold < 0 OR @RebuildThreshold <= @ReorganizeThreshold
         BEGIN
-            RAISERROR (
-                'usp_IndexMaintenance_Run: thresholds must be non-negative and rebuild threshold must be greater than reorganize threshold.',
-                16,
-                1
-            );
+            RAISERROR ('usp_IndexMaintenance_Run: thresholds must be non-negative and rebuild threshold must be greater than reorganize threshold.', 16, 1);
             RETURN;
         END;
 
@@ -54,24 +47,24 @@ BEGIN
 
     DECLARE @RunId UNIQUEIDENTIFIER = NEWID();
 
-    DECLARE @Indexes TABLE
-    (
-        RowId INT IDENTITY (1, 1) NOT NULL,
-        ObjectId INT NOT NULL,
-        IndexId INT NOT NULL,
-        SchemaName SYSNAME NOT NULL,
-        TableName SYSNAME NOT NULL,
-        IndexName SYSNAME NOT NULL,
-        PageCount BIGINT NOT NULL,
-        AvgFragmentationInPercent DECIMAL(9, 4) NOT NULL,
-        ActionTaken VARCHAR(20) NOT NULL
-    );
+    DECLARE
+        @Indexes TABLE
+        (
+            RowId INT IDENTITY (1, 1) NOT NULL,
+            ObjectId INT NOT NULL,
+            IndexId INT NOT NULL,
+            SchemaName SYSNAME NOT NULL,
+            TableName SYSNAME NOT NULL,
+            IndexName SYSNAME NOT NULL,
+            PageCount BIGINT NOT NULL,
+            AvgFragmentationInPercent DECIMAL(9, 4) NOT NULL,
+            ActionTaken VARCHAR(20) NOT NULL
+        );
 
     WITH index_stats AS (
         SELECT
             ips.object_id,
             ips.index_id,
-            SUM(CAST(ips.page_count AS BIGINT)) AS page_count,
             CAST(
                 SUM(
                     CAST(ips.avg_fragmentation_in_percent AS DECIMAL(19, 4))
@@ -79,19 +72,22 @@ BEGIN
                 )
                 / NULLIF(SUM(CAST(ips.page_count AS DECIMAL(19, 4))), 0)
                 AS DECIMAL(9, 4)
-            ) AS avg_fragmentation_in_percent
-        FROM sys.dm_db_index_physical_stats(
-            DB_ID(),
-            NULL,
-            NULL,
-            NULL,
-            'LIMITED'
-        ) AS ips
+            ) AS avg_fragmentation_in_percent,
+            SUM(CAST(ips.page_count AS BIGINT)) AS page_count
+        FROM
+            sys.dm_db_index_physical_stats(
+                DB_ID(),
+                NULL,
+                NULL,
+                NULL,
+                'LIMITED'
+            ) AS ips
         WHERE ips.index_id > 0
         GROUP BY
             ips.object_id,
             ips.index_id
     )
+
     INSERT INTO @Indexes
     (
         ObjectId,
@@ -106,9 +102,9 @@ BEGIN
     SELECT
         stats.object_id,
         stats.index_id,
-        s.name,
-        t.name,
-        i.name,
+        s.name AS SchemaName,
+        t.name AS TableName,
+        i.name AS IndexName,
         stats.page_count,
         stats.avg_fragmentation_in_percent,
         CASE
@@ -118,8 +114,9 @@ BEGIN
         END AS ActionTaken
     FROM index_stats AS stats
     INNER JOIN sys.indexes AS i
-        ON stats.object_id = i.object_id
-        AND stats.index_id = i.index_id
+        ON
+            stats.object_id = i.object_id
+            AND stats.index_id = i.index_id
     INNER JOIN sys.tables AS t
         ON stats.object_id = t.object_id
     INNER JOIN sys.schemas AS s
@@ -174,24 +171,28 @@ BEGIN
             BEGIN TRY
                 IF @ActionTaken = 'REORGANIZE'
                     BEGIN
-                        SET @Sql = N'ALTER INDEX ' + QUOTENAME(@IndexName)
+                        SET
+                            @Sql = N'ALTER INDEX ' + QUOTENAME(@IndexName)
                             + N' ON ' + @QualifiedTableName
                             + N' REORGANIZE;';
                         EXEC sp_executesql @Sql;
 
-                        SET @Sql = N'UPDATE STATISTICS ' + @QualifiedTableName
+                        SET
+                            @Sql = N'UPDATE STATISTICS ' + @QualifiedTableName
                             + N' ' + QUOTENAME(@IndexName) + N';';
                         EXEC sp_executesql @Sql;
                     END;
                 ELSE IF @ActionTaken = 'REBUILD'
                     BEGIN
-                        SET @Sql = N'ALTER INDEX ' + QUOTENAME(@IndexName)
+                        SET
+                            @Sql = N'ALTER INDEX ' + QUOTENAME(@IndexName)
                             + N' ON ' + @QualifiedTableName
                             + N' REBUILD WITH (MAXDOP = ' + CAST(@MaxDop AS NVARCHAR(10));
 
                         IF @UseOnlineRebuild = 1
                             BEGIN
-                                SET @Sql = @Sql
+                                SET
+                                    @Sql = @Sql
                                     + N', ONLINE = ON (WAIT_AT_LOW_PRIORITY (MAX_DURATION = 5 MINUTES, ABORT_AFTER_WAIT = SELF))';
                             END;
 

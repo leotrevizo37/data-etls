@@ -14,7 +14,7 @@ IF OBJECT_ID(N'ctl.IndexMaintenanceLog', N'U') IS NULL
         CREATE TABLE ctl.IndexMaintenanceLog
         (
             IndexMaintenanceLogId BIGINT IDENTITY (1, 1) NOT NULL
-                CONSTRAINT PK_IndexMaintenanceLog PRIMARY KEY,
+            CONSTRAINT PK_IndexMaintenanceLog PRIMARY KEY,
             RunId UNIQUEIDENTIFIER NOT NULL,
             SchemaName SYSNAME NOT NULL,
             TableName SYSNAME NOT NULL,
