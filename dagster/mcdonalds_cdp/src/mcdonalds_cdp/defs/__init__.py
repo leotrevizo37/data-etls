@@ -29,6 +29,7 @@ def _build_defs() -> Any:
         fact_lecturas_ingestion_job,
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
+        index_maintenance_job,
         refresh_dimensions_job,
         spark_df_io_manager_healthcheck_job,
     )
@@ -45,6 +46,7 @@ def _build_defs() -> Any:
         fact_lecturas_sched_every_6h,
         fact_lecturas_sched_every_w,
         factlecturas_cleanup_schedule,
+        index_maintenance_schedule,
         operations_sched_every_1h_w,
         operations_sched_every_6h,
         operations_sched_every_w,
@@ -61,6 +63,7 @@ def _build_defs() -> Any:
             fact_operations_tables_job,
             refresh_dimensions_job,
             spark_df_io_manager_healthcheck_job,
+            index_maintenance_job,
             cleanup_job,
         ],
         resources={
@@ -79,6 +82,7 @@ def _build_defs() -> Any:
             operations_sched_every_1h_w,
             operations_sched_every_6h,
             cleanup_schedule,
+            index_maintenance_schedule,
         ],
         sensors=[
             dwh_dimsidonproddimensions_sensor,
