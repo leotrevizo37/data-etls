@@ -6,6 +6,7 @@ from .factoperations_scheduler import (operations_sched_every_6h,
                                        operations_sched_every_w)
 from .cleanup_schedule import cleanup_schedule
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
+from .index_maintenance_schedule import index_maintenance_schedule
 
 __all__ = [
     "fact_lecturas_sched_every_6h",
@@ -16,4 +17,5 @@ __all__ = [
     "operations_sched_every_w",
     "cleanup_schedule",
     "factlecturas_cleanup_schedule",
+    "index_maintenance_schedule",
 ]
