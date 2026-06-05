@@ -7,7 +7,7 @@ ENV ACCEPT_EULA=Y \
     DAGSTER_HOME=/opt/dagster/dagster_home \
     PYTHONPATH=/opt/dagster/app/src
 
-RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds /opt/dagster/app/smartfit /opt/dagster/app/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds /opt/dagster/app/smartfit /opt/dagster/app/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino
 
 WORKDIR /opt/dagster/app
 
@@ -37,6 +37,7 @@ COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
 COPY dagster/smartfit /opt/dagster/app/smartfit
 COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
 COPY dagster/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete
+COPY dagster/valledelencino /opt/dagster/app/valledelencino
 
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir -r /tmp/requirements.txt
