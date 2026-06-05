@@ -33,7 +33,7 @@ build:
 ps:
 	$(COMPOSE) ps
 
-lint-python: lint-mcdonalds lint-smartfit lint-cdp lint-gabinete
+lint-python: lint-mcdonalds lint-smartfit lint-cdp lint-gabinete lint-valledelencino
 
 lint-mcdonalds:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/mcdonalds && ruff check src tests"
@@ -47,7 +47,10 @@ lint-cdp:
 lint-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/bafar_poc_gabinete && ruff check src tests"
 
-test-python: test-mcdonalds test-smartfit test-cdp test-gabinete
+lint-valledelencino:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-valledelencino -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/valledelencino && ruff check src tests"
+
+test-python: test-mcdonalds test-smartfit test-cdp test-gabinete test-valledelencino
 
 test-mcdonalds:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd -lc "cd /opt/dagster/app/mcdonalds && python -m unittest discover tests -p 'test_*.py'"
@@ -60,3 +63,6 @@ test-cdp:
 
 test-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "cd /opt/dagster/app/bafar_poc_gabinete && python -m unittest discover tests -p 'test_*.py'"
+
+test-valledelencino:
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-valledelencino -lc "cd /opt/dagster/app/valledelencino && python -m unittest discover tests -p 'test_*.py'"
