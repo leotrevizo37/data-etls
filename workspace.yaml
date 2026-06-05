@@ -15,3 +15,7 @@ load_from:
       host: bafar_poc_gabinete-dagster-user-code
       port: 4004
       location_name: bafar_poc_gabinete
+  - grpc_server:
+      host: valledelencino-dagster-user-code
+      port: 4005
+      location_name: valledelencino

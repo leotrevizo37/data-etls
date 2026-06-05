@@ -346,6 +346,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
             job_type="lecturas",
             driver_host="10.0.0.5",
             driver_port="17001",
+            driver_block_manager_port="17002",
             block_manager_port="17101",
         )
 
@@ -361,10 +362,32 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(conf.get("spark.driver.host"), "10.0.0.5")
         self.assertEqual(conf.get("spark.driver.bindAddress"), "0.0.0.0")
         self.assertEqual(conf.get("spark.driver.port"), "17001")
+        self.assertEqual(conf.get("spark.driver.blockManager.port"), "17002")
         self.assertEqual(conf.get("spark.blockManager.port"), "17101")
         self.assertEqual(conf.get("spark.task.maxFailures"), "8")
         self.assertEqual(conf.get("spark.shuffle.io.maxRetries"), "10")
         self.assertEqual(conf.get("spark.network.timeout"), "800s")
+
+    def test_wait_for_spark_capacity_fails_when_worker_network_is_unreachable(self) -> None:
+        spark_res = _spark_resource(
+            master_url="spark://spark-master:7077",
+            job_type="lecturas",
+            block_manager_port="37189",
+        )
+        spark_res._fetch_spark_master_status = lambda: {
+            "workers": [
+                {
+                    "state": "ALIVE",
+                    "host": "172.21.0.4",
+                    "coresFree": 2,
+                    "memoryFree": 4096,
+                }
+            ]
+        }
+        spark_res._worker_endpoint_is_routable = lambda host, port: False
+
+        with self.assertRaisesRegex(RuntimeError, "block manager endpoints"):
+            spark_res._wait_for_spark_capacity()
 
 
 if __name__ == "__main__":

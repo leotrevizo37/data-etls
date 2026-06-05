@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 
 import json
 import os
+import socket
 import time
 from urllib.request import urlopen
 from pyspark.sql import DataFrame, SparkSession
@@ -18,6 +19,7 @@ MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
 DEFAULT_SPARK_MASTER_STATUS_URL = "http://spark-master:8080/json/"
 DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
 DEFAULT_SPARK_RESOURCE_POLL_SECONDS = 10
+DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS = 3
 DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
@@ -258,7 +260,11 @@ class SparkResource:
         driver_host: str = "",
         driver_bind_address: str = "",
         driver_port: str = "",
+        driver_block_manager_port: str = "",
         block_manager_port: str = "",
+        worker_network_timeout_seconds: int = (
+            DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS
+        ),
         resource_profile: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.master_url = master_url
@@ -276,7 +282,9 @@ class SparkResource:
         self.driver_host = driver_host
         self.driver_bind_address = driver_bind_address
         self.driver_port = driver_port
+        self.driver_block_manager_port = driver_block_manager_port
         self.block_manager_port = block_manager_port
+        self.worker_network_timeout_seconds = worker_network_timeout_seconds
         self.resource_profile = resource_profile or _build_spark_resource_profile(job_type)
         self.adls_account_name = adls_account_name
         self.adls_container_name = adls_container_name
@@ -358,6 +366,11 @@ class SparkResource:
             )
         if self.driver_port:
             conf.set("spark.driver.port", str(self.driver_port))
+        if self.driver_block_manager_port:
+            conf.set(
+                "spark.driver.blockManager.port",
+                str(self.driver_block_manager_port),
+            )
         if self.block_manager_port:
             conf.set("spark.blockManager.port", str(self.block_manager_port))
 
@@ -390,6 +403,42 @@ class SparkResource:
         with urlopen(self.master_status_url, timeout=5) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    def _worker_endpoint_is_routable(self, host: str, port: int) -> bool:
+        try:
+            with socket.create_connection(
+                (host, port),
+                timeout=max(self.worker_network_timeout_seconds, 1),
+            ):
+                return True
+        except ConnectionRefusedError:
+            return True
+        except OSError:
+            return False
+
+    def _validate_spark_worker_network(self, master_status: Dict[str, Any]) -> None:
+        if not self.block_manager_port:
+            return
+
+        block_manager_port = int(self.block_manager_port)
+        unreachable = []
+        for worker in master_status.get("workers", []):
+            w = {k.lower(): v for k, v in worker.items()}
+            if str(w.get("state", "")).upper() != "ALIVE":
+                continue
+            host = str(w.get("host") or "").strip()
+            if not host:
+                continue
+            if not self._worker_endpoint_is_routable(host, block_manager_port):
+                unreachable.append(f"{host}:{block_manager_port}")
+
+        if unreachable:
+            raise RuntimeError(
+                "Spark worker block manager endpoints are not reachable from "
+                f"the driver: {', '.join(unreachable)}. Configure each worker "
+                "to advertise a routable host/IP and publish "
+                "SPARK_BLOCK_MANAGER_PORT for executor shuffle traffic."
+            )
+
     def _wait_for_spark_capacity(self) -> None:
         if self.master_url.lower().startswith("local"):
             return
@@ -410,6 +459,7 @@ class SparkResource:
 
             last_available = _spark_master_available_resources(master_status)
             if _has_spark_capacity(last_available, self.resource_profile):
+                self._validate_spark_worker_network(master_status)
                 return
 
             if time.monotonic() >= deadline:
@@ -747,7 +797,14 @@ def spark_resource(init_context):
     driver_host = os.getenv("SPARK_DRIVER_HOST", "")
     driver_bind_address = os.getenv("SPARK_DRIVER_BIND_ADDRESS", "")
     driver_port = os.getenv("SPARK_DRIVER_PORT", "")
+    driver_block_manager_port = os.getenv("SPARK_DRIVER_BLOCK_MANAGER_PORT", "")
     block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
+    worker_network_timeout_seconds = int(
+        os.getenv(
+            "SPARK_WORKER_NETWORK_TIMEOUT_SECONDS",
+            str(DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS),
+        )
+    )
     adls_account_name = os.getenv("ADLS_ACCOUNT_NAME", "")
     adls_container_name = os.getenv("ADLS_CONTAINER_NAME", "")
     adls_base_path = os.getenv("ADLS_BASE_PATH", "")
@@ -787,7 +844,9 @@ def spark_resource(init_context):
         driver_host=driver_host,
         driver_bind_address=driver_bind_address,
         driver_port=driver_port,
+        driver_block_manager_port=driver_block_manager_port,
         block_manager_port=block_manager_port,
+        worker_network_timeout_seconds=worker_network_timeout_seconds,
         resource_profile=resource_profile,
         adls_account_name=adls_account_name,
         adls_container_name=adls_container_name,

@@ -10,6 +10,7 @@ x-dagster-common: &dagster_common
     - ../dagster/smartfit:/opt/dagster/app/smartfit
     - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
+    - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -50,7 +51,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -175,7 +176,9 @@ services:
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_DRIVER_PORT: ${MCD_SPARK_DRIVER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${MCD_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${MCD_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
       - "${MCDONALDS_USER_CODE_PORT:-4001}:4001"
       - "${MCD_SPARK_DRIVER_PORT}:${MCD_SPARK_DRIVER_PORT}"
@@ -223,7 +226,9 @@ services:
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_DRIVER_PORT: ${SMFT_SPARK_DRIVER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${SMFT_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${SMFT_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
       - "${SMARTFIT_USER_CODE_PORT:-4002}:4002"
       - "${SMFT_SPARK_DRIVER_PORT}:${SMFT_SPARK_DRIVER_PORT}"
@@ -271,7 +276,9 @@ services:
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_DRIVER_PORT: ${CDP_SPARK_DRIVER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${CDP_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${CDP_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
       - "${CDP_USER_CODE_PORT:-4003}:4003"
       - "${CDP_SPARK_DRIVER_PORT}:${CDP_SPARK_DRIVER_PORT}"
@@ -319,7 +326,9 @@ services:
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_DRIVER_PORT: ${GAB_SPARK_DRIVER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${GAB_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${GAB_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
       - "${GABINETE_USER_CODE_PORT:-4004}:4004"
       - "${GAB_SPARK_DRIVER_PORT}:${GAB_SPARK_DRIVER_PORT}"
@@ -335,6 +344,56 @@ services:
         [
           "CMD-SHELL",
           "dagster api grpc-health-check -p 4004 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
+  dagster-user-code-valledelencino:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: valledelencino-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/valledelencino
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/valledelencino/src
+      APP_DB: ${VALLEDELENCINO_DB:-valledelencino}
+      DIM_DB: ${VALLEDELENCINO_DIM_DB:-valledelencino}
+      ADLS_CONTAINER_NAME: ${VALLEDELENCINO_ADLS_CONTAINER_NAME:-valledelencino}
+      FACTREADINGS_OVERLAP_HOURS: ${VALLEDELENCINO_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      SPARK_DF_IO_BASE_PATH: ${VALLEDELENCINO_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/valledelencino}
+      SPARK_MASTER_URL: "spark://spark-master:${SPARK_MASTER_PORT:-7077}"
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${VALLEDELENCINO_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${VALLEDELENCINO_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${VALLEDELENCINO_USER_CODE_PORT:-4005}:4005"
+      - "${VALLEDELENCINO_SPARK_DRIVER_PORT}:${VALLEDELENCINO_SPARK_DRIVER_PORT}"
+      - "${VALLEDELENCINO_SPARK_BLOCK_MANAGER_PORT}:${VALLEDELENCINO_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4005",
+      "-m", "valledelencino.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4005 -h 127.0.0.1"
         ]
       interval: 20s
       timeout: 25s
@@ -443,6 +502,12 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
+    ports:
+      - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
+      - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
+      - "${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}:${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}"
+      - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
+      - "${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}:${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}"
     command:
       [
         "/opt/spark/bin/spark-class",

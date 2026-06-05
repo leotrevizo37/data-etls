@@ -17,6 +17,9 @@ services:
   dagster-user-code-bafar-poc-gabinete:
     restart: "no"
 
+  dagster-user-code-valledelencino:
+    restart: "no"
+
   dagster-web:
     restart: "no"
 
