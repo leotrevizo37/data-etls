@@ -133,6 +133,7 @@ spark_df_io_manager_module = _load_module(
 HADOOP_AWS_PACKAGE = spark_module.HADOOP_AWS_PACKAGE
 MSSQL_JDBC_PACKAGE = spark_module.MSSQL_JDBC_PACKAGE
 build_executor_cores = spark_module._build_executor_cores
+build_spark_master_status_url = spark_module._build_spark_master_status_url
 build_spark_resource_profile = spark_module._build_spark_resource_profile
 build_spark_retry_conf = spark_module._build_spark_retry_conf
 spark_master_available_resources = spark_module._spark_master_available_resources
@@ -292,6 +293,25 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(policy["spark.task.maxFailures"], "6")
         self.assertEqual(policy["spark.stage.maxConsecutiveAttempts"], "8")
         self.assertEqual(policy["spark.shuffle.io.retryWait"], "20s")
+
+    def test_spark_master_status_url_derives_from_external_master_url(self) -> None:
+        status_url = build_spark_master_status_url(
+            "spark://172.168.10.80:7077",
+            {
+                "SPARK_MASTER_STATUS_URL": "http://spark-master:8080/json/",
+                "SPARK_MASTER_UI_PORT": "8081",
+            },
+        )
+
+        self.assertEqual(status_url, "http://172.168.10.80:8081/json/")
+
+    def test_spark_master_status_url_keeps_internal_compose_port(self) -> None:
+        status_url = build_spark_master_status_url(
+            "spark://spark-master:7077",
+            {"SPARK_MASTER_UI_PORT": "8081"},
+        )
+
+        self.assertEqual(status_url, "http://spark-master:8080/json/")
 
     def test_legacy_worker_cores_fallback_does_not_exceed_profile_cap(self) -> None:
         profile = build_spark_resource_profile("lecturas", {})

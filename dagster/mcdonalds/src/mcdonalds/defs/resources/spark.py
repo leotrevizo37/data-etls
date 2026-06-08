@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import time
+from urllib.parse import urlparse
 from urllib.request import urlopen
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, max as spark_max, upper
@@ -84,6 +85,38 @@ def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, s
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
     }
+
+
+def _build_spark_master_status_url(
+    master_url: str,
+    env: Optional[Dict[str, str]] = None,
+) -> str:
+    current_env = env or os.environ
+    explicit_url = (current_env.get("SPARK_MASTER_STATUS_URL") or "").strip()
+    parsed_master_url = urlparse(master_url)
+    master_host = parsed_master_url.hostname
+    if explicit_url and (
+        explicit_url != DEFAULT_SPARK_MASTER_STATUS_URL
+        or master_host == "spark-master"
+        or not master_host
+    ):
+        return explicit_url
+
+    if not master_host:
+        return DEFAULT_SPARK_MASTER_STATUS_URL
+
+    status_port = (current_env.get("SPARK_MASTER_STATUS_PORT") or "").strip()
+    if not status_port:
+        if master_host == "spark-master":
+            status_port = current_env.get("SPARK_MASTER_WEBUI_PORT") or "8080"
+        else:
+            status_port = (
+                current_env.get("SPARK_MASTER_UI_PORT")
+                or current_env.get("SPARK_MASTER_WEBUI_PORT")
+                or "8080"
+            )
+
+    return f"http://{master_host}:{status_port}/json/"
 
 
 def _coerce_memory_mb(value: Any) -> int:
@@ -785,10 +818,7 @@ def spark_resource(init_context):
     worker_mem = os.getenv("SPARK_WORKER_MEM", "4G")
     executor_mem = os.getenv("SPARK_EXECUTOR_MEM", "3G")
     executor_cores = _build_executor_cores(resource_profile)
-    master_status_url = os.getenv(
-        "SPARK_MASTER_STATUS_URL",
-        DEFAULT_SPARK_MASTER_STATUS_URL,
-    )
+    master_status_url = _build_spark_master_status_url(master_url)
     resource_wait_seconds = int(
         os.getenv("SPARK_RESOURCE_WAIT_SECONDS", str(DEFAULT_SPARK_RESOURCE_WAIT_SECONDS))
     )
