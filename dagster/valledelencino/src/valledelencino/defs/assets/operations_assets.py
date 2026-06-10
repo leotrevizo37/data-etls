@@ -229,7 +229,13 @@ def build_devices_df_op(
 
     try:
         methods = [
-            "gabinete",
+            "cava",
+            "chiller",
+            "cisterna",
+            "corriente",
+            "destilados",
+            "puerta",
+            "tanque",
         ]
 
         for method in methods:
