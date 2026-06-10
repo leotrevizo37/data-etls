@@ -33,7 +33,7 @@ IF OBJECT_ID(N'dwh.factSensorEvents', N'U') IS NULL
             WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
             CONSTRAINT FK_factSensorEvents_factLecturas_ReadId
             FOREIGN KEY (ReadId)
-            REFERENCES dwh.factLecturas(ReadId)
+            REFERENCES dwh.factLecturas (ReadId)
         );
     END;
 GO
