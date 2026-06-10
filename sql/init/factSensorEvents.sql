@@ -25,6 +25,9 @@ IF OBJECT_ID(N'dwh.factSensorEvents', N'U') IS NULL
             Value DECIMAL(19, 9) NOT NULL,
             EventMinutes DECIMAL(19, 9) NOT NULL,
             IsEventCompleted BIT NOT NULL,
+            ModifiedAt DATETIME2(0) NOT NULL
+            CONSTRAINT DF_factSensorEvents_ModifiedAt
+            DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_factSensorEvents
             PRIMARY KEY CLUSTERED (ReadId)
             WITH (IGNORE_DUP_KEY = ON), -- noqa: PRS
