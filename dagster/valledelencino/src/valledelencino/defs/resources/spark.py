@@ -801,7 +801,24 @@ class SparkResource:
         )
 
     def write_fact_sensor_events(self, df: DataFrame) -> int:
-        df_dedup = df.dropDuplicates(["ReadId"])
+        df_dedup = (
+            df
+            .select(
+                "ReadId",
+                "SensorId",
+                "DeviceId",
+                "LocationId",
+                "LocationName",
+                "DeviceType",
+                "SensorType",
+                "SensorName",
+                "LocalTimeSpan",
+                "Value",
+                "EventMinutes",
+                "IsEventCompleted",
+            )
+            .dropDuplicates(["ReadId"])
+        )
         if len(df_dedup.head(1)) == 0:
             return 0
 

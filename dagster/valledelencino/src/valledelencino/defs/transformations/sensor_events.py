@@ -1,14 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import (
-    col,
-    lag,
-    lead,
-    lit,
-    when,
-    unix_timestamp,
-)
+from pyspark.sql.functions import col, lag, lead, lit, when, unix_timestamp
 from pyspark.sql.window import Window
 
 
@@ -20,37 +13,16 @@ def sensor_events(
     factlecturas_extended_df: DataFrame,
     to_utc_str: str,
 ) -> Optional[DataFrame]:
-    """Detect door/cava state-change events and compute open-duration minutes.
-
-    Parameters
-    ----------
-    factlecturas_extended_df:
-        Lecturas already joined with dimensions (via
-        ``datalake_readings_extended``).  Expected columns include
-        ``ReadId``, ``SensorId``, ``DeviceId``, ``LocationId``,
-        ``location_name``, ``device_type``, ``sensor_type``,
-        ``sensor_name``, ``LocalTimeSpan``, ``Value``.
-    to_utc_str:
-        Upper-bound of the current run window as a string parseable by
-        PySpark (``yyyy-MM-dd HH:mm:ss``).  Used to compute partial
-        ``EventMinutes`` for events that have not yet been closed.
-
-    Returns
-    -------
-    DataFrame | None
-        One row per *state change* with columns matching
-        ``dwh.factSensorEvents``, or ``None`` when no qualifying rows
-        exist in the input.
-    """
     base = factlecturas_extended_df.filter(
         (col("device_type").isin("Puerta", "Cava"))
         & (col("sensor_type") == "Estado")
+        & (col("Value").isin(OPEN_VALUE, CLOSE_VALUE))
     )
 
     if len(base.head(1)) == 0:
         return None
 
-    sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan")
+    sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
 
     with_prev = base.withColumn(
         "prev_value", lag("Value").over(sensor_window)
@@ -89,9 +61,7 @@ def sensor_events(
         ).otherwise(lit(0)),
     ).withColumn(
         "IsEventCompleted",
-        when(
-            col("Value") == lit(CLOSE_VALUE), lit(True)
-        ).when(
+        when(col("Value") == lit(CLOSE_VALUE), lit(True)).when(
             (col("Value") == lit(OPEN_VALUE))
             & col("next_close_time").isNotNull(),
             lit(True),
@@ -103,7 +73,7 @@ def sensor_events(
         col("SensorId"),
         col("DeviceId"),
         col("LocationId"),
-        col("location_name").alias("LocationName"),
+        col("sublocation_name").alias("LocationName"),
         col("device_type").alias("DeviceType"),
         col("sensor_type").alias("SensorType"),
         col("sensor_name").alias("SensorName"),

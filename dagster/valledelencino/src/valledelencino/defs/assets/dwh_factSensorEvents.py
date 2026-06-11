@@ -1,12 +1,10 @@
 from datetime import datetime
+from time import perf_counter
 from typing import Any, Dict, Optional
 
-from dagster import In, Out, op, graph_asset, MaterializeResult, RetryPolicy, RetryRequested
-from pyspark.sql import DataFrame
-from pyspark import StorageLevel
-from time import perf_counter
+from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
 
-from ..resources import SqlServerResource, SparkResource
+from ..resources import SparkResource, SqlServerResource
 from ..transformations import datalake_readings_extended, sensor_events
 
 SENSOR_EVENTS_MAX_RETRIES = 3
@@ -38,17 +36,17 @@ def start_run_and_get_range_opff(context) -> Dict[str, Any]:
         last_loaded_at = datetime(2026, 1, 16)
 
     from_utc = _truncate_to_seconds(last_loaded_at)
-    now_utc = _truncate_to_seconds(datetime.utcnow())
+    to_utc = _truncate_to_seconds(datetime.utcnow())
 
     sql.mark_run_started(INGESTION_NAME)
 
     context.log.info(
-        INGESTION_NAME + " run window from " + str(from_utc) + " to " + str(now_utc)
+        INGESTION_NAME + " run window from " + str(from_utc) + " to " + str(to_utc)
     )
 
     return {
         "from_utc": from_utc,
-        "to_utc": now_utc,
+        "to_utc": to_utc,
         "original_last_loaded_at": last_loaded_at,
         "start_time": start_time,
     }
@@ -82,48 +80,34 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     row_count = 0
     retry_number = getattr(context, "retry_number", 0)
 
-    readings_df: Optional[DataFrame] = None
     try:
-        readings_df = spark_res.read_lecturas_range(from_utc, to_utc)
-        readings_df = readings_df.persist(StorageLevel.MEMORY_AND_DISK)
+        dimensions_df = spark_res.read_dim_prod_dimensions()
+        extended_df = datalake_readings_extended(
+            spark_res=spark_res,
+            raw_dimensions=dimensions_df,
+            fetch_readings_from=from_utc,
+            fetch_readings_to=to_utc,
+        )
 
-        if len(readings_df.head(1)) == 0:
-            context.log.info(
-                "No rows found in Data Lake for window "
-                + str(from_utc) + " to " + str(to_utc)
-            )
+        if extended_df is None:
+            context.log.info("No extended readings found after joining dimensions.")
             succeeded = True
         else:
-            dimensions_df = spark_res.read_dim_prod_dimensions()
+            events_df = sensor_events(extended_df, to_utc.strftime("%Y-%m-%d %H:%M:%S"))
 
-            extended_df = datalake_readings_extended(
-                spark_res=spark_res,
-                raw_dimensions=dimensions_df,
-                fetch_readings_from=from_utc,
-                fetch_readings_to=to_utc,
-            )
-
-            if extended_df is None:
-                context.log.info("No extended readings found after joining dimensions.")
+            if events_df is None:
+                context.log.info("No door/cava state-change events found in window.")
                 succeeded = True
             else:
-                to_utc_str = to_utc.strftime("%Y-%m-%d %H:%M:%S")
-                events_df = sensor_events(extended_df, to_utc_str)
-
-                if events_df is None:
-                    context.log.info(
-                        "No door/cava state-change events found in window."
-                    )
-                    succeeded = True
-                else:
-                    row_count = spark_res.write_fact_sensor_events(events_df)
-                    max_time_span = spark_res.get_max_time_span(events_df, "LocalTimeSpan")
-                    context.log.info(
-                        str(row_count)
-                        + " sensor event rows written to dwh.factSensorEvents. "
-                        + "Max LocalTimeSpan " + str(max_time_span)
-                    )
-                    succeeded = True
+                row_count = spark_res.write_fact_sensor_events(events_df)
+                max_time_span = spark_res.get_max_time_span(events_df, "LocalTimeSpan")
+                context.log.info(
+                    str(row_count)
+                    + " sensor event rows written to dwh.factSensorEvents. "
+                    + "Max LocalTimeSpan "
+                    + str(max_time_span)
+                )
+                succeeded = True
     except Exception as ex:
         error_message = str(ex)
         context.log.error("Error loading FactSensorEvents window: " + error_message)
@@ -151,9 +135,6 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                 seconds_to_wait=SENSOR_EVENTS_RETRY_DELAY_SECONDS,
             ) from ex
         succeeded = False
-    finally:
-        if readings_df is not None:
-            readings_df.unpersist()
 
     return {
         "from_utc": from_utc,
@@ -191,13 +172,15 @@ def finalize_run_opff(context, result: Dict[str, Any]):
         if max_time_span is None:
             new_watermark = to_utc
             context.log.info(
-                INGESTION_NAME + " run succeeded with no events. "
-                "Advancing watermark to " + str(new_watermark)
+                INGESTION_NAME
+                + " run succeeded with no events. Advancing watermark to "
+                + str(new_watermark)
             )
         else:
             new_watermark = max_time_span
             context.log.info(
-                INGESTION_NAME + " run succeeded. Advancing watermark to "
+                INGESTION_NAME
+                + " run succeeded. Advancing watermark to "
                 + str(new_watermark)
             )
 
@@ -221,7 +204,11 @@ def finalize_run_opff(context, result: Dict[str, Any]):
     )
 
 
-@graph_asset(name="dwh_factsensorevents", group_name="valledelencino", key_prefix=["valledelencino"])
+@graph_asset(
+    name="dwh_factsensorevents",
+    group_name="valledelencino",
+    key_prefix=["valledelencino"],
+)
 def dwh_factsensorevents():
     window = start_run_and_get_range_opff()
     result = transform_and_load_sensor_events_op(window)
