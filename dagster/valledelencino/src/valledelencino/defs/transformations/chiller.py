@@ -15,7 +15,11 @@ def chiller(
     max_hour: str,
 ) -> Optional[DataFrame]:
     base = factlecturas_extended_df.filter(col("device_type") == "Chiller (Compresor)")
-    scaffold_base_df = lecturas_time_hours(dimensions_df, min_hour, max_hour)
+    scaffold_base_df = lecturas_time_hours(
+        dimensions_df.filter(col("device_type") == "Chiller (Compresor)"),
+        min_hour,
+        max_hour,
+    )
 
     if scaffold_base_df is None:
         return None
@@ -63,7 +67,7 @@ def chiller(
 
     stats_dfs = [
         stats_df
-        for stats_df in state_stats_df
+        for stats_df in (state_stats_df,)
         if stats_df is not None
     ]
 
