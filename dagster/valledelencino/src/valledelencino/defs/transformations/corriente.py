@@ -16,7 +16,10 @@ def corriente(
 ) -> Optional[DataFrame]:
     base = factlecturas_extended_df.filter(col("device_type") == "Corriente General")
     scaffold_base_df = lecturas_time_hours(
-        dimensions_df.filter(col("device_type") == "Corriente General"),
+        dimensions_df.filter(
+            (col("device_type") == "Corriente General")
+            & (col("sensor_type") == "Corriente")
+        ),
         min_hour,
         max_hour,
     )

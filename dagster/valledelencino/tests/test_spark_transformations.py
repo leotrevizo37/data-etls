@@ -1,7 +1,8 @@
+import ast
 import sys
 import unittest
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
@@ -19,13 +20,20 @@ PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
+from valledelencino.defs.transformations.cava import cava  # noqa: E402
+from valledelencino.defs.transformations.chiller import chiller  # noqa: E402
+from valledelencino.defs.transformations.cisterna import cisterna  # noqa: E402
+from valledelencino.defs.transformations.corriente import corriente  # noqa: E402
+from valledelencino.defs.transformations.destilados import destilados  # noqa: E402
 from valledelencino.defs.transformations.lecturas_time_hours import (  # noqa: E402
     lecturas_time_hours,
 )
 from valledelencino.defs.transformations.gabinete import gabinete  # noqa: E402
+from valledelencino.defs.transformations.puerta import puerta  # noqa: E402
 from valledelencino.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
+from valledelencino.defs.transformations.tanque import tanque  # noqa: E402
 from valledelencino.operations_filters import (  # noqa: E402
     limit_operations_rows_to_closed_hours,
 )
@@ -35,6 +43,69 @@ warnings.simplefilter("ignore", ResourceWarning)
 
 
 class SparkTransformationsTests(unittest.TestCase):
+    DEVICE_TRANSFORMATION_CASES = [
+        (
+            "cava",
+            cava,
+            "Cava",
+            {
+                "Temperatura": [16.0, 18.0],
+                "Humedad": [55.0, 57.0],
+                "Estado": [1.0, 0.0],
+            },
+            "Nivel",
+        ),
+        (
+            "chiller",
+            chiller,
+            "Chiller (Compresor)",
+            {"Corriente": [6.0, 8.0]},
+            "Temperatura",
+        ),
+        (
+            "cisterna",
+            cisterna,
+            "Cisterna",
+            {"Nivel": [62.0, 64.0]},
+            "Temperatura",
+        ),
+        (
+            "corriente",
+            corriente,
+            "Corriente General",
+            {"Corriente": [10.0, 12.0]},
+            "Humedad",
+        ),
+        (
+            "destilados",
+            destilados,
+            "Cuarto destilados",
+            {
+                "Temperatura": [20.0, 22.0],
+                "Humedad": [48.0, 50.0],
+            },
+            "Estado",
+        ),
+        (
+            "puerta",
+            puerta,
+            "Puerta",
+            {
+                "Temperatura": [21.0, 23.0],
+                "Humedad": [45.0, 47.0],
+                "Estado": [1.0, 0.0],
+            },
+            "Nivel",
+        ),
+        (
+            "tanque",
+            tanque,
+            "Tanque vino",
+            {"Temperatura": [19.0, 21.0]},
+            "Humedad",
+        ),
+    ]
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.spark = (
@@ -55,6 +126,193 @@ class SparkTransformationsTests(unittest.TestCase):
 
     def _readings_df(self, rows: list[dict]) -> DataFrame:
         return self.spark.createDataFrame(rows)
+
+    def _device_transform_inputs(
+        self,
+        method_name: str,
+        device_type: str,
+        sensor_values: dict[str, list[float]],
+        unsupported_sensor_type: str,
+    ) -> tuple[DataFrame, DataFrame]:
+        reading_rows = []
+        dimension_rows = []
+        device_id = method_name + "-device"
+        location_id = method_name + "-location"
+        device_name = method_name + "-device-name"
+
+        for idx, (sensor_type, values) in enumerate(sensor_values.items(), start=1):
+            sensor_id = method_name + "-sensor-" + str(idx)
+            sensor_ty_id = method_name + "-sensor-ty-" + str(idx)
+            dimension_rows.append(
+                {
+                    "DeviceId": device_id,
+                    "SensorId": sensor_id,
+                    "LocationId": location_id,
+                    "SensorTyId": sensor_ty_id,
+                    "sensor_type": sensor_type,
+                    "device_type": device_type,
+                    "device_name": device_name,
+                }
+            )
+            for read_idx, value in enumerate(values):
+                reading_rows.append(
+                    {
+                        "ReadId": method_name + "-read-" + str(idx) + "-" + str(read_idx),
+                        "DeviceId": device_id,
+                        "SensorId": sensor_id,
+                        "LocationId": location_id,
+                        "SensorTyId": sensor_ty_id,
+                        "sensor_type": sensor_type,
+                        "device_type": device_type,
+                        "device_name": device_name,
+                        "LocalTimeSpan": datetime(2026, 3, 29, 10, 5 + read_idx * 20),
+                        "Value": float(value),
+                    }
+                )
+
+        unsupported_sensor_id = method_name + "-unsupported-sensor"
+        unsupported_sensor_ty_id = method_name + "-unsupported-sensor-ty"
+        dimension_rows.append(
+            {
+                "DeviceId": device_id,
+                "SensorId": unsupported_sensor_id,
+                "LocationId": location_id,
+                "SensorTyId": unsupported_sensor_ty_id,
+                "sensor_type": unsupported_sensor_type,
+                "device_type": device_type,
+                "device_name": device_name,
+            }
+        )
+        reading_rows.append(
+            {
+                "ReadId": method_name + "-unsupported-read",
+                "DeviceId": device_id,
+                "SensorId": unsupported_sensor_id,
+                "LocationId": location_id,
+                "SensorTyId": unsupported_sensor_ty_id,
+                "sensor_type": unsupported_sensor_type,
+                "device_type": device_type,
+                "device_name": device_name,
+                "LocalTimeSpan": datetime(2026, 3, 29, 10, 15),
+                "Value": 999.0,
+            }
+        )
+
+        other_device_id = method_name + "-other-device"
+        dimension_rows.append(
+            {
+                "DeviceId": other_device_id,
+                "SensorId": method_name + "-other-sensor",
+                "LocationId": location_id,
+                "SensorTyId": method_name + "-other-sensor-ty",
+                "sensor_type": next(iter(sensor_values)),
+                "device_type": "Unrelated device",
+                "device_name": "unrelated",
+            }
+        )
+        reading_rows.append(
+            {
+                "ReadId": method_name + "-other-read",
+                "DeviceId": other_device_id,
+                "SensorId": method_name + "-other-sensor",
+                "LocationId": location_id,
+                "SensorTyId": method_name + "-other-sensor-ty",
+                "sensor_type": next(iter(sensor_values)),
+                "device_type": "Unrelated device",
+                "device_name": "unrelated",
+                "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
+                "Value": 123.0,
+            }
+        )
+
+        return self._readings_df(reading_rows), self._readings_df(dimension_rows)
+
+    def _all_device_transform_inputs(
+        self,
+    ) -> tuple[
+        DataFrame,
+        DataFrame,
+        list[datetime],
+        dict[str, dict[tuple[str, datetime], list[float]]],
+    ]:
+        hour_starts = [
+            datetime(2026, 3, 29, 10, 0),
+            datetime(2026, 3, 29, 11, 0),
+        ]
+        reading_rows = []
+        dimension_rows = []
+        expected_by_method = {}
+
+        for (
+            method_name,
+            _transform_fn,
+            device_type,
+            sensor_values,
+            _unsupported_sensor_type,
+        ) in self.DEVICE_TRANSFORMATION_CASES:
+            device_id = method_name + "-full-device"
+            location_id = method_name + "-full-location"
+            device_name = method_name + "-full-device-name"
+            expected_by_method[method_name] = {}
+
+            for sensor_idx, (sensor_type, base_values) in enumerate(
+                sensor_values.items(),
+                start=1,
+            ):
+                sensor_id = method_name + "-full-sensor-" + str(sensor_idx)
+                sensor_ty_id = method_name + "-full-sensor-ty-" + str(sensor_idx)
+                dimension_rows.append(
+                    {
+                        "DeviceId": device_id,
+                        "SensorId": sensor_id,
+                        "LocationId": location_id,
+                        "SensorTyId": sensor_ty_id,
+                        "sensor_type": sensor_type,
+                        "device_type": device_type,
+                        "device_name": device_name,
+                    }
+                )
+
+                for hour_idx, hour_start in enumerate(hour_starts):
+                    hourly_values = [
+                        float(value + hour_idx)
+                        for value in base_values
+                    ]
+                    expected_by_method[method_name][(sensor_id, hour_start)] = (
+                        hourly_values
+                    )
+
+                    for read_idx, value in enumerate(hourly_values):
+                        reading_rows.append(
+                            {
+                                "ReadId": (
+                                    method_name
+                                    + "-full-read-"
+                                    + str(sensor_idx)
+                                    + "-"
+                                    + str(hour_idx)
+                                    + "-"
+                                    + str(read_idx)
+                                ),
+                                "DeviceId": device_id,
+                                "SensorId": sensor_id,
+                                "LocationId": location_id,
+                                "SensorTyId": sensor_ty_id,
+                                "sensor_type": sensor_type,
+                                "device_type": device_type,
+                                "device_name": device_name,
+                                "LocalTimeSpan": hour_start
+                                + timedelta(minutes=5 + read_idx * 20),
+                                "Value": value,
+                            }
+                        )
+
+        return (
+            self._readings_df(reading_rows),
+            self._readings_df(dimension_rows),
+            hour_starts,
+            expected_by_method,
+        )
 
     def test_lecturas_time_hours_builds_an_inclusive_hourly_scaffold(self) -> None:
         base = self.spark.createDataFrame(
@@ -321,6 +579,167 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(row["ReadingsCount"], 2)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 1.0)
+
+    def test_device_transformations_materialize_supported_sensor_readings(self) -> None:
+        for (
+            method_name,
+            transform_fn,
+            device_type,
+            sensor_values,
+            unsupported_sensor_type,
+        ) in self.DEVICE_TRANSFORMATION_CASES:
+            with self.subTest(method=method_name):
+                readings_df, dimensions_df = self._device_transform_inputs(
+                    method_name,
+                    device_type,
+                    sensor_values,
+                    unsupported_sensor_type,
+                )
+
+                result = transform_fn(
+                    readings_df,
+                    dimensions_df,
+                    "2026-03-29 10:00:00",
+                    "2026-03-29 10:00:00",
+                )
+
+                self.assertIsNotNone(result)
+                rows = result.orderBy("sensor_type").collect()
+                rows_by_sensor_type = {row["sensor_type"]: row for row in rows}
+
+                self.assertEqual(set(rows_by_sensor_type), set(sensor_values))
+                self.assertNotIn(unsupported_sensor_type, rows_by_sensor_type)
+                self.assertEqual({row["device_type"] for row in rows}, {device_type})
+                self.assertEqual(
+                    {row["LocalTimeSpan"] for row in rows},
+                    {datetime(2026, 3, 29, 10, 0)},
+                )
+                self.assertEqual(len({row["OperationId"] for row in rows}), len(rows))
+
+                for sensor_type, values in sensor_values.items():
+                    row = rows_by_sensor_type[sensor_type]
+                    self.assertIsNotNone(row["MeasurementValue"])
+                    self.assertIsNotNone(row["MeasurementStdDev"])
+                    self.assertEqual(row["ReadingsCount"], len(values))
+                    self.assertEqual(row["Anomalies"], 0)
+                    self.assertAlmostEqual(
+                        row["MeasurementValue"],
+                        sum(values) / len(values),
+                    )
+
+    def test_device_transformations_emit_one_row_per_sensor_per_hour(self) -> None:
+        (
+            readings_df,
+            dimensions_df,
+            hour_starts,
+            expected_by_method,
+        ) = self._all_device_transform_inputs()
+
+        for (
+            method_name,
+            transform_fn,
+            _device_type,
+            _sensor_values,
+            _unsupported_sensor_type,
+        ) in self.DEVICE_TRANSFORMATION_CASES:
+            with self.subTest(method=method_name):
+                result = transform_fn(
+                    readings_df,
+                    dimensions_df,
+                    "2026-03-29 10:00:00",
+                    "2026-03-29 11:00:00",
+                )
+
+                self.assertIsNotNone(result)
+                rows = result.collect()
+                rows_by_sensor_hour = {
+                    (row["SensorId"], row["LocalTimeSpan"]): row
+                    for row in rows
+                }
+                expected_rows = expected_by_method[method_name]
+
+                self.assertEqual(len(rows_by_sensor_hour), len(rows))
+                self.assertEqual(set(rows_by_sensor_hour), set(expected_rows))
+                self.assertEqual(len(rows), len(expected_rows))
+
+                sensor_ids = {
+                    sensor_id
+                    for sensor_id, _hour_start in expected_rows
+                }
+                for sensor_id in sensor_ids:
+                    observed_hours = {
+                        hour_start
+                        for candidate_sensor_id, hour_start in rows_by_sensor_hour
+                        if candidate_sensor_id == sensor_id
+                    }
+                    self.assertEqual(observed_hours, set(hour_starts))
+
+                for key, expected_values in expected_rows.items():
+                    row = rows_by_sensor_hour[key]
+                    self.assertIsNotNone(row["MeasurementValue"])
+                    self.assertIsNotNone(row["MeasurementStdDev"])
+                    self.assertEqual(row["ReadingsCount"], len(expected_values))
+                    self.assertEqual(row["Anomalies"], 0)
+                    self.assertAlmostEqual(
+                        row["MeasurementValue"],
+                        sum(expected_values) / len(expected_values),
+                    )
+
+    def test_operations_device_transformations_are_wired_and_covered(self) -> None:
+        operations_path = (
+            PROJECT_SRC
+            / "valledelencino"
+            / "defs"
+            / "assets"
+            / "operations_assets.py"
+        )
+        transformation_ops_path = (
+            PROJECT_SRC
+            / "valledelencino"
+            / "defs"
+            / "resources"
+            / "transformation_ops.py"
+        )
+
+        operations_tree = ast.parse(operations_path.read_text())
+        methods = None
+        for node in ast.walk(operations_tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "build_devices_df_op":
+                for child in ast.walk(node):
+                    if not isinstance(child, ast.Assign):
+                        continue
+                    if not any(
+                        isinstance(target, ast.Name) and target.id == "methods"
+                        for target in child.targets
+                    ):
+                        continue
+                    methods = [
+                        item.value
+                        for item in child.value.elts
+                        if isinstance(item, ast.Constant)
+                    ]
+                    break
+
+        self.assertIsNotNone(methods)
+        covered_methods = [
+            method_name
+            for method_name, *_ in self.DEVICE_TRANSFORMATION_CASES
+        ]
+        self.assertEqual(methods, covered_methods)
+
+        transformation_ops_tree = ast.parse(transformation_ops_path.read_text())
+        wrapper_methods = set()
+        for node in ast.walk(transformation_ops_tree):
+            if isinstance(node, ast.ClassDef) and node.name == "TransformationOps":
+                wrapper_methods = {
+                    child.name
+                    for child in node.body
+                    if isinstance(child, ast.FunctionDef)
+                }
+                break
+
+        self.assertTrue(wrapper_methods)
+        self.assertTrue(set(methods).issubset(wrapper_methods))
 
     def test_gabinete_builds_one_operation_group_per_device_hour(self) -> None:
         factlecturas_extended_df = self._readings_df(

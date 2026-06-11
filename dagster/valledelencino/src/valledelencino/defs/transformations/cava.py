@@ -16,7 +16,12 @@ def cava(
 ) -> Optional[DataFrame]:
     base = factlecturas_extended_df.filter(col("device_type") == "Cava")
     scaffold_base_df = lecturas_time_hours(
-        dimensions_df.filter(col("device_type") == "Cava"), min_hour, max_hour
+        dimensions_df.filter(
+            (col("device_type") == "Cava")
+            & (col("sensor_type").isin("Temperatura", "Humedad", "Estado"))
+        ),
+        min_hour,
+        max_hour,
     )
 
     if scaffold_base_df is None:
@@ -87,9 +92,33 @@ def cava(
             )
         )
 
+    status_stats_df = stats_calculator(
+        base,
+        "Estado",
+        None,
+        None
+    )
+    if status_stats_df is not None:
+        status_stats_df = (
+            status_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
+                "sensor_type",
+                "ReadingsCount",
+                "device_type",
+            )
+        )
+
     stats_dfs = [
         stats_df
-        for stats_df in (state_stats_df, temperature_stats_df)
+        for stats_df in (state_stats_df, temperature_stats_df, status_stats_df)
         if stats_df is not None
     ]
 

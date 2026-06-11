@@ -819,8 +819,6 @@ class SparkResource:
             )
             .dropDuplicates(["ReadId"])
         )
-        if len(df_dedup.head(1)) == 0:
-            return 0
 
         return self._write_jdbc_in_chunks(
             df_dedup,

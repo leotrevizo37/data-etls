@@ -16,7 +16,10 @@ def destilados(
 ) -> Optional[DataFrame]:
     base = factlecturas_extended_df.filter(col("device_type") == "Cuarto destilados")
     scaffold_base_df = lecturas_time_hours(
-        dimensions_df.filter(col("device_type") == "Cuarto destilados"),
+        dimensions_df.filter(
+            (col("device_type") == "Cuarto destilados")
+            & (col("sensor_type").isin("Temperatura", "Humedad"))
+        ),
         min_hour,
         max_hour,
     )

@@ -16,7 +16,10 @@ def chiller(
 ) -> Optional[DataFrame]:
     base = factlecturas_extended_df.filter(col("device_type") == "Chiller (Compresor)")
     scaffold_base_df = lecturas_time_hours(
-        dimensions_df.filter(col("device_type") == "Chiller (Compresor)"),
+        dimensions_df.filter(
+            (col("device_type") == "Chiller (Compresor)")
+            & (col("sensor_type") == "Corriente")
+        ),
         min_hour,
         max_hour,
     )
