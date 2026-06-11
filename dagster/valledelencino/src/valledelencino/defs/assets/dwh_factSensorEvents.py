@@ -3,6 +3,8 @@ from time import perf_counter
 from typing import Any, Dict, Optional
 
 from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
+from pyspark import StorageLevel
+from pyspark.sql import DataFrame
 
 from ..resources import SparkResource, SqlServerResource
 from ..transformations import datalake_readings_extended, sensor_events
@@ -80,6 +82,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     row_count = 0
     retry_number = getattr(context, "retry_number", 0)
 
+    events_df: Optional[DataFrame] = None
     try:
         dimensions_df = spark_res.read_dim_prod_dimensions()
         extended_df = datalake_readings_extended(
@@ -94,20 +97,20 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             succeeded = True
         else:
             events_df = sensor_events(extended_df, to_utc.strftime("%Y-%m-%d %H:%M:%S"))
-
-            if events_df is None:
-                context.log.info("No door/cava state-change events found in window.")
-                succeeded = True
-            else:
-                row_count = spark_res.write_fact_sensor_events(events_df)
-                max_time_span = spark_res.get_max_time_span(events_df, "LocalTimeSpan")
-                context.log.info(
-                    str(row_count)
-                    + " sensor event rows written to dwh.factSensorEvents. "
-                    + "Max LocalTimeSpan "
-                    + str(max_time_span)
+            events_df = events_df.persist(StorageLevel.MEMORY_AND_DISK)
+            row_count = spark_res.write_fact_sensor_events(events_df)
+            if row_count > 0:
+                max_time_span = spark_res.get_max_time_span(
+                    events_df,
+                    "LocalTimeSpan",
                 )
-                succeeded = True
+            context.log.info(
+                str(row_count)
+                + " sensor event rows written to dwh.factSensorEvents. "
+                + "Max LocalTimeSpan "
+                + str(max_time_span)
+            )
+            succeeded = True
     except Exception as ex:
         error_message = str(ex)
         context.log.error("Error loading FactSensorEvents window: " + error_message)
@@ -135,6 +138,9 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                 seconds_to_wait=SENSOR_EVENTS_RETRY_DELAY_SECONDS,
             ) from ex
         succeeded = False
+    finally:
+        if events_df is not None:
+            events_df.unpersist()
 
     return {
         "from_utc": from_utc,
