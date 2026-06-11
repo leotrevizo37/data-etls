@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 import json
+import logging
 import os
 import socket
 import time
@@ -678,7 +679,20 @@ class SparkResource:
         if not existing_paths:
             return self._empty_lecturas_dataframe()
 
-        df = spark.read.parquet(*existing_paths)
+        try:
+            df = (
+                spark.read
+                .option("ignoreCorruptFiles", "true")
+                .parquet(*existing_paths)
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "No valid lecturas parquet files found in path(s) %s: %s",
+                existing_paths,
+                exc,
+            )
+            return self._empty_lecturas_dataframe()
+
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
