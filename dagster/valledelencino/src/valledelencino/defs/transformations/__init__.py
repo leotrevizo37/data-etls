@@ -13,6 +13,7 @@ __all__ = [
     "corriente",
     "destilados",
     "puerta",
+    "sensor_events",
     "tanque",
 ]
 
@@ -27,6 +28,7 @@ _MODULE_BY_EXPORT = {
     "corriente": ".corriente",
     "destilados": ".destilados",
     "puerta": ".puerta",
+    "sensor_events": ".sensor_events",
     "tanque": ".tanque",
 }
 
