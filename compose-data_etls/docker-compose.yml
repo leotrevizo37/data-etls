@@ -500,6 +500,7 @@ services:
     build:
       context: ..
       dockerfile: spark/Dockerfile
+    network_mode: host
     depends_on:
       spark-master:
         condition: service_started
@@ -508,22 +509,20 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
-    ports:
-      - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
-      - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
-      - "${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}:${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}"
-      - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
-      - "${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}:${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}"
+      - SPARK_DRIVER_HOST=${SPARK_DRIVER_HOST:-}
+      - SPARK_MASTER_HOST=${SPARK_MASTER_HOST:-}
+      - SPARK_MASTER_CONNECT_HOST=${SPARK_MASTER_CONNECT_HOST:-}
+      - SPARK_MASTER_PORT=${SPARK_MASTER_PORT:-7077}
+      - SPARK_WORKER_HOST=${SPARK_WORKER_HOST:-}
+      - SPARK_WORKER_PORT=${SPARK_WORKER_PORT:-38081}
     command:
       [
-        "/opt/spark/bin/spark-class",
-        "org.apache.spark.deploy.worker.Worker",
-        "spark://spark-master:${SPARK_MASTER_PORT:-7077}"
+        "sh",
+        "-c",
+        "exec /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker \"spark://$${SPARK_MASTER_CONNECT_HOST:-$${SPARK_MASTER_HOST:-127.0.0.1}}:$${SPARK_MASTER_PORT:-7077}\" --host \"$${SPARK_WORKER_HOST:-$${SPARK_DRIVER_HOST:-127.0.0.1}}\" --port \"$${SPARK_WORKER_PORT:-38081}\""
       ]
     volumes:
       - spark-data:/data
-    networks:
-      - data-dagster
     restart: unless-stopped
 
   spark-data-init:
