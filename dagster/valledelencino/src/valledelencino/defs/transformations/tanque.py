@@ -8,7 +8,7 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-def gabinete(
+def tanque(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
     min_hour: str,
