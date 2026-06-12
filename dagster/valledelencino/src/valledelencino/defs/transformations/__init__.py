@@ -7,7 +7,14 @@ __all__ = [
     "datalake_readings_extended",
     "factlecturas_extended",
     "raw_dimensions",
-    "gabinete",
+    "cava",
+    "chiller",
+    "cisterna",
+    "corriente",
+    "destilados",
+    "puerta",
+    "sensor_events",
+    "tanque",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -15,7 +22,14 @@ _MODULE_BY_EXPORT = {
     "factlecturas_extended": ".factlecturas_extended",
     "raw_dimensions": ".raw_dimensions",
     "sensor_expected_values": ".sensor_expected_values",
-    "gabinete": ".gabinete",
+    "cava": ".cava",
+    "chiller": ".chiller",
+    "cisterna": ".cisterna",
+    "corriente": ".corriente",
+    "destilados": ".destilados",
+    "puerta": ".puerta",
+    "sensor_events": ".sensor_events",
+    "tanque": ".tanque",
 }
 
 

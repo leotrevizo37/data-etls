@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 import json
+import logging
 import os
 import socket
 import time
@@ -678,7 +679,20 @@ class SparkResource:
         if not existing_paths:
             return self._empty_lecturas_dataframe()
 
-        df = spark.read.parquet(*existing_paths)
+        try:
+            df = (
+                spark.read
+                .option("ignoreCorruptFiles", "true")
+                .parquet(*existing_paths)
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "No valid lecturas parquet files found in path(s) %s: %s",
+                existing_paths,
+                exc,
+            )
+            return self._empty_lecturas_dataframe()
+
         return df.filter(
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
@@ -798,6 +812,32 @@ class SparkResource:
             url=self._build_wh_path()["url"],
             table="dwh.dimSidonProdDimensions",
             properties=self._build_wh_path()["properties"]
+        )
+
+    def write_fact_sensor_events(self, df: DataFrame) -> int:
+        df_dedup = (
+            df
+            .select(
+                "ReadId",
+                "SensorId",
+                "DeviceId",
+                "LocationId",
+                "LocationName",
+                "DeviceType",
+                "SensorType",
+                "SensorName",
+                "LocalTimeSpan",
+                "Value",
+                "EventMinutes",
+                "IsEventCompleted",
+            )
+            .dropDuplicates(["ReadId"])
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_dedup,
+            table="dwh.factSensorEvents",
+            chunk_column="ReadId",
         )
 
     def create_emptiness_dataframe(self) -> DataFrame:
