@@ -11,6 +11,7 @@ x-dagster-common: &dagster_common
     - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
+    - ../dagster/carlsjr:/opt/dagster/app/carlsjr
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -399,6 +400,57 @@ services:
         [
           "CMD-SHELL",
           "dagster api grpc-health-check -p 4005 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
+  dagster-user-code-carlsjr:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: carlsjr-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/carlsjr
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/carlsjr/src
+      APP_DB: ${CARLSJR_DB:-carlsjr}
+      DIM_DB: ${CARLSJR_DIM_DB:-carlsjr}
+      ADLS_CONTAINER_NAME: ${CARLSJR_ADLS_CONTAINER_NAME:-carlsjr}
+      FACTREADINGS_OVERLAP_HOURS: ${CARLSJR_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      SPARK_DF_IO_BASE_PATH: ${CARLSJR_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/carlsjr}
+      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
+      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${CARLSJR_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${CARLSJR_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${CARLSJR_USER_CODE_PORT:-4006}:4006"
+      - "${CARLSJR_SPARK_DRIVER_PORT}:${CARLSJR_SPARK_DRIVER_PORT}"
+      - "${CARLSJR_SPARK_BLOCK_MANAGER_PORT}:${CARLSJR_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4006",
+      "-m", "carlsjr.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4006 -h 127.0.0.1"
         ]
       interval: 20s
       timeout: 25s
