@@ -40,6 +40,20 @@ SPARK_RETRY_POLICY_ENV = {
     "spark.network.timeout": ("SPARK_NETWORK_TIMEOUT", "800s"),
     "spark.executor.heartbeatInterval": ("SPARK_EXECUTOR_HEARTBEAT_INTERVAL", "60s"),
 }
+SPARK_S3A_TUNING_ENV = {
+    "fs.s3a.connection.maximum": ("SPARK_S3A_CONNECTION_MAXIMUM", "64"),
+    "fs.s3a.threads.max": ("SPARK_S3A_THREADS_MAX", "32"),
+    "fs.s3a.max.total.tasks": ("SPARK_S3A_MAX_TOTAL_TASKS", "64"),
+    "fs.s3a.multipart.size": ("SPARK_S3A_MULTIPART_SIZE", "128M"),
+    "fs.s3a.multipart.threshold": ("SPARK_S3A_MULTIPART_THRESHOLD", "128M"),
+    "fs.s3a.fast.upload": ("SPARK_S3A_FAST_UPLOAD", "true"),
+    "fs.s3a.fast.upload.buffer": ("SPARK_S3A_FAST_UPLOAD_BUFFER", "disk"),
+    "fs.s3a.fast.upload.active.blocks": ("SPARK_S3A_FAST_UPLOAD_ACTIVE_BLOCKS", "4"),
+    "fs.s3a.attempts.maximum": ("SPARK_S3A_ATTEMPTS_MAXIMUM", "10"),
+    "fs.s3a.connection.request.timeout": ("SPARK_S3A_CONNECTION_REQUEST_TIMEOUT", "30m"),
+    "fs.s3a.connection.timeout": ("SPARK_S3A_CONNECTION_TIMEOUT", "30s"),
+    "fs.s3a.socket.timeout": ("SPARK_S3A_SOCKET_TIMEOUT", "30m"),
+}
 
 def _get_operations_timezone():
     try:
@@ -85,6 +99,15 @@ def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, s
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
+    }
+
+
+def _build_s3a_tuning_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    current_env = env or os.environ
+    return {
+        spark_key: current_env.get(env_key) or default
+        for spark_key, (env_key, default) in SPARK_S3A_TUNING_ENV.items()
+        if (current_env.get(env_key) or default)
     }
 
 
@@ -376,6 +399,7 @@ class SparkResource:
         }
         if self.ozone_s3_region:
             options["fs.s3a.endpoint.region"] = self.ozone_s3_region
+        options.update(_build_s3a_tuning_conf())
         if self.ozone_s3_access_key and self.ozone_s3_secret_key:
             options["fs.s3a.access.key"] = self.ozone_s3_access_key
             options["fs.s3a.secret.key"] = self.ozone_s3_secret_key
@@ -474,6 +498,27 @@ class SparkResource:
                 "SPARK_BLOCK_MANAGER_PORT for executor shuffle traffic."
             )
 
+    def _validate_port_assignments(self) -> None:
+        ports = {}
+        for label, value in [
+            ("spark.driver.port", self.driver_port),
+            ("spark.driver.blockManager.port", self.driver_block_manager_port),
+            ("spark.blockManager.port", self.block_manager_port),
+        ]:
+            if not value:
+                continue
+            port_str = str(value).strip()
+            if not port_str:
+                continue
+            if port_str in ports:
+                raise RuntimeError(
+                    f"Spark port conflict: {label} and {ports[port_str]} "
+                    f"are both set to port {port_str}. Each Spark port "
+                    f"(driver, driver block manager, executor block manager) "
+                    f"must be unique."
+                )
+            ports[port_str] = label
+
     def _wait_for_spark_capacity(self) -> None:
         if self.master_url.lower().startswith("local"):
             return
@@ -513,6 +558,7 @@ class SparkResource:
         if self._spark is not None:
             return self._spark
 
+        self._validate_port_assignments()
         self._wait_for_spark_capacity()
         conf = self._build_spark_conf()
 
