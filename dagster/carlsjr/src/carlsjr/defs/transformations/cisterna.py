@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import expr, lit, col, rlike
+from pyspark.sql.functions import expr, lit, col
 from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours

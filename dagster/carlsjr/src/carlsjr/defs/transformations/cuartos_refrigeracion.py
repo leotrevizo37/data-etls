@@ -1,14 +1,14 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lit, expr, rlike
+from pyspark.sql.functions import col, lit, expr
 from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-PATRON_DEVICE = r"(?iu)(refr|cong|fr[ií]a)"
+PATRON_DEVICE = r"(?iu)(refr|cong|conserv|fr[ií][ao])"
 PATRON_SENSOR = r"(?iu)(temp|hum|cor)"
 
 def cuartos_refrigeracion(

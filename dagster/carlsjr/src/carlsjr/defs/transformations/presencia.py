@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col,lit, expr, rlike
+from pyspark.sql.functions import col,lit, expr
 
 from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
