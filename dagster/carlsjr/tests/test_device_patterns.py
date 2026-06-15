@@ -19,7 +19,10 @@ def _load_patron_device() -> str:
     for node in tree.body:
         if (
             isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "PATRON_DEVICE" for target in node.targets)
+            and any(
+                isinstance(target, ast.Name) and target.id == "PATRON_DEVICE"
+                for target in node.targets
+            )
             and isinstance(node.value, ast.Constant)
         ):
             return str(node.value.value)

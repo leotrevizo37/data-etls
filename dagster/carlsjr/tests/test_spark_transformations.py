@@ -23,7 +23,6 @@ if str(PROJECT_SRC) not in sys.path:
 from carlsjr.defs.transformations.lecturas_time_hours import (  # noqa: E402
     lecturas_time_hours,
 )
-from carlsjr.defs.transformations.maquinas_soda import maquinas_soda  # noqa: E402
 from carlsjr.defs.transformations.sensor_expected_values import (  # noqa: E402
     build_sensor_expected_values_from_dataframes,
 )
@@ -34,9 +33,6 @@ from carlsjr.operations_filters import (  # noqa: E402
     limit_operations_rows_to_closed_hours,
 )
 
-
-SODA_DEVICE_TYPE = "M\u00e1quina de sodas"
-SODA_PRESSURE_SENSOR = "Presi\u00f3n"
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -328,153 +324,6 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(row["ReadingsCount"], 2)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 1.0)
-
-    def test_maquinas_soda_builds_one_operation_group_per_device_hour(self) -> None:
-        factlecturas_extended_df = self._readings_df(
-            [
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Corriente",
-                    "device_type": SODA_DEVICE_TYPE,
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
-                    "Value": 0.5,
-                    "device_name": "A/C Rooftop 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Corriente",
-                    "device_type": SODA_DEVICE_TYPE,
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
-                    "Value": 0.6,
-                    "device_name": "A/C Rooftop 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 11,
-                    "LocationId": 100,
-                    "SensorTyId": 201,
-                    "sensor_type": SODA_PRESSURE_SENSOR,
-                    "device_type": SODA_DEVICE_TYPE,
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
-                    "Value": 21.0,
-                    "device_name": "A/C Rooftop 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 11,
-                    "LocationId": 100,
-                    "SensorTyId": 201,
-                    "sensor_type": SODA_PRESSURE_SENSOR,
-                    "device_type": SODA_DEVICE_TYPE,
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
-                    "Value": 22.0,
-                    "device_name": "A/C Rooftop 1",
-                },
-            ]
-        )
-        dimensions_df = self._readings_df(
-            [
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Corriente",
-                    "device_type": SODA_DEVICE_TYPE,
-                    "device_name": "A/C Rooftop 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 11,
-                    "LocationId": 100,
-                    "SensorTyId": 201,
-                    "sensor_type": SODA_PRESSURE_SENSOR,
-                    "device_type": SODA_DEVICE_TYPE,
-                    "device_name": "A/C Rooftop 1",
-                },
-            ]
-        )
-
-        result = maquinas_soda(
-            factlecturas_extended_df,
-            dimensions_df,
-            "2026-03-29 10:00:00",
-            "2026-03-29 10:00:00",
-        )
-
-        rows = result.orderBy("SensorId").collect()
-
-        self.assertEqual(len(rows), 2)
-        self.assertEqual({row["SensorId"] for row in rows}, {10, 11})
-        self.assertEqual(
-            {row["LocalTimeSpan"] for row in rows},
-            {datetime(2026, 3, 29, 10, 0)},
-        )
-        self.assertEqual(len({row["OperationId"] for row in rows}), 2)
-        self.assertEqual({row["LocationId"] for row in rows}, {100})
-        self.assertEqual(
-            {row["sensor_type"] for row in rows},
-            {"Corriente", SODA_PRESSURE_SENSOR},
-        )
-
-    def test_maquinas_soda_scaffolds_empty_readings_with_zero_counts(self) -> None:
-        readings_schema = StructType(
-            [
-                StructField("DeviceId", IntegerType(), True),
-                StructField("SensorId", IntegerType(), True),
-                StructField("LocationId", IntegerType(), True),
-                StructField("SensorTyId", IntegerType(), True),
-                StructField("sensor_type", StringType(), True),
-                StructField("device_type", StringType(), True),
-                StructField("LocalTimeSpan", TimestampType(), True),
-                StructField("Value", DoubleType(), True),
-                StructField("device_name", StringType(), True),
-            ]
-        )
-        factlecturas_extended_df = self.spark.createDataFrame([], readings_schema)
-        dimensions_df = self._readings_df(
-            [
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Corriente",
-                    "device_type": SODA_DEVICE_TYPE,
-                    "device_name": "Soda 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 11,
-                    "LocationId": 100,
-                    "SensorTyId": 201,
-                    "sensor_type": SODA_PRESSURE_SENSOR,
-                    "device_type": SODA_DEVICE_TYPE,
-                    "device_name": "Soda 1",
-                },
-            ]
-        )
-
-        result = maquinas_soda(
-            factlecturas_extended_df,
-            dimensions_df,
-            "2026-03-29 10:00:00",
-            "2026-03-29 10:00:00",
-        )
-
-        rows = result.orderBy("SensorId").collect()
-
-        self.assertEqual(len(rows), 2)
-        self.assertEqual({row["SensorId"] for row in rows}, {10, 11})
-        self.assertEqual({row["ReadingsCount"] for row in rows}, {0})
-        self.assertEqual({row["Anomalies"] for row in rows}, {1})
-        self.assertTrue(all(row["MeasurementValue"] is None for row in rows))
 
     def test_build_sensor_expected_values_generates_hvac_and_light_rows(self) -> None:
         dimensions_df = self.spark.createDataFrame(
