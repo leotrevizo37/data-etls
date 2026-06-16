@@ -231,6 +231,7 @@ def build_devices_df_op(
         methods = [
             "cisterna",
             "cuartos_refrigeracion",
+            "presencia",
         ]
 
         for method in methods:
@@ -241,7 +242,13 @@ def build_devices_df_op(
                 dims,
                 window["fetch_from"],
                 window["max_local_hour"],
-            ).select(
+            )
+
+            if df is None:
+                context.log.info("No dataframe returned for method: " + method)
+                continue
+
+            df = df.select(
                 col("OperationId"),
                 col("DeviceId"),
                 col("LocationId"),

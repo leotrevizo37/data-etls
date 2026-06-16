@@ -839,6 +839,32 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def write_fact_sensor_events(self, df: DataFrame) -> int:
+        df_dedup = (
+            df
+            .select(
+                "ReadId",
+                "SensorId",
+                "DeviceId",
+                "LocationId",
+                "LocationName",
+                "DeviceType",
+                "SensorType",
+                "SensorName",
+                "LocalTimeSpan",
+                "Value",
+                "EventMinutes",
+                "IsEventCompleted",
+            )
+            .dropDuplicates(["ReadId"])
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_dedup,
+            table="dwh.factSensorEvents",
+            chunk_column="ReadId",
+        )
+
     def create_emptiness_dataframe(self) -> DataFrame:
         spark = self.get_spark()
         return spark.createDataFrame([(True,)], ["is_empty"])
