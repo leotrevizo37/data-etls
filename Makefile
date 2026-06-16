@@ -3,6 +3,7 @@ SHELL := /bin/bash
 PYTHON ?= python
 COMPOSE_FILE := compose-data_etls/docker-compose.yml
 ENV_FILE := compose-data_etls/.env
+export COMPOSE_ENV_FILE := $(notdir $(ENV_FILE))
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 

@@ -1,6 +1,6 @@
 x-dagster-common: &dagster_common
   env_file:
-    - .env
+    - ${COMPOSE_ENV_FILE:-.env}
   environment:
     DAGSTER_HOME: /opt/dagster/dagster_home
   working_dir: /opt/dagster/app
@@ -28,7 +28,7 @@ services:
     image: mcr.microsoft.com/mssql-tools
     container_name: data-sql-init
     env_file:
-      - .env
+      - ${COMPOSE_ENV_FILE:-.env}
     networks:
       - data-dagster
     volumes:
@@ -52,7 +52,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -131,7 +131,7 @@ services:
     image: postgres:16
     container_name: data-dagster-postgres
     env_file:
-      - .env
+      - ${COMPOSE_ENV_FILE:-.env}
     environment:
       POSTGRES_USER: ${DAGSTER_PG_USER}
       POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD}
