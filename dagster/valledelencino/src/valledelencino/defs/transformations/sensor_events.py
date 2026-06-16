@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Optional
+
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, lag, lead, lit, when, unix_timestamp
 from pyspark.sql.window import Window
@@ -5,6 +8,15 @@ from pyspark.sql.window import Window
 
 OPEN_VALUE = 1
 CLOSE_VALUE = 0
+
+
+def resolve_sensor_events_from(
+    control_from: datetime,
+    open_event_from: Optional[datetime],
+) -> datetime:
+    if open_event_from is None:
+        return control_from
+    return min(control_from, open_event_from)
 
 
 def sensor_events(

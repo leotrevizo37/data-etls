@@ -11,9 +11,9 @@ PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
-sensor_events = import_module(
-    "valledelencino.defs.transformations.sensor_events"
-).sensor_events
+sensor_events_module = import_module("valledelencino.defs.transformations.sensor_events")
+sensor_events = sensor_events_module.sensor_events
+resolve_sensor_events_from = sensor_events_module.resolve_sensor_events_from
 
 
 warnings.simplefilter("ignore", ResourceWarning)
@@ -113,6 +113,21 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(rows[1]["EventMinutes"], 10.0)
         self.assertAlmostEqual(rows[2]["EventMinutes"], 100.0)
         self.assertFalse(rows[2]["IsEventCompleted"])
+
+    def test_reprocess_start_uses_open_event_when_older_than_control(self) -> None:
+        control_from = datetime(2026, 3, 29, 11, 0)
+        open_event_from = datetime(2026, 3, 29, 10, 0)
+
+        result = resolve_sensor_events_from(control_from, open_event_from)
+
+        self.assertEqual(result, open_event_from)
+
+    def test_reprocess_start_uses_control_when_no_open_event_exists(self) -> None:
+        control_from = datetime(2026, 3, 29, 11, 0)
+
+        result = resolve_sensor_events_from(control_from, None)
+
+        self.assertEqual(result, control_from)
 
     def test_calculates_event_minutes_for_open_then_close(self) -> None:
         df = self._readings_df(

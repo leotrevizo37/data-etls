@@ -70,6 +70,22 @@ class SqlServerResource:
                     return None
                 return row.LastLoadedAt
 
+    def get_min_open_sensor_event_time(self) -> Optional[datetime]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(
+                        "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
+                        "FROM dwh.factSensorEvents "
+                        "WHERE IsEventCompleted = 0"
+                    )
+                    row = cursor.fetchone()
+                except pyodbc.Error:
+                    return None
+                if row is None:
+                    return None
+                return row.OpenEventFrom
+
     def mark_run_started(self, ingestion_name: str) -> None:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
