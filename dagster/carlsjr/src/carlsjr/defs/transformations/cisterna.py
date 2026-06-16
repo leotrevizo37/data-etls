@@ -52,7 +52,7 @@ def cisterna(
 
     state_stats_df = stats_calculator(
         base,
-        "Nivel de cisterna",
+        "nivel de cisterna porcentaje",
         10,
         115
     )

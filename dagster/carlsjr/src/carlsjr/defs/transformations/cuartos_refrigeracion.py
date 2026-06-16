@@ -53,77 +53,94 @@ def cuartos_refrigeracion(
 
     base = base.persist(StorageLevel.MEMORY_AND_DISK)
 
-    temperature_stats_df = (
-        stats_calculator(
-            base,
-            "Temperatura",
-            -10,
-            90
-        )
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "SensorId",
-            "LocalTimeSpan",
-            "MeasurementValue",
-            "MeasurementStdDev",
-            "Anomalies",
-            "sensor_type",
-            "ReadingsCount",
-            "device_type",
-        )
+    temperature_stats_df = stats_calculator(
+        base,
+        "Temperatura F",
+        -10,
+        90
     )
+    if temperature_stats_df is not None:
+        temperature_stats_df = (
+            temperature_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
+                "sensor_type",
+                "ReadingsCount",
+                "device_type",
+            )
+        )
 
-    humidity_stats_df = (
-        stats_calculator(
-            base,
-            "Humedad",
-            5,
-            99
-        )
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "SensorId",
-            "LocalTimeSpan",
-            "MeasurementValue",
-            "MeasurementStdDev",
-            "Anomalies",
-            "sensor_type",
-            "ReadingsCount",
-            "device_type",
-        )
+    humidity_stats_df = stats_calculator(
+        base,
+        "Humedad",
+        5,
+        99
     )
+    if humidity_stats_df is not None:
+        humidity_stats_df = (
+            humidity_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
+                "sensor_type",
+                "ReadingsCount",
+                "device_type",
+            )
+        )
 
-    current_stats_df = (
-        stats_calculator(
-            base,
-            "Corriente",
-            None,
-            None
-        )
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "SensorId",
-            "LocalTimeSpan",
-            "MeasurementValue",
-            "MeasurementStdDev",
-            "Anomalies",
-            "sensor_type",
-            "ReadingsCount",
-            "device_type",
-        )
+    current_stats_df = stats_calculator(
+        base,
+        "Corriente",
+        None,
+        None
     )
+    if current_stats_df is not None:
+        current_stats_df = (
+            current_stats_df
+            .select(
+                "DeviceId",
+                "LocationId",
+                "SensorTyId",
+                "SensorId",
+                "LocalTimeSpan",
+                "MeasurementValue",
+                "MeasurementStdDev",
+                "Anomalies",
+                "sensor_type",
+                "ReadingsCount",
+                "device_type",
+            )
+        )
+
+    stats_dfs = [
+        stats_df
+        for stats_df in (temperature_stats_df, current_stats_df, humidity_stats_df)
+        if stats_df is not None
+    ]
+
+    if not stats_dfs:
+        base.unpersist()
+        return None
+
+    cuartos_refrigeracion_df = stats_dfs[0]
+    for stats_df in stats_dfs[1:]:
+        cuartos_refrigeracion_df = cuartos_refrigeracion_df.unionByName(stats_df)
 
     cuartos_refrigeracion_df = (
-        temperature_stats_df
-        .unionByName(current_stats_df)
-        .unionByName(humidity_stats_df)
-        .select(
+        cuartos_refrigeracion_df.select(
             "DeviceId",
             "LocationId",
             "SensorTyId",

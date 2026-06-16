@@ -20,22 +20,24 @@ def presencia(
         .filter(col("device_type").rlike(PATRON_DEVICE))
     )
 
-    if len(base.head(1)) == 0:
-        empty_base_df = (
-            lecturas_time_hours(
-                dimensions_df.filter(
-                    (
-                        col("device_type").rlike(PATRON_DEVICE)
-                    ) & (
-                        col("sensor_type").rlike(PATRON_SENSOR)
-                    )
-                ),
-                min_hour,
-                max_hour
+    scaffold_base_df = lecturas_time_hours(
+        dimensions_df.filter(
+            (
+                col("device_type").rlike(PATRON_DEVICE)
+            ) & (
+                col("sensor_type").rlike(PATRON_SENSOR)
             )
-        )
+        ),
+        min_hour,
+        max_hour
+    )
+
+    if scaffold_base_df is None:
+        return None
+
+    if len(base.head(1)) == 0:
         group_with_guid_df = (
-            empty_base_df
+            scaffold_base_df
             .withColumn(
                 "OperationId",
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
@@ -51,28 +53,17 @@ def presencia(
     states_stats_df = (
         stats_calculator(
             base,
-            "Encendido",
+            "Camara de presencia",
             None,
             None
         )
-        .select(
-            "DeviceId",
-            "LocationId",
-            "SensorTyId",
-            "SensorId",
-            "LocalTimeSpan",
-            "MeasurementValue",
-            "MeasurementStdDev",
-            "Anomalies",
-            "sensor_type",
-            "ReadingsCount",
-            "device_type",
-        )
     )
 
+    if states_stats_df is None:
+        return None
+
     luces_df = (
-        states_stats_df
-        .select(
+        states_stats_df.select(
             "DeviceId",
             "LocationId",
             "SensorTyId",
@@ -88,18 +79,7 @@ def presencia(
     )
 
     scaffold_df = (
-        lecturas_time_hours(
-            dimensions_df.filter(
-                (
-                    col("device_type").rlike(PATRON_DEVICE)
-                ) & (
-                    col("sensor_type").rlike(PATRON_SENSOR)
-                )
-            ),
-            min_hour,
-            max_hour
-        )
-        .join(
+        scaffold_base_df.join(
             luces_df,
             on=[
                 "SensorId",
