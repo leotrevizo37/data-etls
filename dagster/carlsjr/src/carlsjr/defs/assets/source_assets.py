@@ -24,27 +24,3 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["carlsjr", "dbo_sublocation_tys"]),
     group_name="carlsjr",
 )
-dbo_ProgramProfileTys = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_ProgramProfileTys"]),
-    group_name="carlsjr",
-)
-dbo_ProgramProfiles = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_ProgramProfiles"]),
-    group_name="carlsjr",
-)
-dbo_ProgramSchedules = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_ProgramSchedules"]),
-    group_name="carlsjr",
-)
-dbo_GroupSensors = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_GroupSensors"]),
-    group_name="carlsjr",
-)
-dbo_GroupHasSchedules = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_GroupHasSchedules"]),
-    group_name="carlsjr",
-)
-dbo_GroupHasSensors = SourceAsset(
-    key=AssetKey(["carlsjr", "dbo_GroupHasSensors"]),
-    group_name="carlsjr",
-)

@@ -13,19 +13,12 @@ def _build_defs() -> Any:
     from .asset_checks import quality_asset_checks
     from .assets import (
         cleanup_old_runs,
-        dbo_GroupHasSchedules,
-        dbo_GroupHasSensors,
-        dbo_GroupSensors,
-        dbo_ProgramProfileTys,
-        dbo_ProgramProfiles,
-        dbo_ProgramSchedules,
         dbo_devices,
         dbo_sensor_tys,
         dbo_sensors,
         dbo_device_tys,
         dbo_sublocations,
         dbo_sublocation_tys,
-        dwh_dimsensorexpectedval,
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
         dwh_factsensorevents,
@@ -40,7 +33,6 @@ def _build_defs() -> Any:
         fact_sensor_events_job,
         index_maintenance_job,
         refresh_dimensions_job,
-        refresh_sensor_expected_values_job,
         spark_df_io_manager_healthcheck_job,
     )
     from .resources import (
@@ -64,7 +56,6 @@ def _build_defs() -> Any:
         sensor_events_sched_every_1h_w,
     )
     from .sensors import (
-        dwh_dimsensorexpectedval_sensor,
         dwh_dimsidonproddimensions_sensor,
     )
 
@@ -76,7 +67,6 @@ def _build_defs() -> Any:
             fact_operations_tables_job,
             fact_sensor_events_job,
             refresh_dimensions_job,
-            refresh_sensor_expected_values_job,
             spark_df_io_manager_healthcheck_job,
             index_maintenance_job,
             cleanup_job,
@@ -102,7 +92,6 @@ def _build_defs() -> Any:
             index_maintenance_schedule,
         ],
         sensors=[
-            dwh_dimsensorexpectedval_sensor,
             dwh_dimsidonproddimensions_sensor,
         ],
         assets=[
@@ -112,17 +101,10 @@ def _build_defs() -> Any:
             dbo_device_tys,
             dbo_sublocations,
             dbo_sublocation_tys,
-            dbo_ProgramProfileTys,
-            dbo_ProgramProfiles,
-            dbo_ProgramSchedules,
-            dbo_GroupSensors,
-            dbo_GroupHasSchedules,
-            dbo_GroupHasSensors,
             dwh_factlecturas,
             dwh_factsensorevents,
             operations_assets,
             dwh_dimsidonproddimensions,
-            dwh_dimsensorexpectedval,
             cleanup_old_runs,
         ],
         asset_checks=quality_asset_checks,

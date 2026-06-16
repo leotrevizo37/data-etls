@@ -26,7 +26,6 @@ DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
-    "sensor_expected_values": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
@@ -829,26 +828,6 @@ class SparkResource:
             df_dedup,
             table="dwh.dimSidonProdDimensions",
             chunk_column="SensorId",
-        )
-
-    def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
-        df_write = df.dropDuplicates(
-            [
-                "SensorId",
-                "DeviceId",
-                "StartTime",
-                "EndTime",
-                "scheduledDays",
-                "min_expected_value",
-                "max_expected_value",
-            ]
-        )
-
-        return self._write_jdbc_in_chunks(
-            df_write,
-            table="dwh.dimSensorExpectedVal",
-            chunk_column="SensorId",
-            storage_level=StorageLevel.DISK_ONLY,
         )
 
     def read_dim_prod_dimensions(self) -> DataFrame:

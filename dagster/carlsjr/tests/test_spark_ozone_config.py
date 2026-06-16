@@ -318,14 +318,6 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_memory_mb"], 4096)
         self.assertEqual(profile["cores_max"], 4)
 
-    def test_sensor_expected_values_profile_uses_heavier_defaults(self) -> None:
-        profile = build_spark_resource_profile("sensor_expected_values", {})
-
-        self.assertEqual(profile["name"], "sensor_expected_values")
-        self.assertEqual(profile["min_cores"], 2)
-        self.assertEqual(profile["min_memory_mb"], 2048)
-        self.assertEqual(profile["cores_max"], 2)
-
     def test_spark_retry_policy_uses_defaults_and_env_overrides(self) -> None:
         policy = build_spark_retry_conf(
             {
