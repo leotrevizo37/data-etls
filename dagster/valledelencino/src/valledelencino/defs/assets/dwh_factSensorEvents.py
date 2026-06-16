@@ -8,6 +8,7 @@ from pyspark.sql import DataFrame
 
 from ..resources import SparkResource, SqlServerResource
 from ..transformations import datalake_readings_extended, sensor_events
+from ..transformations.sensor_events import resolve_sensor_events_from
 
 SENSOR_EVENTS_MAX_RETRIES = 3
 SENSOR_EVENTS_RETRY_DELAY_SECONDS = 60
@@ -37,19 +38,29 @@ def start_run_and_get_range_opff(context) -> Dict[str, Any]:
     if last_loaded_at is None:
         last_loaded_at = datetime(2026, 1, 16)
 
-    from_utc = _truncate_to_seconds(last_loaded_at)
+    open_event_from = sql.get_min_open_sensor_event_time()
+    from_utc = _truncate_to_seconds(
+        resolve_sensor_events_from(last_loaded_at, open_event_from)
+    )
     to_utc = _truncate_to_seconds(datetime.utcnow())
 
     sql.mark_run_started(INGESTION_NAME)
 
     context.log.info(
-        INGESTION_NAME + " run window from " + str(from_utc) + " to " + str(to_utc)
+        INGESTION_NAME
+        + " run window from "
+        + str(from_utc)
+        + " to "
+        + str(to_utc)
+        + ". Open event from "
+        + str(open_event_from)
     )
 
     return {
         "from_utc": from_utc,
         "to_utc": to_utc,
         "original_last_loaded_at": last_loaded_at,
+        "open_event_from": open_event_from,
         "start_time": start_time,
     }
 
@@ -146,6 +157,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
         "from_utc": from_utc,
         "to_utc": to_utc,
         "original_last_loaded_at": original_last_loaded_at,
+        "open_event_from": window.get("open_event_from"),
         "max_time_span": max_time_span,
         "succeeded": succeeded,
         "error_message": error_message,
@@ -184,6 +196,8 @@ def finalize_run_opff(context, result: Dict[str, Any]):
             )
         else:
             new_watermark = max_time_span
+            if new_watermark < original_last_loaded_at:
+                new_watermark = original_last_loaded_at
             context.log.info(
                 INGESTION_NAME
                 + " run succeeded. Advancing watermark to "
@@ -206,6 +220,7 @@ def finalize_run_opff(context, result: Dict[str, Any]):
             "elapsed_seconds": elapsed,
             "to_utc": str(to_utc),
             "original_last_loaded_at": str(original_last_loaded_at),
+            "open_event_from": str(result.get("open_event_from")),
         }
     )
 
