@@ -22,6 +22,7 @@ def _build_defs() -> Any:
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
         dwh_factsensorevents,
+        dwh_factsmartauditscategories,
         operations_assets,
     )
     from .jobs import (
@@ -31,14 +32,18 @@ def _build_defs() -> Any:
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         fact_sensor_events_job,
+        fact_smartaudits_categories_job,
         index_maintenance_job,
         refresh_dimensions_job,
+        smartaudits_comment_lookup_promotion_job,
+        smartaudits_classifier_training_job,
         spark_df_io_manager_healthcheck_job,
     )
     from .resources import (
         dim_sqlserver_resource,
         spark_df_io_manager,
         spark_resource,
+        smartaudits_mysql_resource,
         sqlserver_resource,
         transformation_ops,
     )
@@ -54,6 +59,8 @@ def _build_defs() -> Any:
         operations_sched_every_w,
         sensor_events_sched_every_6h,
         sensor_events_sched_every_1h_w,
+        smartaudits_categories_sched_every_6h,
+        smartaudits_classifier_training_daily,
     )
     from .sensors import (
         dwh_dimsidonproddimensions_sensor,
@@ -66,6 +73,9 @@ def _build_defs() -> Any:
             fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             fact_sensor_events_job,
+            fact_smartaudits_categories_job,
+            smartaudits_comment_lookup_promotion_job,
+            smartaudits_classifier_training_job,
             refresh_dimensions_job,
             spark_df_io_manager_healthcheck_job,
             index_maintenance_job,
@@ -75,6 +85,7 @@ def _build_defs() -> Any:
             "sqlserver": sqlserver_resource,
             "spark": spark_resource,
             "dim_sqlserver": dim_sqlserver_resource,
+            "smartaudits_mysql": smartaudits_mysql_resource,
             "transformation_ops": transformation_ops,
             "spark_df_io_manager": spark_df_io_manager,
         },
@@ -88,6 +99,8 @@ def _build_defs() -> Any:
             operations_sched_every_6h,
             sensor_events_sched_every_6h,
             sensor_events_sched_every_1h_w,
+            smartaudits_categories_sched_every_6h,
+            smartaudits_classifier_training_daily,
             cleanup_schedule,
             index_maintenance_schedule,
         ],
@@ -103,6 +116,7 @@ def _build_defs() -> Any:
             dbo_sublocation_tys,
             dwh_factlecturas,
             dwh_factsensorevents,
+            dwh_factsmartauditscategories,
             operations_assets,
             dwh_dimsidonproddimensions,
             cleanup_old_runs,

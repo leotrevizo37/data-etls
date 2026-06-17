@@ -9,8 +9,15 @@ import time
 from urllib.parse import urlparse
 from urllib.request import urlopen
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, max as spark_max, upper
-from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
+from pyspark.sql.functions import col, lit, max as spark_max, upper
+from pyspark.sql.types import (
+    BinaryType,
+    DoubleType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 from pyspark import SparkConf, StorageLevel
 from dagster import resource
 from zoneinfo import ZoneInfo
@@ -18,6 +25,7 @@ from zoneinfo import ZoneInfo
 OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
 HADOOP_AWS_PACKAGE = "org.apache.hadoop:hadoop-aws:3.4.1"
 MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
+MYSQL_JDBC_PACKAGE = "com.mysql:mysql-connector-j:8.4.0"
 DEFAULT_SPARK_MASTER_STATUS_URL = "http://spark-master:8080/json/"
 DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
 DEFAULT_SPARK_RESOURCE_POLL_SECONDS = 10
@@ -28,6 +36,7 @@ DEFAULT_SPARK_RESOURCE_PROFILES = {
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "smartaudits": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
 }
 SPARK_RETRY_POLICY_ENV = {
@@ -307,6 +316,7 @@ class SparkResource:
         jdbc_write_num_chunks: int,
         jdbc_write_target_partitions: int,
         jdbc_write_batch_size: int,
+        mysql_jdbc_package: str = "",
         user_code: str = "",
         job_name: str = "",
         job_type: str = "default",
@@ -363,6 +373,7 @@ class SparkResource:
         self.jdbc_write_num_chunks = jdbc_write_num_chunks
         self.jdbc_write_target_partitions = jdbc_write_target_partitions
         self.jdbc_write_batch_size = jdbc_write_batch_size
+        self.mysql_jdbc_package = mysql_jdbc_package
         self._spark: Optional[SparkSession] = None
 
     def _ozone_s3_enabled(self) -> bool:
@@ -378,6 +389,8 @@ class SparkResource:
             ])
         if self._ozone_s3_enabled():
             packages.append(HADOOP_AWS_PACKAGE)
+        if self.mysql_jdbc_package:
+            packages.append(self.mysql_jdbc_package)
         return packages
 
     def _build_ozone_s3_options(self) -> Dict[str, str]:
@@ -865,6 +878,125 @@ class SparkResource:
             chunk_column="ReadId",
         )
 
+    def write_fact_smartaudits_categories_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "PlanResultId",
+            "WorkPlanId",
+            "EvidencePhotoId",
+            "Location",
+            "Sublocation",
+            "Checkpoint",
+            "Task",
+            "LocationName",
+            "SublocationName",
+            "CheckpointName",
+            "TaskName",
+            "TaskCategory",
+            "ResultCategory",
+            "AiResult",
+            "ReviewDate",
+            "ReviewAIDate",
+            "SourceLastChangedAt",
+            "ClassificationMethod",
+            "ClassifierModelVersion",
+            "ClassifierConfidence",
+            "FailedEvidenceCount",
+            "EvidenceCount",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factSmartauditsCategories",
+            chunk_column="PlanResultId",
+        )
+
+    def write_smartaudits_comment_review_queue_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        queue_columns = [
+            "NormalizedCommentHash",
+            "AiResult",
+            "NormalizedComment",
+            "SampleComment",
+            "CandidateCount",
+            "FirstSeenAt",
+            "LastSeenAt",
+            "LastPlanResultId",
+            "LastEvidencePhotoId",
+            "SuggestedCategory",
+            "SuggestedMethod",
+            "SuggestedConfidence",
+        ]
+        df_stage = (
+            df
+            .select(*queue_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *queue_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.SmartauditsAiCommentReviewQueue",
+            chunk_column="NormalizedCommentHash",
+        )
+
+    def read_smartaudits_ai_comment_lookup(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSmartauditsAiCommentLookup",
+            properties=self._build_wh_path()["properties"],
+        )
+
+    def read_smartaudits_unclassified_fact_keys(self) -> DataFrame:
+        spark = self.get_spark()
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=(
+                "(SELECT PlanResultId "
+                "FROM dwh.factSmartauditsCategories "
+                "WHERE ResultCategory = 'SIN_CLASIFICAR') AS unclassified"
+            ),
+            properties=self._build_wh_path()["properties"],
+        )
+
+    def read_smartaudits_model_artifact(self, artifact_path: str) -> bytes:
+        spark = self.get_spark()
+        row = spark.read.parquet(artifact_path).select("content").collect()[0]
+        return bytes(row.content)
+
+    def write_smartaudits_model_artifact(
+        self,
+        artifact_path: str,
+        model_version: str,
+        content: bytes,
+    ) -> None:
+        spark = self.get_spark()
+        schema = StructType(
+            [
+                StructField("model_version", StringType(), False),
+                StructField("content", BinaryType(), False),
+            ]
+        )
+        (
+            spark.createDataFrame([(model_version, bytearray(content))], schema)
+            .write
+            .mode("overwrite")
+            .parquet(artifact_path)
+        )
+
     def create_emptiness_dataframe(self) -> DataFrame:
         spark = self.get_spark()
         return spark.createDataFrame([(True,)], ["is_empty"])
@@ -924,6 +1056,12 @@ def spark_resource(init_context):
     jdbc_write_num_chunks = int(os.getenv("JDBC_WRITE_NUM_CHUNKS", "5"))
     jdbc_write_target_partitions = int(os.getenv("JDBC_WRITE_TARGET_PARTITIONS", "2"))
     jdbc_write_batch_size = int(os.getenv("JDBC_WRITE_BATCH_SIZE", "100"))
+    mysql_jdbc_package = ""
+    if os.getenv("SMARTAUDITS_MYSQL_HOST"):
+        mysql_jdbc_package = os.getenv(
+            "SMARTAUDITS_MYSQL_JDBC_PACKAGE",
+            MYSQL_JDBC_PACKAGE,
+        )
     spark_res = SparkResource(
         master_url=master_url,
         app_name=app_context["app_name"],
@@ -964,6 +1102,7 @@ def spark_resource(init_context):
         jdbc_write_num_chunks=jdbc_write_num_chunks,
         jdbc_write_target_partitions=jdbc_write_target_partitions,
         jdbc_write_batch_size=jdbc_write_batch_size,
+        mysql_jdbc_package=mysql_jdbc_package,
     )
     try:
         yield spark_res
