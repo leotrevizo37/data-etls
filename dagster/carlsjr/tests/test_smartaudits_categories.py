@@ -154,10 +154,17 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             ]
         )
         sublocations = self.spark.createDataFrame(
-            [{"id": 500, "locationId": "loc-1", "description": "Cocina"}]
+            [
+                {
+                    "id": 500,
+                    "locationId": "mx-loc-1",
+                    "SublocationId": "cocina-main",
+                    "description": "Cocina",
+                }
+            ]
         )
         locations = self.spark.createDataFrame(
-            [{"id": "loc-1", "Name": "Sucursal 1"}]
+            [{"id": "mx-loc-1", "Name": "Sucursal 1"}]
         )
         priority_types = self.spark.createDataFrame(
             [
@@ -258,6 +265,17 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
 
         self.assertEqual(row.ResultCategory, "SIN_CLASIFICAR")
         self.assertEqual(row.ClassificationMethod, "SIN_CLASIFICAR")
+
+    def test_location_and_sublocation_codes_are_normalized(self) -> None:
+        row = (
+            self._result_df()
+            .filter("PlanResultId = 1")
+            .select("LocationId", "SublocationId")
+            .collect()[0]
+        )
+
+        self.assertEqual(row.LocationId, "MX-LOC-1")
+        self.assertEqual(row.SublocationId, "COCINA-MAIN")
 
     def test_priority_comes_from_task_priority_type(self) -> None:
         row = (
