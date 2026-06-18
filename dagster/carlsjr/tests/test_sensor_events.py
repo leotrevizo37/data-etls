@@ -4,6 +4,7 @@ import warnings
 from datetime import datetime
 from importlib import import_module
 from pathlib import Path
+from typing import Optional
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -49,6 +50,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         value: float,
         device_type: str = "Monitoreo camara",
         sensor_type: str = "Camara de presencia",
+        time_span: Optional[datetime] = None,
     ) -> dict:
         return {
             "ReadId": read_id,
@@ -59,6 +61,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
             "device_type": device_type,
             "sensor_type": sensor_type,
             "sensor_name": "sensor-" + sensor_id,
+            "TimeSpan": time_span if time_span is not None else local_time,
             "LocalTimeSpan": local_time,
             "Value": value,
         }
@@ -127,6 +130,26 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual([row["ReadId"] for row in rows], ["r1", "r2"])
         self.assertAlmostEqual(rows[0]["EventMinutes"], 30.0)
         self.assertAlmostEqual(rows[1]["EventMinutes"], 30.0)
+
+    def test_unclosed_event_uses_utc_time_span_for_run_end(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "r1",
+                    "s1",
+                    datetime(2026, 3, 29, 10, 0),
+                    1.0,
+                    time_span=datetime(2026, 3, 29, 16, 0),
+                ),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 17:00:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
+        self.assertFalse(rows[0]["IsEventCompleted"])
 
     def test_output_columns_match_sql_table_schema(self) -> None:
         df = self._readings_df(

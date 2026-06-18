@@ -57,7 +57,7 @@ def sensor_events(
         ).otherwise(
             (
                 unix_timestamp(lit(to_utc_str))
-                - unix_timestamp(col("LocalTimeSpan"))
+                - unix_timestamp(col("TimeSpan"))
             )
             / lit(60)
         ),
