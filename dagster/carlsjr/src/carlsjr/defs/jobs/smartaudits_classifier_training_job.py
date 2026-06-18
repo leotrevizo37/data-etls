@@ -69,7 +69,7 @@ def _plan_results_id_range_query(min_plan_result_id: int, max_plan_result_id: in
         + str(min_plan_result_id)
         + " AND pr.id <= "
         + str(max_plan_result_id)
-        + " AND (t.reviewAI = 1 OR t.reviewAIAutomatically = 1)"
+        + " AND (t.reviewAI = 1 AND t.reviewAIAutomatically = 1)"
     )
 
 

@@ -79,7 +79,7 @@ def _changed_plan_results_query(from_utc: datetime, to_utc: datetime) -> str:
         "INNER JOIN work_plan wp ON pr.workPlanId = wp.id "
         "INNER JOIN tasks t ON wp.taskId = t.id "
         "LEFT JOIN evidence_photos ep ON ep.planResultsId = pr.id "
-        "WHERE (t.reviewAI = 1 OR t.reviewAIAutomatically = 1) "
+        "WHERE (t.reviewAI = 1 AND t.reviewAIAutomatically = 1) "
         "AND ("
         "(pr.reviewAIDate >= '" + from_str + "' AND pr.reviewAIDate < '" + to_str + "') "
         "OR (ep.createdAt >= '" + from_str + "' AND ep.createdAt < '" + to_str + "')"
