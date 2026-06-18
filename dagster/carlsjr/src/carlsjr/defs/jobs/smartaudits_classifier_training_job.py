@@ -201,6 +201,7 @@ def _reclassify_unclassified_rows(
             checkpoints_df=_read_mysql_table(spark_res, mysql, "checkpoints"),
             sublocations_df=_read_mysql_table(spark_res, mysql, "sublocations"),
             locations_df=_read_mysql_table(spark_res, mysql, "locations"),
+            priority_types_df=_read_mysql_table(spark_res, mysql, "priority_types"),
             task_categories_df=_read_mysql_table(spark_res, mysql, "task_categories"),
             categories_df=_read_mysql_table(spark_res, mysql, "categories"),
             comment_lookup_df=comment_lookup_df,

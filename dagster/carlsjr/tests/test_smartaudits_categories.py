@@ -129,9 +129,21 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
         )
         tasks = self.spark.createDataFrame(
             [
-                {"id": 100, "description": "Congelador - Temperaturas productos"},
-                {"id": 200, "description": "Limpieza mostrador"},
-                {"id": 300, "description": "Revision operativa"},
+                {
+                    "id": 100,
+                    "description": "Congelador - Temperaturas productos",
+                    "priorityTypeId": 1,
+                },
+                {
+                    "id": 200,
+                    "description": "Limpieza mostrador",
+                    "priorityTypeId": 2,
+                },
+                {
+                    "id": 300,
+                    "description": "Revision operativa",
+                    "priorityTypeId": 3,
+                },
             ]
         )
         checkpoints = self.spark.createDataFrame(
@@ -146,6 +158,12 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
         )
         locations = self.spark.createDataFrame(
             [{"id": "loc-1", "Name": "Sucursal 1"}]
+        )
+        priority_types = self.spark.createDataFrame(
+            [
+                {"id": 1, "name": "Alta"},
+                {"id": 2, "name": "Media"},
+            ]
         )
         task_categories = self.spark.createDataFrame(
             [
@@ -167,6 +185,7 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints,
             sublocations,
             locations,
+            priority_types,
             task_categories,
             categories,
         )
@@ -181,8 +200,9 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            task_categories_df=frames[7],
-            categories_df=frames[8],
+            priority_types_df=frames[7],
+            task_categories_df=frames[8],
+            categories_df=frames[9],
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )
 
@@ -239,6 +259,16 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
         self.assertEqual(row.ResultCategory, "SIN_CLASIFICAR")
         self.assertEqual(row.ClassificationMethod, "SIN_CLASIFICAR")
 
+    def test_priority_comes_from_task_priority_type(self) -> None:
+        row = (
+            self._result_df()
+            .filter("PlanResultId = 1")
+            .select("Priority")
+            .collect()[0]
+        )
+
+        self.assertEqual(row.Priority, "Alta")
+
     def test_unmatched_failed_comment_can_use_ml_prediction(self) -> None:
         frames = self._base_frames()
         predictions = self.spark.createDataFrame(
@@ -260,8 +290,9 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            task_categories_df=frames[7],
-            categories_df=frames[8],
+            priority_types_df=frames[7],
+            task_categories_df=frames[8],
+            categories_df=frames[9],
             classifier_predictions_df=predictions,
         )
 
@@ -301,8 +332,9 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            task_categories_df=frames[7],
-            categories_df=frames[8],
+            priority_types_df=frames[7],
+            task_categories_df=frames[8],
+            categories_df=frames[9],
             comment_lookup_df=lookup,
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )
@@ -337,8 +369,9 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            task_categories_df=frames[7],
-            categories_df=frames[8],
+            priority_types_df=frames[7],
+            task_categories_df=frames[8],
+            categories_df=frames[9],
             comment_lookup_df=lookup,
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )

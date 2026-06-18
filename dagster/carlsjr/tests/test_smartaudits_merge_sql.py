@@ -42,6 +42,7 @@ class SmartAuditsMergeSqlTests(unittest.TestCase):
 
         self.assertIn("MERGE dwh.factSmartauditsCategories", sql)
         self.assertIn("target.PlanResultId = source.PlanResultId", sql)
+        self.assertIn("target.Priority = source.Priority", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
         self.assertIn("WHERE RunId = ?", sql)

@@ -896,6 +896,7 @@ class SparkResource:
             "CheckpointName",
             "TaskName",
             "TaskCategory",
+            "Priority",
             "ResultCategory",
             "AiResult",
             "ReviewDate",

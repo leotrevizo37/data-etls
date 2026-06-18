@@ -35,6 +35,7 @@ OUTPUT_COLUMNS = [
     "CheckpointName",
     "TaskName",
     "TaskCategory",
+    "Priority",
     "ResultCategory",
     "AiResult",
     "ReviewDate",
@@ -172,6 +173,7 @@ def build_smartaudits_categories_df(
     checkpoints_df: DataFrame,
     sublocations_df: DataFrame,
     locations_df: DataFrame,
+    priority_types_df: DataFrame,
     task_categories_df: DataFrame,
     categories_df: DataFrame,
     comment_lookup_df: Optional[DataFrame] = None,
@@ -221,6 +223,11 @@ def build_smartaudits_categories_df(
             F.col("sl.locationId") == F.col("loc.id"),
             "left",
         )
+        .join(
+            priority_types_df.alias("pt"),
+            F.col("t.priorityTypeId") == F.col("pt.id"),
+            "left",
+        )
         .join(task_category_df.alias("tc"), F.col("t.id") == F.col("tc.taskId"), "left")
         .select(
             F.col("pr.id").cast("long").alias("PlanResultId"),
@@ -234,6 +241,7 @@ def build_smartaudits_categories_df(
             F.col("cp.description").cast("string").alias("CheckpointName"),
             F.col("t.description").cast("string").alias("TaskName"),
             F.coalesce(F.col("tc.TaskCategory"), F.lit("SIN_CATEGORIA")).alias("TaskCategory"),
+            F.col("pt.name").cast("string").alias("Priority"),
             ai_result_int_column(F.col("pr.okAI")).cast("byte").alias("AiResult"),
             F.col("pr.reviewDate").cast("timestamp").alias("ReviewDate"),
             F.col("pr.reviewAIDate").cast("timestamp").alias("ReviewAIDate"),
