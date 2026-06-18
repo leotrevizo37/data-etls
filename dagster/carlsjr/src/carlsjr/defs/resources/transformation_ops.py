@@ -5,7 +5,9 @@ from ..transformations import (raw_dimensions,
                                factReadingsMeasurement_device,
                                cisterna,
                                presencia,
-                               cuartos_refrigeracion)
+                               cuartos_refrigeracion,
+                               sensor_events,
+                               temperature_events)
 from ..resources import (SqlServerResource,
                          SparkResource,
                          SqlDimServerResource)
@@ -34,6 +36,14 @@ class TransformationOps:
         return factReadingsMeasurement_device(df)
     def presencia(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return presencia(df, dims, min_hour, max_hour)
+    def sensor_events(self, df: DataFrame, to_utc_str: str) -> Optional[DataFrame]:
+        return sensor_events(df, to_utc_str)
+    def temperature_events(
+            self,
+            df: DataFrame,
+            expected_values: DataFrame,
+            to_utc_str: str) -> Optional[DataFrame]:
+        return temperature_events(df, expected_values, to_utc_str)
     def raw_dimensions(
             self,
             spark_res: SparkResource,

@@ -9,6 +9,7 @@ __all__ = [
     "raw_dimensions",
     "presencia",
     "sensor_events",
+    "temperature_events",
     "cisterna",
     "cuartos_refrigeracion",
 ]
@@ -20,6 +21,7 @@ _MODULE_BY_EXPORT = {
     "cisterna": ".cisterna",
     "presencia": ".presencia",
     "sensor_events": ".sensor_events",
+    "temperature_events": ".temperature_events",
     "cuartos_refrigeracion": ".cuartos_refrigeracion",
 }
 
