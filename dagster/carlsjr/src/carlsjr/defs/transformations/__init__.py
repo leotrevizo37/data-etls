@@ -11,6 +11,8 @@ __all__ = [
     "sensor_events",
     "cisterna",
     "cuartos_refrigeracion",
+    "smartaudits_categories",
+    "smartaudits_classifier",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -21,6 +23,8 @@ _MODULE_BY_EXPORT = {
     "presencia": ".presencia",
     "sensor_events": ".sensor_events",
     "cuartos_refrigeracion": ".cuartos_refrigeracion",
+    "smartaudits_categories": ".smartaudits_categories",
+    "smartaudits_classifier": ".smartaudits_classifier",
 }
 
 

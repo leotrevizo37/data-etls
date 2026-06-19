@@ -87,6 +87,7 @@ def _install_optional_stubs() -> None:
             return None
 
         pyspark_functions.col = _function
+        pyspark_functions.lit = _function
         pyspark_functions.max = _function
         pyspark_functions.upper = _function
 
@@ -96,6 +97,7 @@ def _install_optional_stubs() -> None:
             def __init__(self, *_args, **_kwargs):
                 pass
 
+        pyspark_types.BinaryType = _Type
         pyspark_types.DoubleType = _Type
         pyspark_types.StringType = _Type
         pyspark_types.StructField = _Type
@@ -317,6 +319,14 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_cores"], 3)
         self.assertEqual(profile["min_memory_mb"], 4096)
         self.assertEqual(profile["cores_max"], 4)
+
+    def test_smartaudits_profile_uses_executor_sized_defaults(self) -> None:
+        profile = build_spark_resource_profile("smartaudits", {})
+
+        self.assertEqual(profile["name"], "smartaudits")
+        self.assertEqual(profile["min_cores"], 2)
+        self.assertEqual(profile["min_memory_mb"], 3072)
+        self.assertEqual(profile["cores_max"], 2)
 
     def test_spark_retry_policy_uses_defaults_and_env_overrides(self) -> None:
         policy = build_spark_retry_conf(
