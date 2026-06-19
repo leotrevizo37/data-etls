@@ -344,21 +344,56 @@ class SqlServerResource:
                     return None
                 return row.LastLoadedAt
 
-    def get_min_open_sensor_event_time(self) -> Optional[datetime]:
+    def get_min_open_sensor_event_time(
+        self,
+        sensor_type: Optional[str] = None,
+    ) -> Optional[datetime]:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 try:
-                    cursor.execute(
-                        "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
-                        "FROM dwh.factSensorEvents "
-                        "WHERE IsEventCompleted = 0"
-                    )
+                    if sensor_type is None:
+                        cursor.execute(
+                            "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
+                            "FROM dwh.factSensorEvents "
+                            "WHERE IsEventCompleted = 0"
+                        )
+                    else:
+                        cursor.execute(
+                            "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
+                            "FROM dwh.factSensorEvents "
+                            "WHERE IsEventCompleted = 0 "
+                            "AND SensorType = ?",
+                            sensor_type,
+                        )
                     row = cursor.fetchone()
                 except pyodbc.Error:
                     return None
                 if row is None:
                     return None
                 return row.OpenEventFrom
+
+    def delete_sensor_events_range(
+        self,
+        sensor_type: str,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM dwh.factSensorEvents "
+                    "WHERE SensorType = ? "
+                    "AND LocalTimeSpan >= ? "
+                    "AND LocalTimeSpan <= ?",
+                    sensor_type,
+                    from_utc,
+                    to_utc,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                if deleted is None or deleted < 0:
+                    return 0
+                return int(deleted)
 
     def mark_run_started(self, ingestion_name: str) -> None:
         with self._get_connection() as conn:

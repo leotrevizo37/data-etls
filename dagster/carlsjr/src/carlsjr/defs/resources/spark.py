@@ -852,6 +852,15 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def read_dim_sensor_expected_values(self) -> DataFrame:
+        spark = self.get_spark()
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSensorExpectedVal",
+            properties=self._build_wh_path()["properties"]
+        )
+
     def write_fact_sensor_events(self, df: DataFrame) -> int:
         df_dedup = (
             df

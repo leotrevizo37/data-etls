@@ -13,8 +13,10 @@ if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
 sensor_events_module = import_module("carlsjr.defs.transformations.sensor_events")
+temperature_events_module = import_module("carlsjr.defs.transformations.temperature_events")
 sensor_events = sensor_events_module.sensor_events
 resolve_sensor_events_from = sensor_events_module.resolve_sensor_events_from
+temperature_events = temperature_events_module.temperature_events
 
 
 warnings.simplefilter("ignore", ResourceWarning)
@@ -40,6 +42,9 @@ class SensorEventsTransformationTests(unittest.TestCase):
         cls.spark.stop()
 
     def _readings_df(self, rows: list[dict]) -> DataFrame:
+        return self.spark.createDataFrame(rows)
+
+    def _expected_values_df(self, rows: list[dict]) -> DataFrame:
         return self.spark.createDataFrame(rows)
 
     def _row(
@@ -150,6 +155,172 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
         self.assertFalse(rows[0]["IsEventCompleted"])
+
+    def test_ignores_temperature_out_of_range_when_under_two_hours(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "t1",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t2",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 30),
+                    40.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "00:00:00",
+                    "EndTime": "23:59:59",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 12:00:00")
+
+        self.assertEqual(result.collect(), [])
+
+    def test_detects_completed_temperature_event_after_two_hours(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "t1",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t2",
+                    "temp1",
+                    datetime(2026, 3, 30, 12, 0),
+                    40.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "00:00:00",
+                    "EndTime": "23:59:59",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 12:30:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ReadId"], "t1")
+        self.assertEqual(rows[0]["SensorType"], "Temperatura F")
+        self.assertAlmostEqual(rows[0]["Value"], 50.0)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 120.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_detects_open_temperature_event_after_two_hours(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "t1",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t2",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 30),
+                    51.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "00:00:00",
+                    "EndTime": "23:59:59",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 12:30:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ReadId"], "t1")
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 150.0)
+        self.assertFalse(rows[0]["IsEventCompleted"])
+
+    def test_ignores_temperature_readings_outside_schedule(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "out-time",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "out-day",
+                    "temp1",
+                    datetime(2026, 3, 29, 12, 30),
+                    51.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "12:00:00",
+                    "EndTime": "13:00:00",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 14:00:00")
+
+        self.assertEqual(result.collect(), [])
 
     def test_output_columns_match_sql_table_schema(self) -> None:
         df = self._readings_df(
