@@ -20,6 +20,9 @@ services:
   dagster-user-code-valledelencino:
     restart: "no"
 
+  dagster-user-code-carlsjr:
+    restart: "no"
+
   dagster-web:
     restart: "no"
 

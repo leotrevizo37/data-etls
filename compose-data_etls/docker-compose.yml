@@ -1,6 +1,6 @@
 x-dagster-common: &dagster_common
   env_file:
-    - .env
+    - ${COMPOSE_ENV_FILE:-.env}
   environment:
     DAGSTER_HOME: /opt/dagster/dagster_home
   working_dir: /opt/dagster/app
@@ -11,6 +11,7 @@ x-dagster-common: &dagster_common
     - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
+    - ../dagster/carlsjr:/opt/dagster/app/carlsjr
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -27,7 +28,7 @@ services:
     image: mcr.microsoft.com/mssql-tools
     container_name: data-sql-init
     env_file:
-      - .env
+      - ${COMPOSE_ENV_FILE:-.env}
     networks:
       - data-dagster
     volumes:
@@ -51,7 +52,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -130,7 +131,7 @@ services:
     image: postgres:16
     container_name: data-dagster-postgres
     env_file:
-      - .env
+      - ${COMPOSE_ENV_FILE:-.env}
     environment:
       POSTGRES_USER: ${DAGSTER_PG_USER}
       POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD}
@@ -405,6 +406,73 @@ services:
       retries: 10
       start_period: 40s
 
+  dagster-user-code-carlsjr:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: carlsjr-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/carlsjr
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/carlsjr/src
+      APP_DB: ${CARLSJR_DB:-carlsjr}
+      DIM_DB: ${CARLSJR_DIM_DB:-carlsjr}
+      ADLS_CONTAINER_NAME: ${CARLSJR_ADLS_CONTAINER_NAME:-carlsjr}
+      FACTREADINGS_OVERLAP_HOURS: ${CARLSJR_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      SPARK_DF_IO_BASE_PATH: ${CARLSJR_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/carlsjr}
+      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
+      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
+      MSSQL_HOST: ${CARLSJR_MSSQL_HOST:-${MSSQL_HOST}}
+      MSSQL_PORT: ${CARLSJR_MSSQL_PORT:-${MSSQL_PORT:-1433}}
+      MSSQL_USER: ${CARLSJR_MSSQL_USER:-${MSSQL_USER}}
+      MSSQL_PASSWORD: ${CARLSJR_MSSQL_PASSWORD:-${MSSQL_PASSWORD}}
+      DIMSQL_HOST: ${CARLSJR_DIMSQL_HOST:-${DIMSQL_HOST}}
+      DIMSQL_PORT: ${CARLSJR_DIMSQL_PORT:-${DIMSQL_PORT:-1433}}
+      DIMSQL_USER: ${CARLSJR_DIMSQL_USER:-${DIMSQL_USER}}
+      DIMSQL_PASSWORD: ${CARLSJR_DIMSQL_PASSWORD:-${DIMSQL_PASSWORD}}
+      SMARTAUDITS_MYSQL_HOST: ${CARLSJR_SMARTAUDITS_MYSQL_HOST:-${SMARTAUDITS_MYSQL_HOST:-}}
+      SMARTAUDITS_MYSQL_PORT: ${CARLSJR_SMARTAUDITS_MYSQL_PORT:-${SMARTAUDITS_MYSQL_PORT:-3306}}
+      SMARTAUDITS_MYSQL_DATABASE: ${CARLSJR_SMARTAUDITS_MYSQL_DATABASE:-${SMARTAUDITS_MYSQL_DATABASE:-}}
+      SMARTAUDITS_MYSQL_USER: ${CARLSJR_SMARTAUDITS_MYSQL_USER:-${SMARTAUDITS_MYSQL_USER:-}}
+      SMARTAUDITS_MYSQL_PASSWORD: ${CARLSJR_SMARTAUDITS_MYSQL_PASSWORD:-${SMARTAUDITS_MYSQL_PASSWORD:-}}
+      SMARTAUDITS_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL: ${CARLSJR_SMARTAUDITS_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:-${SMARTAUDITS_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:-true}}
+      SMARTAUDITS_MODEL_BASE_PATH: ${CARLSJR_SMARTAUDITS_MODEL_BASE_PATH:-s3a://data-etls/models/carlsjr/smartaudits/result_category}
+      SMARTAUDITS_CLASSIFIER_CONFIDENCE_THRESHOLD: ${CARLSJR_SMARTAUDITS_CLASSIFIER_CONFIDENCE_THRESHOLD:-0.75}
+      SMARTAUDITS_CLASSIFIER_MIN_TRAINING_ROWS: ${CARLSJR_SMARTAUDITS_CLASSIFIER_MIN_TRAINING_ROWS:-50}
+      SMARTAUDITS_CLASSIFIER_MIN_ACCURACY: ${CARLSJR_SMARTAUDITS_CLASSIFIER_MIN_ACCURACY:-0.85}
+      SMARTAUDITS_CLASSIFIER_MIN_MACRO_F1: ${CARLSJR_SMARTAUDITS_CLASSIFIER_MIN_MACRO_F1:-0.80}
+      SMARTAUDITS_CLASSIFIER_RETRAIN_UNCLASSIFIED_THRESHOLD: ${CARLSJR_SMARTAUDITS_CLASSIFIER_RETRAIN_UNCLASSIFIED_THRESHOLD:-100}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${CARLSJR_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${CARLSJR_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${CARLSJR_USER_CODE_PORT:-4006}:4006"
+      - "${CARLSJR_SPARK_DRIVER_PORT}:${CARLSJR_SPARK_DRIVER_PORT}"
+      - "${CARLSJR_SPARK_BLOCK_MANAGER_PORT}:${CARLSJR_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4006",
+      "-m", "carlsjr.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4006 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
   dagster-web:
     build:
       context: ..
@@ -508,12 +576,14 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
+      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-86400}"
     ports:
       - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
       - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
       - "${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}:${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}"
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}:${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}"
+      - "${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}:${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}"
     command:
       [
         "/opt/spark/bin/spark-class",

@@ -141,6 +141,7 @@ build_executor_cores = spark_module._build_executor_cores
 build_spark_master_status_url = spark_module._build_spark_master_status_url
 build_spark_resource_profile = spark_module._build_spark_resource_profile
 build_spark_retry_conf = spark_module._build_spark_retry_conf
+build_s3a_tuning_conf = spark_module._build_s3a_tuning_conf
 spark_master_available_resources = spark_module._spark_master_available_resources
 SparkResource = spark_module.SparkResource
 SparkDataFrameParquetIOManager = (
@@ -151,6 +152,15 @@ SparkDataFrameParquetIOManager = (
 class _Context:
     def get_identifier(self):
         return ["run-id", "op-name", "result"]
+
+
+class _FakeDataFrame:
+    def __init__(self):
+        self.repartition_calls = []
+
+    def repartition(self, partitions):
+        self.repartition_calls.append(partitions)
+        return self
 
 
 def _spark_resource(
@@ -210,8 +220,42 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(options["fs.s3a.bucket.probe"], "0")
         self.assertEqual(options["fs.s3a.change.detection.mode"], "none")
         self.assertEqual(options["fs.s3a.connection.ssl.enabled"], "false")
+        self.assertEqual(options["fs.s3a.fast.upload.buffer"], "disk")
+        self.assertEqual(options["fs.s3a.multipart.size"], "128M")
         self.assertEqual(options["fs.s3a.access.key"], "access")
         self.assertEqual(options["fs.s3a.secret.key"], "secret")
+
+    def test_s3a_tuning_uses_defaults_and_env_overrides(self) -> None:
+        options = build_s3a_tuning_conf(
+            {
+                "SPARK_S3A_MULTIPART_SIZE": "64M",
+                "SPARK_S3A_FAST_UPLOAD_BUFFER": "bytebuffer",
+            }
+        )
+
+        self.assertEqual(options["fs.s3a.connection.maximum"], "64")
+        self.assertEqual(options["fs.s3a.multipart.size"], "64M")
+        self.assertEqual(options["fs.s3a.fast.upload.buffer"], "bytebuffer")
+
+    def test_spark_df_io_manager_repartitions_remote_writes(self) -> None:
+        manager = SparkDataFrameParquetIOManager(
+            "s3a://data-etls/dagster_io/spark_dfs/bafar_poc_gabinete",
+            write_partitions=4,
+        )
+        df = _FakeDataFrame()
+
+        self.assertIs(manager._prepare_for_write(df), df)
+        self.assertEqual(df.repartition_calls, [4])
+
+    def test_spark_df_io_manager_keeps_local_writes_unchanged(self) -> None:
+        manager = SparkDataFrameParquetIOManager(
+            "/data/dagster_io/spark_dfs/bafar_poc_gabinete",
+            write_partitions=4,
+        )
+        df = _FakeDataFrame()
+
+        self.assertIs(manager._prepare_for_write(df), df)
+        self.assertEqual(df.repartition_calls, [])
 
     def test_spark_packages_preserve_adls_jdbc_and_add_hadoop_aws(self) -> None:
         spark_res = _spark_resource(
@@ -413,6 +457,25 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "block manager endpoints"):
             spark_res._wait_for_spark_capacity()
+
+    def test_validate_port_assignments_raises_on_collision(self) -> None:
+        spark_res = _spark_resource(
+            master_url="spark://spark-master:7077",
+            driver_port="37079",
+            driver_block_manager_port="37078",
+            block_manager_port="37079",
+        )
+        with self.assertRaisesRegex(RuntimeError, "port conflict"):
+            spark_res._validate_port_assignments()
+
+    def test_validate_port_assignments_passes_with_distinct_ports(self) -> None:
+        spark_res = _spark_resource(
+            master_url="spark://spark-master:7077",
+            driver_port="37077",
+            driver_block_manager_port="37078",
+            block_manager_port="37079",
+        )
+        spark_res._validate_port_assignments()
 
 
 if __name__ == "__main__":
