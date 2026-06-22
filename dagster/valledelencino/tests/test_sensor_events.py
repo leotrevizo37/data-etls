@@ -4,6 +4,7 @@ import warnings
 from datetime import datetime
 from importlib import import_module
 from pathlib import Path
+from typing import Optional
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -11,9 +12,9 @@ PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
-sensor_events = import_module(
-    "valledelencino.defs.transformations.sensor_events"
-).sensor_events
+sensor_events_module = import_module("valledelencino.defs.transformations.sensor_events")
+sensor_events = sensor_events_module.sensor_events
+resolve_sensor_events_from = sensor_events_module.resolve_sensor_events_from
 
 
 warnings.simplefilter("ignore", ResourceWarning)
@@ -49,6 +50,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         value: float,
         device_type: str = "Puerta",
         sensor_type: str = "Estado",
+        time_span: Optional[datetime] = None,
     ) -> dict:
         return {
             "ReadId": read_id,
@@ -59,6 +61,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
             "device_type": device_type,
             "sensor_type": sensor_type,
             "sensor_name": "sensor-" + sensor_id,
+            "TimeSpan": time_span if time_span is not None else local_time,
             "LocalTimeSpan": local_time,
             "Value": value,
         }
@@ -114,6 +117,21 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(rows[2]["EventMinutes"], 100.0)
         self.assertFalse(rows[2]["IsEventCompleted"])
 
+    def test_reprocess_start_uses_open_event_when_older_than_control(self) -> None:
+        control_from = datetime(2026, 3, 29, 11, 0)
+        open_event_from = datetime(2026, 3, 29, 10, 0)
+
+        result = resolve_sensor_events_from(control_from, open_event_from)
+
+        self.assertEqual(result, open_event_from)
+
+    def test_reprocess_start_uses_control_when_no_open_event_exists(self) -> None:
+        control_from = datetime(2026, 3, 29, 11, 0)
+
+        result = resolve_sensor_events_from(control_from, None)
+
+        self.assertEqual(result, control_from)
+
     def test_calculates_event_minutes_for_open_then_close(self) -> None:
         df = self._readings_df(
             [
@@ -148,6 +166,26 @@ class SensorEventsTransformationTests(unittest.TestCase):
         result = sensor_events(df, "2026-03-29 11:00:00")
 
         self.assertIsNotNone(result)
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
+        self.assertFalse(rows[0]["IsEventCompleted"])
+
+    def test_unclosed_event_uses_utc_time_span_for_run_end(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "r1",
+                    "s1",
+                    datetime(2026, 3, 29, 10, 0),
+                    1.0,
+                    time_span=datetime(2026, 3, 29, 16, 0),
+                ),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 17:00:00")
+
         rows = result.collect()
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
