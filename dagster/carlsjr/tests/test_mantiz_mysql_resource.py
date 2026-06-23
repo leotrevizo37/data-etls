@@ -143,6 +143,20 @@ class MantizMySqlResourceTests(unittest.TestCase):
         self.assertFalse(any(path.name.startswith("dimMantiz") for path in init_dir.glob("*.sql")))
         self.assertFalse((init_dir / "factMantizTickets.sql").exists())
 
+    def test_changed_text_tickets_query_uses_exists_for_ticket_comments(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "assets"
+            / "mantiz_common.py"
+        ).read_text()
+
+        self.assertIn("OR EXISTS (", source)
+        self.assertIn("FROM TicketComment tc", source)
+        self.assertNotIn("LEFT JOIN TicketComment", source)
+
 
 if __name__ == "__main__":
     unittest.main()

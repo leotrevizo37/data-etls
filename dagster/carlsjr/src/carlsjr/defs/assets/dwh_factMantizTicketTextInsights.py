@@ -8,11 +8,11 @@ from pyspark.sql import DataFrame
 
 from ..resources import MantizMySqlResource, SparkResource, SqlServerResource
 from ..transformations.mantiz_tickets import (
-    build_mantiz_changed_ticket_keys_df,
-    build_mantiz_source_texts_df,
+    build_mantiz_source_texts_from_context_df,
     build_mantiz_text_insight_review_queue_df,
+    build_mantiz_ticket_context_df,
     build_mantiz_ticket_text_insight_detail_from_sources_df,
-    build_mantiz_ticket_text_insights_fact_df,
+    build_mantiz_ticket_text_insights_fact_from_prepared_df,
     empty_mantiz_classifier_predictions_df,
 )
 from ..transformations.mantiz_text_classifier import (
@@ -24,28 +24,36 @@ from .mantiz_common import (
     MANTIZ_RETRY_DELAY_SECONDS,
     MANTIZ_RETRY_POLICY,
     TEXT_INSIGHTS_INGESTION_NAME,
+    branches_for_changed_text_tickets_query,
     changed_text_tickets_query,
+    clients_for_changed_text_tickets_query,
     comments_for_changed_tickets_query,
+    equipment_catalog_for_changed_text_tickets_query,
+    equipment_instances_for_changed_text_tickets_query,
+    failure_types_for_changed_text_tickets_query,
     finalize_run,
     read_mysql_query,
-    read_mysql_table,
+    spare_parts_for_changed_text_tickets_query,
     start_run,
+    suppliers_for_changed_text_tickets_query,
+    ticket_spare_parts_for_changed_text_tickets_query,
     validate_mantiz_config,
 )
 
 
-def _load_active_mantiz_text_models(
+def _load_active_mantiz_text_model_payloads(
     context,
     sql: SqlServerResource,
     spark_res: SparkResource,
-) -> Dict[str, tuple[Any, str]]:
+) -> Dict[str, tuple[bytes, str]]:
     active_models = sql.get_active_mantiz_text_classifier_models()
     loaded = {}
     for insight_type, model_info in active_models.items():
         try:
             content = spark_res.read_mantiz_text_model_artifact(model_info["artifact_path"])
+            load_mantiz_model_bytes(content)
             loaded[insight_type] = (
-                load_mantiz_model_bytes(content),
+                content,
                 str(model_info["model_version"]),
             )
         except Exception as exc:
@@ -65,13 +73,13 @@ def _build_mantiz_classifier_predictions_df(
     sources_df: DataFrame,
 ) -> DataFrame:
     spark = spark_res.get_spark()
-    models = _load_active_mantiz_text_models(context, sql, spark_res)
-    if not models:
+    model_payloads = _load_active_mantiz_text_model_payloads(context, sql, spark_res)
+    if not model_payloads:
         return empty_mantiz_classifier_predictions_df(spark)
 
     threshold = float(os.getenv("MANTIZ_TEXT_CLASSIFIER_CONFIDENCE_THRESHOLD", "0.75"))
-    predictions = []
-    rows = (
+    payloads_bc = spark.sparkContext.broadcast(model_payloads)
+    prediction_rows = (
         sources_df
         .select(
             "OrganizationId",
@@ -80,11 +88,33 @@ def _build_mantiz_classifier_predictions_df(
             "SourceId",
             "NormalizedText",
         )
-        .collect()
+        .rdd
+        .mapPartitions(
+            lambda rows: _predict_mantiz_text_partition(
+                rows,
+                payloads_bc.value,
+                threshold,
+            )
+        )
     )
+
+    return spark.createDataFrame(
+        prediction_rows,
+        "OrganizationId string, TicketId string, SourceType string, SourceId string, "
+        "InsightType string, CanonicalCode string, CanonicalName string, "
+        "ClassifierModelVersion string, ClassifierConfidence double",
+    )
+
+
+def _predict_mantiz_text_partition(rows, model_payloads, threshold):
+    models = None
     for row in rows:
-        for insight_type, model_with_version in models.items():
-            model, model_version = model_with_version
+        if models is None:
+            models = [
+                (insight_type, load_mantiz_model_bytes(content), model_version)
+                for insight_type, (content, model_version) in model_payloads.items()
+            ]
+        for insight_type, model, model_version in models:
             prediction = predict_mantiz_text(
                 model,
                 row.NormalizedText,
@@ -93,29 +123,17 @@ def _build_mantiz_classifier_predictions_df(
             )
             if prediction is None:
                 continue
-            predictions.append(
-                (
-                    row.OrganizationId,
-                    row.TicketId,
-                    row.SourceType,
-                    row.SourceId,
-                    insight_type,
-                    prediction.label,
-                    prediction.label.replace("_", " "),
-                    prediction.model_version,
-                    prediction.confidence,
-                )
+            yield (
+                row.OrganizationId,
+                row.TicketId,
+                row.SourceType,
+                row.SourceId,
+                insight_type,
+                prediction.label,
+                prediction.label.replace("_", " "),
+                prediction.model_version,
+                prediction.confidence,
             )
-
-    if not predictions:
-        return empty_mantiz_classifier_predictions_df(spark)
-
-    return spark.createDataFrame(
-        predictions,
-        "OrganizationId string, TicketId string, SourceType string, SourceId string, "
-        "InsightType string, CanonicalCode string, CanonicalName string, "
-        "ClassifierModelVersion string, ClassifierConfidence double",
-    )
 
 
 @op(
@@ -161,6 +179,7 @@ def transform_and_load_mantiz_text_insights_op(
     result_df: Optional[DataFrame] = None
     detail_df: Optional[DataFrame] = None
     changed_keys_df: Optional[DataFrame] = None
+    context_df: Optional[DataFrame] = None
     sources_df: Optional[DataFrame] = None
     review_queue_df: Optional[DataFrame] = None
 
@@ -179,14 +198,54 @@ def transform_and_load_mantiz_text_insights_op(
             context.log.info("No Mantiz text insight tickets found in window.")
             succeeded = True
         else:
-            branches_df = read_mysql_table(spark_res, mysql, "Branch")
-            clients_df = read_mysql_table(spark_res, mysql, "Client")
-            equipment_instances_df = read_mysql_table(spark_res, mysql, "EquipmentInstance")
-            equipment_catalog_df = read_mysql_table(spark_res, mysql, "EquipmentCatalog")
-            failure_types_df = read_mysql_table(spark_res, mysql, "FailureType")
-            suppliers_df = read_mysql_table(spark_res, mysql, "Supplier")
-            ticket_spare_parts_df = read_mysql_table(spark_res, mysql, "TicketSparePart")
-            spare_parts_df = read_mysql_table(spark_res, mysql, "SparePart")
+            branches_df = read_mysql_query(
+                spark_res,
+                mysql,
+                branches_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_branches",
+            )
+            clients_df = read_mysql_query(
+                spark_res,
+                mysql,
+                clients_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_clients",
+            )
+            equipment_instances_df = read_mysql_query(
+                spark_res,
+                mysql,
+                equipment_instances_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_equipment_instances",
+            )
+            equipment_catalog_df = read_mysql_query(
+                spark_res,
+                mysql,
+                equipment_catalog_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_equipment_catalog",
+            )
+            failure_types_df = read_mysql_query(
+                spark_res,
+                mysql,
+                failure_types_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_failure_types",
+            )
+            suppliers_df = read_mysql_query(
+                spark_res,
+                mysql,
+                suppliers_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_suppliers",
+            )
+            ticket_spare_parts_df = read_mysql_query(
+                spark_res,
+                mysql,
+                ticket_spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_ticket_spare_parts",
+            )
+            spare_parts_df = read_mysql_query(
+                spark_res,
+                mysql,
+                spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                "changed_mantiz_spare_parts",
+            )
             comments_df = read_mysql_query(
                 spark_res,
                 mysql,
@@ -194,7 +253,7 @@ def transform_and_load_mantiz_text_insights_op(
                 "changed_mantiz_ticket_comments",
             )
 
-            changed_keys_df = build_mantiz_changed_ticket_keys_df(
+            context_df = build_mantiz_ticket_context_df(
                 tickets_df=tickets_df,
                 branches_df=branches_df,
                 clients_df=clients_df,
@@ -204,17 +263,14 @@ def transform_and_load_mantiz_text_insights_op(
                 suppliers_df=suppliers_df,
                 organization_id=mysql.organization_id,
             ).persist(StorageLevel.MEMORY_AND_DISK)
-            changed_ticket_count = changed_keys_df.count()
-            sources_df = build_mantiz_source_texts_df(
-                tickets_df=tickets_df,
+            changed_keys_df = (
+                context_df
+                .select("OrganizationId", "TicketId")
+                .dropDuplicates(["OrganizationId", "TicketId"])
+            )
+            sources_df = build_mantiz_source_texts_from_context_df(
+                context_df=context_df,
                 ticket_comments_df=comments_df,
-                branches_df=branches_df,
-                clients_df=clients_df,
-                equipment_instances_df=equipment_instances_df,
-                equipment_catalog_df=equipment_catalog_df,
-                failure_types_df=failure_types_df,
-                suppliers_df=suppliers_df,
-                organization_id=mysql.organization_id,
             ).persist(StorageLevel.MEMORY_AND_DISK)
             classifier_predictions_df = _build_mantiz_classifier_predictions_df(
                 context,
@@ -227,46 +283,42 @@ def transform_and_load_mantiz_text_insights_op(
                 sources_df=sources_df,
                 classifier_predictions_df=classifier_predictions_df,
             ).persist(StorageLevel.MEMORY_AND_DISK)
-            result_df = build_mantiz_ticket_text_insights_fact_df(
-                tickets_df=tickets_df,
-                ticket_comments_df=comments_df,
-                branches_df=branches_df,
-                clients_df=clients_df,
-                equipment_instances_df=equipment_instances_df,
-                equipment_catalog_df=equipment_catalog_df,
-                failure_types_df=failure_types_df,
-                suppliers_df=suppliers_df,
-                organization_id=mysql.organization_id,
+            result_df = build_mantiz_ticket_text_insights_fact_from_prepared_df(
+                context_df=context_df,
+                sources_df=sources_df,
                 insight_detail_df=detail_df,
                 ticket_spare_parts_df=ticket_spare_parts_df,
                 spare_parts_df=spare_parts_df,
             ).persist(StorageLevel.MEMORY_AND_DISK)
 
-            row_count = result_df.count()
-            detail_row_count = detail_df.count()
             sql.clear_fact_mantiz_ticket_text_insights_stage(run_id)
-            if changed_ticket_count > 0:
-                spark_res.write_mantiz_ticket_text_insight_changed_tickets_stage(
-                    changed_keys_df,
+            changed_ticket_count = spark_res.write_mantiz_ticket_text_insight_changed_tickets_stage(
+                changed_keys_df,
+                run_id,
+            )
+            max_source_changed_at = spark_res.get_max_time_span(
+                result_df,
+                "SourceLastChangedAt",
+            )
+            row_count = spark_res.write_fact_mantiz_ticket_text_insights_stage(result_df, run_id)
+            result_df.unpersist()
+            result_df = None
+            sources_df.unpersist()
+            sources_df = None
+            context_df.unpersist()
+            context_df = None
+            detail_row_count = spark_res.write_mantiz_ticket_text_insight_detail_stage(
+                detail_df,
+                run_id,
+            )
+            if detail_row_count > 0:
+                review_queue_df = build_mantiz_text_insight_review_queue_df(detail_df)
+                review_queue_rows = spark_res.write_mantiz_text_insight_review_queue_stage(
+                    review_queue_df,
                     run_id,
                 )
-            if row_count > 0:
-                max_source_changed_at = spark_res.get_max_time_span(
-                    result_df,
-                    "SourceLastChangedAt",
-                )
-                spark_res.write_fact_mantiz_ticket_text_insights_stage(result_df, run_id)
-            if detail_row_count > 0:
-                spark_res.write_mantiz_ticket_text_insight_detail_stage(detail_df, run_id)
-                review_queue_df = build_mantiz_text_insight_review_queue_df(detail_df).persist(
-                    StorageLevel.MEMORY_AND_DISK,
-                )
-                review_queue_rows = review_queue_df.count()
-                if review_queue_rows > 0:
-                    spark_res.write_mantiz_text_insight_review_queue_stage(
-                        review_queue_df,
-                        run_id,
-                    )
+            detail_df.unpersist()
+            detail_df = None
             if row_count == 0:
                 max_source_changed_at = to_utc
             merged_rows = sql.replace_fact_mantiz_ticket_text_insights(run_id)
@@ -305,6 +357,8 @@ def transform_and_load_mantiz_text_insights_op(
             detail_df.unpersist()
         if changed_keys_df is not None:
             changed_keys_df.unpersist()
+        if context_df is not None:
+            context_df.unpersist()
         if sources_df is not None:
             sources_df.unpersist()
         if review_queue_df is not None:

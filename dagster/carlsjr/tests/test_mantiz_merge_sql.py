@@ -99,6 +99,7 @@ class MantizMergeSqlTests(unittest.TestCase):
         self.assertIn("FROM stg.MantizTextInsightReviewQueue", sql)
         self.assertIn("target.InsightType = source.InsightType", sql)
         self.assertIn("target.ConceptHash = source.ConceptHash", sql)
+        self.assertIn("RepresentativeRawText", sql)
         self.assertNotIn("target.ReviewStatus", update_section)
         self.assertNotIn("target.ReviewedBy", update_section)
 
@@ -124,6 +125,29 @@ class MantizMergeSqlTests(unittest.TestCase):
         self.assertIn("queue.ConceptStatus", source)
         self.assertIn("N'ACTIVE'", source)
         self.assertIn("N'REJECTED'", source)
+        self.assertIn("RepresentativeRawText", source)
+
+    def test_mantiz_classifier_prediction_uses_partition_prediction_without_collect(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "assets"
+            / "dwh_factMantizTicketTextInsights.py"
+        )
+        source = path.read_text(encoding="utf-8")
+        match = re.search(
+            r"def _build_mantiz_classifier_predictions_df\(.*?^def _predict_mantiz_text_partition",
+            source,
+            flags=re.S | re.M,
+        )
+        self.assertIsNotNone(match)
+        section = match.group(0)
+
+        self.assertNotIn(".collect()", section)
+        self.assertIn(".mapPartitions(", section)
+        self.assertIn(".broadcast(", section)
 
 
 if __name__ == "__main__":

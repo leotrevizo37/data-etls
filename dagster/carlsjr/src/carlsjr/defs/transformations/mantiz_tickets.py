@@ -70,6 +70,7 @@ INSIGHT_DETAIL_COLUMNS = [
     "SourceCreatedAt",
     "SourceUpdatedAt",
     "RawTextExcerpt",
+    "RawText",
     "NormalizedText",
     "InsightType",
     "InsightPhraseHash",
@@ -144,6 +145,7 @@ REVIEW_QUEUE_COLUMNS = [
     "CanonicalCode",
     "CanonicalName",
     "RepresentativeText",
+    "RepresentativeRawText",
     "FirstSeenAt",
     "LastSeenAt",
     "CandidateCount",
@@ -242,6 +244,28 @@ def _ticket_context_df(
             F.col("t.approvalNotes").cast("string").alias("ApprovalNotes"),
             F.col("t.cancellationNotes").cast("string").alias("CancellationNotes"),
         )
+    )
+
+
+def build_mantiz_ticket_context_df(
+    tickets_df: DataFrame,
+    branches_df: DataFrame,
+    clients_df: DataFrame,
+    equipment_instances_df: DataFrame,
+    equipment_catalog_df: DataFrame,
+    failure_types_df: DataFrame,
+    suppliers_df: DataFrame,
+    organization_id: str,
+) -> DataFrame:
+    return _ticket_context_df(
+        tickets_df,
+        branches_df,
+        clients_df,
+        equipment_instances_df,
+        equipment_catalog_df,
+        failure_types_df,
+        suppliers_df,
+        organization_id,
     )
 
 
@@ -417,6 +441,13 @@ def _source_texts_df(context_df: DataFrame, ticket_comments_df: DataFrame) -> Da
     )
 
 
+def build_mantiz_source_texts_from_context_df(
+    context_df: DataFrame,
+    ticket_comments_df: DataFrame,
+) -> DataFrame:
+    return _source_texts_df(context_df, ticket_comments_df)
+
+
 def _failure_code_column(text_column):
     return (
         F.when(
@@ -491,6 +522,7 @@ def _base_insight_columns(df: DataFrame) -> DataFrame:
         "SourceCreatedAt",
         "SourceUpdatedAt",
         "RawTextExcerpt",
+        "RawText",
         "NormalizedText",
         "InsightType",
         "InsightPhraseHash",
@@ -730,6 +762,7 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
             F.col("src.SourceCreatedAt").alias("SourceCreatedAt"),
             F.col("src.SourceUpdatedAt").alias("SourceUpdatedAt"),
             F.col("src.RawTextExcerpt").alias("RawTextExcerpt"),
+            F.col("src.RawText").alias("RawText"),
             F.col("src.NormalizedText").alias("NormalizedText"),
             F.col("src.SourceLastChangedAt").alias("SourceLastChangedAt"),
             F.col("pred.InsightType").alias("PredInsightType"),
@@ -852,6 +885,7 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
             "SourceCreatedAt",
             "SourceUpdatedAt",
             "RawTextExcerpt",
+            "RawText",
             "NormalizedText",
             "InsightType",
             "InsightPhraseHash",
@@ -1194,44 +1228,17 @@ def _insights_json_df(insight_detail_df: DataFrame) -> DataFrame:
     )
 
 
-def build_mantiz_ticket_text_insights_fact_df(
-    tickets_df: DataFrame,
-    ticket_comments_df: DataFrame,
-    branches_df: DataFrame,
-    clients_df: DataFrame,
-    equipment_instances_df: DataFrame,
-    equipment_catalog_df: DataFrame,
-    failure_types_df: DataFrame,
-    suppliers_df: DataFrame,
-    organization_id: str,
-    insight_detail_df: Optional[DataFrame] = None,
-    classifier_predictions_df: Optional[DataFrame] = None,
+def build_mantiz_ticket_text_insights_fact_from_prepared_df(
+    context_df: DataFrame,
+    sources_df: DataFrame,
+    insight_detail_df: DataFrame,
     ticket_spare_parts_df: Optional[DataFrame] = None,
     spare_parts_df: Optional[DataFrame] = None,
 ) -> DataFrame:
-    context_df = _ticket_context_df(
-        tickets_df,
-        branches_df,
-        clients_df,
-        equipment_instances_df,
-        equipment_catalog_df,
-        failure_types_df,
-        suppliers_df,
-        organization_id,
-    )
-    sources_df = _source_texts_df(context_df, ticket_comments_df)
-    detail_df = (
-        insight_detail_df
-        if insight_detail_df is not None
-        else build_mantiz_ticket_text_insight_detail_from_sources_df(
-            sources_df,
-            classifier_predictions_df,
-        )
-    )
     source_rollup = _source_rollup_df(sources_df)
-    ranked = _ranked_insights_df(detail_df)
-    counts = _detail_counts_df(detail_df)
-    insights_json = _insights_json_df(detail_df)
+    ranked = _ranked_insights_df(insight_detail_df)
+    counts = _detail_counts_df(insight_detail_df)
+    insights_json = _insights_json_df(insight_detail_df)
     spare_part_rollup = _spare_part_rollup_df(
         context_df,
         ticket_spare_parts_df,
@@ -1282,6 +1289,49 @@ def build_mantiz_ticket_text_insights_fact_df(
         )
     )
     return fact.select(*INSIGHT_COLUMNS)
+
+
+def build_mantiz_ticket_text_insights_fact_df(
+    tickets_df: DataFrame,
+    ticket_comments_df: DataFrame,
+    branches_df: DataFrame,
+    clients_df: DataFrame,
+    equipment_instances_df: DataFrame,
+    equipment_catalog_df: DataFrame,
+    failure_types_df: DataFrame,
+    suppliers_df: DataFrame,
+    organization_id: str,
+    insight_detail_df: Optional[DataFrame] = None,
+    classifier_predictions_df: Optional[DataFrame] = None,
+    ticket_spare_parts_df: Optional[DataFrame] = None,
+    spare_parts_df: Optional[DataFrame] = None,
+) -> DataFrame:
+    context_df = _ticket_context_df(
+        tickets_df,
+        branches_df,
+        clients_df,
+        equipment_instances_df,
+        equipment_catalog_df,
+        failure_types_df,
+        suppliers_df,
+        organization_id,
+    )
+    sources_df = _source_texts_df(context_df, ticket_comments_df)
+    detail_df = (
+        insight_detail_df
+        if insight_detail_df is not None
+        else build_mantiz_ticket_text_insight_detail_from_sources_df(
+            sources_df,
+            classifier_predictions_df,
+        )
+    )
+    return build_mantiz_ticket_text_insights_fact_from_prepared_df(
+        context_df,
+        sources_df,
+        detail_df,
+        ticket_spare_parts_df,
+        spare_parts_df,
+    )
 
 
 def build_mantiz_ticket_text_insights_df(
@@ -1337,6 +1387,7 @@ def build_mantiz_text_insight_review_queue_df(insights_df: DataFrame) -> DataFra
             F.col("CanonicalFailureCode").alias("CanonicalCode"),
             F.regexp_replace(F.col("CanonicalFailureCode"), "_", " ").alias("CanonicalName"),
             F.col("NormalizedFailurePhrase").alias("RepresentativeText"),
+            F.col("RawText").alias("RepresentativeRawText"),
             "SourceLastChangedAt",
             "TicketId",
             "ExtractionMethod",
@@ -1352,6 +1403,7 @@ def build_mantiz_text_insight_review_queue_df(insights_df: DataFrame) -> DataFra
             F.col("CanonicalSolutionCode").alias("CanonicalCode"),
             F.regexp_replace(F.col("CanonicalSolutionCode"), "_", " ").alias("CanonicalName"),
             F.col("NormalizedSolutionPhrase").alias("RepresentativeText"),
+            F.col("RawText").alias("RepresentativeRawText"),
             "SourceLastChangedAt",
             "TicketId",
             "ExtractionMethod",
@@ -1367,6 +1419,7 @@ def build_mantiz_text_insight_review_queue_df(insights_df: DataFrame) -> DataFra
             F.col("CanonicalSolutionPartName").alias("CanonicalCode"),
             F.col("CanonicalSolutionPartName").alias("CanonicalName"),
             F.col("NormalizedSolutionPartText").alias("RepresentativeText"),
+            F.col("RawText").alias("RepresentativeRawText"),
             "SourceLastChangedAt",
             "TicketId",
             "ExtractionMethod",
@@ -1380,6 +1433,7 @@ def build_mantiz_text_insight_review_queue_df(insights_df: DataFrame) -> DataFra
             F.max("CanonicalCode").alias("CanonicalCode"),
             F.max("CanonicalName").alias("CanonicalName"),
             F.min("RepresentativeText").alias("RepresentativeText"),
+            F.min("RepresentativeRawText").alias("RepresentativeRawText"),
             F.min("SourceLastChangedAt").alias("FirstSeenAt"),
             F.max("SourceLastChangedAt").alias("LastSeenAt"),
             F.count(F.lit(1)).cast("int").alias("CandidateCount"),

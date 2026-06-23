@@ -19,6 +19,7 @@ IF OBJECT_ID(N'stg.MantizTextInsightReviewQueue', N'U') IS NULL
             CanonicalCode NVARCHAR(100) NULL,
             CanonicalName NVARCHAR(255) NULL,
             RepresentativeText NVARCHAR(500) NULL,
+            RepresentativeRawText NVARCHAR(MAX) NULL,
             FirstSeenAt DATETIME2(0) NULL,
             LastSeenAt DATETIME2(0) NULL,
             CandidateCount INT NOT NULL,
@@ -26,6 +27,15 @@ IF OBJECT_ID(N'stg.MantizTextInsightReviewQueue', N'U') IS NULL
             LastTicketId NVARCHAR(100) NULL,
             SuggestedByMethod NVARCHAR(50) NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.MantizTextInsightReviewQueue', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.MantizTextInsightReviewQueue', N'RepresentativeRawText') IS NULL
+    BEGIN
+        ALTER TABLE stg.MantizTextInsightReviewQueue
+        ADD RepresentativeRawText NVARCHAR(MAX) NULL;
     END;
 GO
 

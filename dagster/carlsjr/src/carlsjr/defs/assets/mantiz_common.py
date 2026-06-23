@@ -95,14 +95,136 @@ def changed_text_tickets_query(
         "FROM Ticket t "
         "LEFT JOIN Branch b ON b.id = t.branchId "
         "LEFT JOIN Client c ON c.id = b.clientId "
-        "LEFT JOIN TicketComment tc ON tc.ticketId = t.id "
         "WHERE c.organizationId = " + org + " "
         "AND ("
         "(COALESCE(t.updatedAt, t.createdAt) >= '" + from_str + "' "
         "AND COALESCE(t.updatedAt, t.createdAt) < '" + to_str + "') "
-        "OR (COALESCE(tc.updatedAt, tc.createdAt) >= '" + from_str + "' "
-        "AND COALESCE(tc.updatedAt, tc.createdAt) < '" + to_str + "')"
+        "OR EXISTS ("
+        "SELECT 1 FROM TicketComment tc "
+        "WHERE tc.ticketId = t.id "
+        "AND COALESCE(tc.updatedAt, tc.createdAt) >= '" + from_str + "' "
+        "AND COALESCE(tc.updatedAt, tc.createdAt) < '" + to_str + "'"
         ")"
+        ")"
+    )
+
+
+def branches_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT b.id, b.clientId, b.name "
+        "FROM Branch b "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.branchId = b.id"
+    )
+
+
+def clients_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    org = mysql_literal(organization_id)
+    return (
+        "SELECT DISTINCT c.id, c.organizationId "
+        "FROM Client c "
+        "INNER JOIN Branch b ON b.clientId = c.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.branchId = b.id "
+        "WHERE c.organizationId = " + org
+    )
+
+
+def equipment_instances_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ei.id, ei.catalogId, ei.location, ei.customAssetId, ei.serialNumber "
+        "FROM EquipmentInstance ei "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.equipmentId = ei.id"
+    )
+
+
+def equipment_catalog_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ec.id, ec.name "
+        "FROM EquipmentCatalog ec "
+        "INNER JOIN EquipmentInstance ei ON ei.catalogId = ec.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.equipmentId = ei.id"
+    )
+
+
+def failure_types_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ft.id, ft.name "
+        "FROM FailureType ft "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.failureId = ft.id"
+    )
+
+
+def suppliers_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT s.id, s.name "
+        "FROM Supplier s "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.supplierId = s.id"
+    )
+
+
+def ticket_spare_parts_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT tsp.* "
+        "FROM TicketSparePart tsp "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.id = tsp.ticketId"
+    )
+
+
+def spare_parts_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = changed_text_tickets_query(from_utc, to_utc, organization_id)
+    org = mysql_literal(organization_id)
+    return (
+        "SELECT DISTINCT sp.* "
+        "FROM SparePart sp "
+        "INNER JOIN TicketSparePart tsp ON tsp.sparePartId = sp.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.id = tsp.ticketId "
+        "WHERE sp.organizationId = " + org
     )
 
 

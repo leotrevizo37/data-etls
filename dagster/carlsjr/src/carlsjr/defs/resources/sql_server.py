@@ -552,6 +552,7 @@ USING (
         CanonicalCode,
         CanonicalName,
         RepresentativeText,
+        RepresentativeRawText,
         FirstSeenAt,
         LastSeenAt,
         CandidateCount,
@@ -568,6 +569,7 @@ WHEN MATCHED THEN
         target.CanonicalCode = COALESCE(target.ReviewedCanonicalCode, target.CanonicalCode, source.CanonicalCode),
         target.CanonicalName = COALESCE(target.ReviewedCanonicalName, target.CanonicalName, source.CanonicalName),
         target.RepresentativeText = COALESCE(target.RepresentativeText, source.RepresentativeText),
+        target.RepresentativeRawText = COALESCE(target.RepresentativeRawText, source.RepresentativeRawText),
         target.CandidateCount =
             CASE
                 WHEN target.LastSeenAt IS NULL THEN target.CandidateCount + source.CandidateCount
@@ -600,6 +602,7 @@ WHEN NOT MATCHED BY TARGET THEN
         CanonicalCode,
         CanonicalName,
         RepresentativeText,
+        RepresentativeRawText,
         ConceptStatus,
         CandidateCount,
         TicketCount,
@@ -615,6 +618,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.CanonicalCode,
         source.CanonicalName,
         source.RepresentativeText,
+        source.RepresentativeRawText,
         N'CANDIDATE',
         source.CandidateCount,
         source.TicketCount,
@@ -1119,7 +1123,7 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT queue.RepresentativeText, "
+                    "SELECT COALESCE(queue.RepresentativeRawText, queue.RepresentativeText) AS RepresentativeText, "
                     "COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) AS Label "
                     "FROM ctl.MantizTextInsightReviewQueue AS queue "
                     "WHERE queue.InsightType = ? "
@@ -1130,8 +1134,8 @@ class SqlServerResource:
                     "AND UPPER(queue.ConceptStatus) <> N'REJECTED' "
                     "AND COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) IS NOT NULL "
                     "AND LTRIM(RTRIM(COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode))) <> N'' "
-                    "AND queue.RepresentativeText IS NOT NULL "
-                    "AND LTRIM(RTRIM(queue.RepresentativeText)) <> N''",
+                    "AND COALESCE(queue.RepresentativeRawText, queue.RepresentativeText) IS NOT NULL "
+                    "AND LTRIM(RTRIM(COALESCE(queue.RepresentativeRawText, queue.RepresentativeText))) <> N''",
                     insight_type,
                 )
                 return [

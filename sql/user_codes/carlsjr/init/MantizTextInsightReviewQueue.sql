@@ -18,6 +18,7 @@ IF OBJECT_ID(N'ctl.MantizTextInsightReviewQueue', N'U') IS NULL
             CanonicalCode NVARCHAR(100) NULL,
             CanonicalName NVARCHAR(255) NULL,
             RepresentativeText NVARCHAR(500) NULL,
+            RepresentativeRawText NVARCHAR(MAX) NULL,
             ConceptStatus NVARCHAR(20) NOT NULL
             CONSTRAINT DF_MantizTextInsightReviewQueue_ConceptStatus
             DEFAULT (N'CANDIDATE'),
@@ -48,5 +49,14 @@ IF OBJECT_ID(N'ctl.MantizTextInsightReviewQueue', N'U') IS NULL
             CONSTRAINT PK_MantizTextInsightReviewQueue
             PRIMARY KEY CLUSTERED (InsightType, ConceptHash)
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'ctl.MantizTextInsightReviewQueue', N'U') IS NOT NULL
+    AND COL_LENGTH(N'ctl.MantizTextInsightReviewQueue', N'RepresentativeRawText') IS NULL
+    BEGIN
+        ALTER TABLE ctl.MantizTextInsightReviewQueue
+        ADD RepresentativeRawText NVARCHAR(MAX) NULL;
     END;
 GO

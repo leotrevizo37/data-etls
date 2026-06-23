@@ -56,7 +56,17 @@ if SPARK_TESTS_AVAILABLE:
     build_mantiz_ticket_text_insight_detail_df = (
         mantiz_module.build_mantiz_ticket_text_insight_detail_df
     )
+    build_mantiz_ticket_text_insight_detail_from_sources_df = (
+        mantiz_module.build_mantiz_ticket_text_insight_detail_from_sources_df
+    )
+    build_mantiz_ticket_context_df = mantiz_module.build_mantiz_ticket_context_df
+    build_mantiz_source_texts_from_context_df = (
+        mantiz_module.build_mantiz_source_texts_from_context_df
+    )
     build_mantiz_ticket_text_insights_df = mantiz_module.build_mantiz_ticket_text_insights_df
+    build_mantiz_ticket_text_insights_fact_from_prepared_df = (
+        mantiz_module.build_mantiz_ticket_text_insights_fact_from_prepared_df
+    )
     build_mantiz_text_insight_review_queue_df = (
         mantiz_module.build_mantiz_text_insight_review_queue_df
     )
@@ -67,7 +77,11 @@ if SPARK_TESTS_AVAILABLE:
 else:
     build_mantiz_ticket_lifecycle_df = None
     build_mantiz_ticket_text_insight_detail_df = None
+    build_mantiz_ticket_text_insight_detail_from_sources_df = None
+    build_mantiz_ticket_context_df = None
+    build_mantiz_source_texts_from_context_df = None
     build_mantiz_ticket_text_insights_df = None
+    build_mantiz_ticket_text_insights_fact_from_prepared_df = None
     build_mantiz_text_insight_review_queue_df = None
     LIFECYCLE_COLUMNS = []
     INSIGHT_DETAIL_COLUMNS = []
@@ -451,9 +465,20 @@ class MantizTicketsTransformationTests(unittest.TestCase):
         )
 
         self.assertEqual(detail.columns, INSIGHT_DETAIL_COLUMNS)
+        self.assertTrue(
+            any(
+                row.RawText == "se cambia reten"
+                for row in detail.select("RawText").collect()
+            )
+        )
 
         review_queue = build_mantiz_text_insight_review_queue_df(detail)
         self.assertEqual(review_queue.columns, REVIEW_QUEUE_COLUMNS)
+        raw_texts = {
+            row.RepresentativeRawText
+            for row in review_queue.select("RepresentativeRawText").collect()
+        }
+        self.assertIn("se cambia reten", raw_texts)
         self.assertTrue(
             {"FALLA", "SOLUCION", "REFACCION_SOLUCION"}.issubset(
                 {row.InsightType for row in review_queue.select("InsightType").collect()}
@@ -546,6 +571,90 @@ class MantizTicketsTransformationTests(unittest.TestCase):
         self.assertEqual(row.SparePartName, "Reten original Mantiz")
         self.assertEqual(float(row.SparePartUnitPrice), 125.50)
         self.assertIsNone(row.SparePartCurrency)
+
+    def test_text_insights_prepared_path_handles_many_tickets_and_comments(self) -> None:
+        ticket_rows = []
+        comment_rows = []
+        for index in range(30):
+            ticket_id = "t-scale-" + str(index)
+            ticket_rows.append(
+                {
+                    "id": ticket_id,
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-S-" + str(index),
+                    "status": "RESUELTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": datetime(2026, 1, 1, 2, 0),
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 2, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "Parrilla no calienta" if index % 2 == 0 else "Refrigerador no enfria",
+                    "description": "parrilla no calienta" if index % 2 == 0 else "refrigerador no enfria",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "se apreto llave floja" if index % 3 == 0 else "se cambia reten",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                }
+            )
+            comment_rows.append(
+                (
+                    "comment-" + str(index),
+                    ticket_id,
+                    "se acomoda termostato" if index % 5 == 0 else "",
+                    datetime(2026, 1, 1, 1, 0),
+                    datetime(2026, 1, 1, 1, 0),
+                )
+            )
+
+        tickets = self.spark.createDataFrame(ticket_rows, TICKET_SCHEMA)
+        comments = self.spark.createDataFrame(comment_rows, COMMENT_SCHEMA)
+        frames = self._context_frames()
+        context = build_mantiz_ticket_context_df(
+            tickets_df=tickets,
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+        sources = build_mantiz_source_texts_from_context_df(context, comments)
+        detail = build_mantiz_ticket_text_insight_detail_from_sources_df(sources)
+        result = build_mantiz_ticket_text_insights_fact_from_prepared_df(
+            context_df=context,
+            sources_df=sources,
+            insight_detail_df=detail,
+        )
+
+        self.assertEqual(result.count(), 30)
+        self.assertEqual(
+            result.groupBy("TicketId").count().filter("count <> 1").count(),
+            0,
+        )
+        self.assertEqual(result.filter("SparePartName IS NOT NULL").count(), 0)
+
+        sample = result.filter("TicketId = 't-scale-0'").collect()[0]
+        self.assertEqual(sample.SolutionCode, "AJUSTE")
+        self.assertEqual(sample.SolutionPartName, "LLAVE")
+        self.assertEqual(sample.FailureCode, "NO_CALIENTA")
+        self.assertTrue(sample.NeedsReview)
+        self.assertGreater(len(json.loads(sample.InsightsJson)), 1)
+
+        review_queue = build_mantiz_text_insight_review_queue_df(detail)
+        self.assertGreater(
+            review_queue.filter("RepresentativeRawText = 'se apreto llave floja'").count(),
+            0,
+        )
 
     def test_empty_text_does_not_generate_insights(self) -> None:
         tickets = self.spark.createDataFrame(

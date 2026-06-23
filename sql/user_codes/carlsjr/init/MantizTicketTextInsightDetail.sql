@@ -25,6 +25,7 @@ IF OBJECT_ID(N'stg.MantizTicketTextInsightDetail', N'U') IS NULL
             SourceCreatedAt DATETIME2(0) NULL,
             SourceUpdatedAt DATETIME2(0) NULL,
             RawTextExcerpt NVARCHAR(2000) NULL,
+            RawText NVARCHAR(MAX) NULL,
             NormalizedText NVARCHAR(2000) NULL,
             InsightType NVARCHAR(30) NOT NULL,
             InsightPhraseHash CHAR(64) NOT NULL,
@@ -55,6 +56,15 @@ IF OBJECT_ID(N'stg.MantizTicketTextInsightDetail', N'U') IS NULL
             IsNewConceptCandidate BIT NOT NULL,
             SourceLastChangedAt DATETIME2(0) NOT NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.MantizTicketTextInsightDetail', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.MantizTicketTextInsightDetail', N'RawText') IS NULL
+    BEGIN
+        ALTER TABLE stg.MantizTicketTextInsightDetail
+        ADD RawText NVARCHAR(MAX) NULL;
     END;
 GO
 
