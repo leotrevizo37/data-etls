@@ -185,6 +185,8 @@ def transform_and_load_mantiz_text_insights_op(
             equipment_catalog_df = read_mysql_table(spark_res, mysql, "EquipmentCatalog")
             failure_types_df = read_mysql_table(spark_res, mysql, "FailureType")
             suppliers_df = read_mysql_table(spark_res, mysql, "Supplier")
+            ticket_spare_parts_df = read_mysql_table(spark_res, mysql, "TicketSparePart")
+            spare_parts_df = read_mysql_table(spark_res, mysql, "SparePart")
             comments_df = read_mysql_query(
                 spark_res,
                 mysql,
@@ -236,6 +238,8 @@ def transform_and_load_mantiz_text_insights_op(
                 suppliers_df=suppliers_df,
                 organization_id=mysql.organization_id,
                 insight_detail_df=detail_df,
+                ticket_spare_parts_df=ticket_spare_parts_df,
+                spare_parts_df=spare_parts_df,
             ).persist(StorageLevel.MEMORY_AND_DISK)
 
             row_count = result_df.count()

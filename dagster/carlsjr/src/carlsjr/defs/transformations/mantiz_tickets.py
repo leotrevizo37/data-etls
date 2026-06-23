@@ -955,6 +955,22 @@ def _source_priority_column():
     )
 
 
+def _insight_source_priority_column():
+    failure_priority = (
+        F.when(F.col("SourceType") == F.lit("TICKET_DESCRIPTION"), F.lit(7))
+        .when(F.col("SourceType") == F.lit("TICKET_TITLE"), F.lit(6))
+        .when(F.col("SourceType") == F.lit("TICKET_COMMENT"), F.lit(5))
+        .when(F.col("SourceType") == F.lit("TICKET_SCHEDULE_NOTES"), F.lit(4))
+        .when(F.col("SourceType") == F.lit("TICKET_RESOLUTION_NOTES"), F.lit(3))
+        .when(F.col("SourceType") == F.lit("TICKET_APPROVAL_NOTES"), F.lit(2))
+        .when(F.col("SourceType") == F.lit("TICKET_CANCELLATION_NOTES"), F.lit(2))
+        .otherwise(F.lit(1))
+    )
+    return F.when(F.col("InsightType") == F.lit("FALLA"), failure_priority).otherwise(
+        _source_priority_column(),
+    )
+
+
 def _source_rollup_df(sources_df: DataFrame) -> DataFrame:
     return (
         sources_df
@@ -997,7 +1013,7 @@ def _ranked_insights_df(insight_detail_df: DataFrame) -> DataFrame:
     )
     return (
         insight_detail_df
-        .withColumn("SourcePriority", _source_priority_column())
+        .withColumn("SourcePriority", _insight_source_priority_column())
         .withColumn("DetailRank", F.row_number().over(window))
     )
 
@@ -1059,6 +1075,82 @@ def _primary_solution_part_df(ranked_df: DataFrame) -> DataFrame:
     )
 
 
+def _empty_spare_part_rollup_df(context_df: DataFrame) -> DataFrame:
+    return (
+        context_df
+        .select("OrganizationId", "TicketId")
+        .limit(0)
+        .withColumn("SparePartName", F.lit(None).cast("string"))
+        .withColumn("SparePartUnitPrice", F.lit(None).cast("decimal(18,4)"))
+        .withColumn("SparePartCurrency", F.lit(None).cast("string"))
+        .withColumn("SparePartLastChangedAt", F.lit(None).cast("timestamp"))
+    )
+
+
+def _spare_part_rollup_df(
+    context_df: DataFrame,
+    ticket_spare_parts_df: Optional[DataFrame] = None,
+    spare_parts_df: Optional[DataFrame] = None,
+) -> DataFrame:
+    if ticket_spare_parts_df is None or spare_parts_df is None:
+        return _empty_spare_part_rollup_df(context_df)
+
+    window = (
+        Window
+        .partitionBy("OrganizationId", "TicketId")
+        .orderBy(
+            F.col("SparePartTotalCost").desc_nulls_last(),
+            F.col("SparePartUnitPrice").desc_nulls_last(),
+            F.col("SparePartLastChangedAt").desc_nulls_last(),
+            F.col("SparePartName").asc_nulls_last(),
+        )
+    )
+    return (
+        context_df
+        .select("OrganizationId", "TicketId")
+        .alias("ctx")
+        .join(
+            ticket_spare_parts_df.alias("tsp"),
+            F.col("ctx.TicketId") == F.col("tsp.ticketId"),
+            "inner",
+        )
+        .join(
+            spare_parts_df.alias("sp"),
+            (
+                (F.col("tsp.sparePartId") == F.col("sp.id"))
+                & (F.col("sp.organizationId") == F.col("ctx.OrganizationId"))
+            ),
+            "left",
+        )
+        .select(
+            F.col("ctx.OrganizationId").alias("OrganizationId"),
+            F.col("ctx.TicketId").alias("TicketId"),
+            F.col("sp.name").cast("string").alias("SparePartName"),
+            F.coalesce(
+                F.col("tsp.unitCost").cast("decimal(18,4)"),
+                F.col("sp.cost").cast("decimal(18,4)"),
+            ).alias("SparePartUnitPrice"),
+            F.lit(None).cast("string").alias("SparePartCurrency"),
+            F.greatest(
+                F.col("tsp.createdAt").cast("timestamp"),
+                F.col("sp.updatedAt").cast("timestamp"),
+                F.col("sp.createdAt").cast("timestamp"),
+            ).alias("SparePartLastChangedAt"),
+            F.col("tsp.totalCost").cast("double").alias("SparePartTotalCost"),
+        )
+        .withColumn("SparePartRank", F.row_number().over(window))
+        .filter(F.col("SparePartRank") == F.lit(1))
+        .select(
+            "OrganizationId",
+            "TicketId",
+            "SparePartName",
+            "SparePartUnitPrice",
+            "SparePartCurrency",
+            "SparePartLastChangedAt",
+        )
+    )
+
+
 def _insights_json_df(insight_detail_df: DataFrame) -> DataFrame:
     code = F.coalesce(
         F.col("CanonicalFailureCode"),
@@ -1114,6 +1206,8 @@ def build_mantiz_ticket_text_insights_fact_df(
     organization_id: str,
     insight_detail_df: Optional[DataFrame] = None,
     classifier_predictions_df: Optional[DataFrame] = None,
+    ticket_spare_parts_df: Optional[DataFrame] = None,
+    spare_parts_df: Optional[DataFrame] = None,
 ) -> DataFrame:
     context_df = _ticket_context_df(
         tickets_df,
@@ -1138,6 +1232,11 @@ def build_mantiz_ticket_text_insights_fact_df(
     ranked = _ranked_insights_df(detail_df)
     counts = _detail_counts_df(detail_df)
     insights_json = _insights_json_df(detail_df)
+    spare_part_rollup = _spare_part_rollup_df(
+        context_df,
+        ticket_spare_parts_df,
+        spare_parts_df,
+    )
 
     fact = (
         context_df
@@ -1157,6 +1256,7 @@ def build_mantiz_ticket_text_insights_fact_df(
         .join(_primary_solution_df(ranked), ["OrganizationId", "TicketId"], "left")
         .join(_primary_solution_part_df(ranked), ["OrganizationId", "TicketId"], "left")
         .join(insights_json, ["OrganizationId", "TicketId"], "left")
+        .join(spare_part_rollup, ["OrganizationId", "TicketId"], "left")
         .withColumn("DetailInsightCount", F.coalesce(F.col("DetailInsightCount"), F.lit(0)).cast("int"))
         .withColumn("InsightStatus", F.when(F.col("DetailInsightCount") > F.lit(0), F.lit("CLASSIFIED")).otherwise(F.lit("SIN_CLASIFICAR")))
         .withColumn(
@@ -1169,14 +1269,15 @@ def build_mantiz_ticket_text_insights_fact_df(
         .withColumn("NeedsReview", ((F.col("DetailInsightCount") == F.lit(0)) | F.coalesce(F.col("HasNewConceptCandidate"), F.lit(False))).cast("boolean"))
         .withColumn("InsightsJson", F.coalesce(F.col("InsightsJson"), F.lit("[]")))
         .withColumn("TextEvidenceJson", F.coalesce(F.col("TextEvidenceJson"), F.lit("[]")))
-        .withColumn("SparePartName", F.col("SolutionPartName"))
-        .withColumn("SparePartUnitPrice", F.lit(None).cast("decimal(18,4)"))
-        .withColumn("SparePartCurrency", F.lit(None).cast("string"))
+        .withColumn("SparePartName", F.col("SparePartName").cast("string"))
+        .withColumn("SparePartUnitPrice", F.col("SparePartUnitPrice").cast("decimal(18,4)"))
+        .withColumn("SparePartCurrency", F.col("SparePartCurrency").cast("string"))
         .withColumn(
             "SourceLastChangedAt",
             F.greatest(
                 F.coalesce(F.col("LastTextSourceChangedAt"), F.lit("1900-01-01 00:00:00").cast("timestamp")),
                 F.coalesce(F.col("UpdatedAt"), F.col("CreatedAt"), F.lit("1900-01-01 00:00:00").cast("timestamp")),
+                F.coalesce(F.col("SparePartLastChangedAt"), F.lit("1900-01-01 00:00:00").cast("timestamp")),
             ),
         )
     )
@@ -1194,6 +1295,8 @@ def build_mantiz_ticket_text_insights_df(
     suppliers_df: DataFrame,
     organization_id: str,
     classifier_predictions_df: Optional[DataFrame] = None,
+    ticket_spare_parts_df: Optional[DataFrame] = None,
+    spare_parts_df: Optional[DataFrame] = None,
 ) -> DataFrame:
     detail_df = build_mantiz_ticket_text_insight_detail_df(
         tickets_df=tickets_df,
@@ -1218,6 +1321,8 @@ def build_mantiz_ticket_text_insights_df(
         suppliers_df=suppliers_df,
         organization_id=organization_id,
         insight_detail_df=detail_df,
+        ticket_spare_parts_df=ticket_spare_parts_df,
+        spare_parts_df=spare_parts_df,
     )
 
 

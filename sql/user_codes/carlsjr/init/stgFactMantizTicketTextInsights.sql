@@ -10,18 +10,7 @@ IF
 GO
 
 IF
-    OBJECT_ID(N'stg.factMantizTicketTextInsights', N'U') IS NOT NULL
-    AND (
-        COL_LENGTH(N'stg.factMantizTicketTextInsights', N'FailureCode') IS NULL
-        OR COL_LENGTH(N'stg.factMantizTicketTextInsights', N'PrimaryFailureCode') IS NOT NULL
-        OR COL_LENGTH(N'stg.factMantizTicketTextInsights', N'FailureConceptHash') IS NOT NULL
-    )
-    BEGIN
-        DROP TABLE stg.factMantizTicketTextInsights;
-    END;
-GO
-
-IF OBJECT_ID(N'stg.factMantizTicketTextInsights', N'U') IS NULL
+    OBJECT_ID(N'stg.factMantizTicketTextInsights', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.factMantizTicketTextInsights
         (

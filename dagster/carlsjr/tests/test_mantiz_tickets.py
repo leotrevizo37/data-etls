@@ -113,6 +113,31 @@ createdAt timestamp,
 updatedAt timestamp
 """
 
+TICKET_SPARE_PART_SCHEMA = """
+id string,
+ticketId string,
+sparePartId string,
+quantity double,
+unitCost double,
+totalCost double,
+createdAt timestamp
+"""
+
+SPARE_PART_SCHEMA = """
+id string,
+organizationId string,
+name string,
+sku string,
+description string,
+unit string,
+minStock double,
+currentStock double,
+cost double,
+photo string,
+createdAt timestamp,
+updatedAt timestamp
+"""
+
 
 @unittest.skipIf(
     not SPARK_TESTS_AVAILABLE,
@@ -383,7 +408,7 @@ class MantizTicketsTransformationTests(unittest.TestCase):
         self.assertIn(row.FailureCode, {"NO_CALIENTA", "NO_ENFRIA"})
         self.assertEqual(row.SolutionCode, "CAMBIO_REFACCION")
         self.assertEqual(row.SolutionPartName, "RETEN")
-        self.assertEqual(row.SparePartName, "RETEN")
+        self.assertIsNone(row.SparePartName)
         self.assertEqual(row.InsightStatus, "CLASSIFIED")
         self.assertEqual(row.ClassificationMethod, "RULE")
         self.assertGreater(float(row.ClassifierConfidence), 0.0)
@@ -434,6 +459,93 @@ class MantizTicketsTransformationTests(unittest.TestCase):
                 {row.InsightType for row in review_queue.select("InsightType").collect()}
             )
         )
+
+    def test_text_insights_keeps_solution_part_separate_from_spare_part(self) -> None:
+        tickets = self.spark.createDataFrame(
+            [
+                {
+                    "id": "t-spare",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-12",
+                    "status": "RESUELTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": datetime(2026, 1, 1, 2, 0),
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 2, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "Parrilla no calienta",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "se cambia reten",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                }
+            ],
+            TICKET_SCHEMA,
+        )
+        ticket_spare_parts = self.spark.createDataFrame(
+            [
+                (
+                    "tsp1",
+                    "t-spare",
+                    "sp1",
+                    1.0,
+                    125.50,
+                    125.50,
+                    datetime(2026, 1, 1, 3, 0),
+                )
+            ],
+            TICKET_SPARE_PART_SCHEMA,
+        )
+        spare_parts = self.spark.createDataFrame(
+            [
+                (
+                    "sp1",
+                    "org-carlsjr",
+                    "Reten original Mantiz",
+                    "RET-1",
+                    "",
+                    "pieza",
+                    0.0,
+                    0.0,
+                    110.00,
+                    "",
+                    datetime(2026, 1, 1, 0, 0),
+                    datetime(2026, 1, 1, 1, 0),
+                )
+            ],
+            SPARE_PART_SCHEMA,
+        )
+        frames = self._context_frames()
+
+        result = build_mantiz_ticket_text_insights_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+            ticket_spare_parts_df=ticket_spare_parts,
+            spare_parts_df=spare_parts,
+        )
+
+        row = result.collect()[0]
+        self.assertEqual(row.SolutionPartName, "RETEN")
+        self.assertEqual(row.SparePartName, "Reten original Mantiz")
+        self.assertEqual(float(row.SparePartUnitPrice), 125.50)
+        self.assertIsNone(row.SparePartCurrency)
 
     def test_empty_text_does_not_generate_insights(self) -> None:
         tickets = self.spark.createDataFrame(

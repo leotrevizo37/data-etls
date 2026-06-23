@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import re
 import sys
 import types
@@ -100,6 +101,29 @@ class MantizMergeSqlTests(unittest.TestCase):
         self.assertIn("target.ConceptHash = source.ConceptHash", sql)
         self.assertNotIn("target.ReviewStatus", update_section)
         self.assertNotIn("target.ReviewedBy", update_section)
+
+    def test_review_queue_promotion_uses_ctl_without_dwh_dimensions(self) -> None:
+        module = _load_sql_server_module()
+        sql = module.build_mantiz_text_insight_review_promotion_sql()
+
+        self.assertIn("UPDATE ctl.MantizTextInsightReviewQueue", sql)
+        self.assertIn("ConceptStatus = N'ACTIVE'", sql)
+        self.assertIn("ConceptStatus = N'REJECTED'", sql)
+        self.assertIn("ReviewStatus = N'PROMOTED'", sql)
+        self.assertIn("ReviewedCanonicalCode", sql)
+        self.assertNotIn("dwh.dimMantiz", sql)
+        self.assertTrue(hasattr(module.SqlServerResource, "promote_mantiz_text_insight_reviews"))
+
+    def test_training_samples_include_promoted_active_reviews(self) -> None:
+        module = _load_sql_server_module()
+        source = inspect.getsource(
+            module.SqlServerResource.get_mantiz_text_classifier_training_samples,
+        )
+
+        self.assertIn("N'PROMOTED'", source)
+        self.assertIn("queue.ConceptStatus", source)
+        self.assertIn("N'ACTIVE'", source)
+        self.assertIn("N'REJECTED'", source)
 
 
 if __name__ == "__main__":

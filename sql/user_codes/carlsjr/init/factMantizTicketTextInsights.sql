@@ -10,36 +10,7 @@ IF
 GO
 
 IF
-    NOT EXISTS (
-        SELECT 1
-        FROM sys.schemas
-        WHERE name = N'ctl'
-    )
-    BEGIN
-        EXEC ('CREATE SCHEMA ctl');
-    END;
-GO
-
-IF
-    OBJECT_ID(N'dwh.factMantizTicketTextInsights', N'U') IS NOT NULL
-    AND (
-        COL_LENGTH(N'dwh.factMantizTicketTextInsights', N'FailureCode') IS NULL
-        OR COL_LENGTH(N'dwh.factMantizTicketTextInsights', N'PrimaryFailureCode') IS NOT NULL
-        OR COL_LENGTH(N'dwh.factMantizTicketTextInsights', N'FailureConceptHash') IS NOT NULL
-    )
-    BEGIN
-        IF OBJECT_ID(N'ctl.MantizTicketTextInsightLegacyDetail', N'U') IS NULL
-            BEGIN
-                SELECT *
-                INTO ctl.MantizTicketTextInsightLegacyDetail
-                FROM dwh.factMantizTicketTextInsights;
-            END;
-
-        DROP TABLE dwh.factMantizTicketTextInsights;
-    END;
-GO
-
-IF OBJECT_ID(N'dwh.factMantizTicketTextInsights', N'U') IS NULL
+    OBJECT_ID(N'dwh.factMantizTicketTextInsights', N'U') IS NULL
     BEGIN
         CREATE TABLE dwh.factMantizTicketTextInsights
         (

@@ -630,6 +630,49 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+def build_mantiz_text_insight_review_promotion_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @PromotedRows INT = 0;
+
+UPDATE ctl.MantizTextInsightReviewQueue
+SET
+    CanonicalCode = COALESCE(
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+        CanonicalCode
+    ),
+    CanonicalName = COALESCE(
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalName)), N''),
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+        CanonicalName
+    ),
+    ConceptStatus = N'ACTIVE',
+    ReviewStatus = N'PROMOTED',
+    ReviewedAt = COALESCE(ReviewedAt, SYSUTCDATETIME()),
+    ModifiedAt = SYSUTCDATETIME()
+WHERE UPPER(ReviewStatus) = N'APPROVED'
+AND COALESCE(
+    NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+    NULLIF(LTRIM(RTRIM(CanonicalCode)), N'')
+) IS NOT NULL;
+
+SET @PromotedRows = @PromotedRows + @@ROWCOUNT;
+
+UPDATE ctl.MantizTextInsightReviewQueue
+SET
+    ConceptStatus = N'REJECTED',
+    ReviewStatus = N'PROMOTED',
+    ReviewedAt = COALESCE(ReviewedAt, SYSUTCDATETIME()),
+    ModifiedAt = SYSUTCDATETIME()
+WHERE UPPER(ReviewStatus) = N'REJECTED';
+
+SET @PromotedRows = @PromotedRows + @@ROWCOUNT;
+
+SELECT @PromotedRows AS AffectedRows;
+"""
+
+
 class SqlServerResource:
     def __init__(
         self,
@@ -874,6 +917,16 @@ class SqlServerResource:
                     return 0
                 return int(row.AffectedRows)
 
+    def promote_mantiz_text_insight_reviews(self) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_mantiz_text_insight_review_promotion_sql())
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
     def get_active_smartaudits_classifier_model(self) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
@@ -1070,7 +1123,11 @@ class SqlServerResource:
                     "COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) AS Label "
                     "FROM ctl.MantizTextInsightReviewQueue AS queue "
                     "WHERE queue.InsightType = ? "
-                    "AND UPPER(queue.ReviewStatus) = N'APPROVED' "
+                    "AND ("
+                    "UPPER(queue.ReviewStatus) IN (N'APPROVED', N'PROMOTED') "
+                    "OR UPPER(queue.ConceptStatus) = N'ACTIVE'"
+                    ") "
+                    "AND UPPER(queue.ConceptStatus) <> N'REJECTED' "
                     "AND COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) IS NOT NULL "
                     "AND LTRIM(RTRIM(COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode))) <> N'' "
                     "AND queue.RepresentativeText IS NOT NULL "
