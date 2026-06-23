@@ -1036,6 +1036,48 @@ class SparkResource:
             "BranchId",
             "EquipmentId",
             "EquipmentName",
+            "FailureCode",
+            "FailureSubject",
+            "FailureProblem",
+            "SolutionCode",
+            "SolutionSubject",
+            "SolutionPartName",
+            "SparePartName",
+            "SparePartUnitPrice",
+            "SparePartCurrency",
+            "InsightStatus",
+            "ClassificationMethod",
+            "ClassifierConfidence",
+            "NeedsReview",
+            "InsightsJson",
+            "TextEvidenceJson",
+            "SourceLastChangedAt",
+        ]
+        df_stage = (
+            df
+            .select(*insight_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *insight_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factMantizTicketTextInsights",
+            chunk_column="TicketId",
+        )
+
+    def write_mantiz_ticket_text_insight_detail_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        detail_columns = [
+            "OrganizationId",
+            "TicketId",
+            "Folio",
+            "BranchId",
+            "EquipmentId",
+            "EquipmentName",
             "SourceType",
             "SourceId",
             "SourceCreatedAt",
@@ -1063,6 +1105,9 @@ class SparkResource:
             "SolutionPartConceptHash",
             "CanonicalSolutionPartName",
             "SolutionPartConceptStatus",
+            "ExtractedInsightSubject",
+            "ExtractedProblemQualifier",
+            "NormalizedProblemQualifier",
             "ExtractionMethod",
             "ExtractionConfidence",
             "IsNewConceptCandidate",
@@ -1070,14 +1115,14 @@ class SparkResource:
         ]
         df_stage = (
             df
-            .select(*insight_columns)
+            .select(*detail_columns)
             .withColumn("RunId", lit(run_id))
-            .select("RunId", *insight_columns)
+            .select("RunId", *detail_columns)
         )
 
         return self._write_jdbc_in_chunks(
             df_stage,
-            table="stg.factMantizTicketTextInsights",
+            table="stg.MantizTicketTextInsightDetail",
             chunk_column="TicketId",
         )
 

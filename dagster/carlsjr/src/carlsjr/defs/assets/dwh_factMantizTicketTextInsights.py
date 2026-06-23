@@ -11,7 +11,8 @@ from ..transformations.mantiz_tickets import (
     build_mantiz_changed_ticket_keys_df,
     build_mantiz_source_texts_df,
     build_mantiz_text_insight_review_queue_df,
-    build_mantiz_ticket_text_insights_df,
+    build_mantiz_ticket_text_insight_detail_from_sources_df,
+    build_mantiz_ticket_text_insights_fact_df,
     empty_mantiz_classifier_predictions_df,
 )
 from ..transformations.mantiz_text_classifier import (
@@ -154,12 +155,11 @@ def transform_and_load_mantiz_text_insights_op(
     row_count = 0
     changed_ticket_count = 0
     merged_rows = 0
-    failure_concepts = 0
-    solution_concepts = 0
-    solution_part_concepts = 0
     review_queue_rows = 0
     review_queue_merged_rows = 0
+    detail_row_count = 0
     result_df: Optional[DataFrame] = None
+    detail_df: Optional[DataFrame] = None
     changed_keys_df: Optional[DataFrame] = None
     sources_df: Optional[DataFrame] = None
     review_queue_df: Optional[DataFrame] = None
@@ -221,7 +221,11 @@ def transform_and_load_mantiz_text_insights_op(
                 sources_df,
             )
 
-            result_df = build_mantiz_ticket_text_insights_df(
+            detail_df = build_mantiz_ticket_text_insight_detail_from_sources_df(
+                sources_df=sources_df,
+                classifier_predictions_df=classifier_predictions_df,
+            ).persist(StorageLevel.MEMORY_AND_DISK)
+            result_df = build_mantiz_ticket_text_insights_fact_df(
                 tickets_df=tickets_df,
                 ticket_comments_df=comments_df,
                 branches_df=branches_df,
@@ -231,10 +235,11 @@ def transform_and_load_mantiz_text_insights_op(
                 failure_types_df=failure_types_df,
                 suppliers_df=suppliers_df,
                 organization_id=mysql.organization_id,
-                classifier_predictions_df=classifier_predictions_df,
+                insight_detail_df=detail_df,
             ).persist(StorageLevel.MEMORY_AND_DISK)
 
             row_count = result_df.count()
+            detail_row_count = detail_df.count()
             sql.clear_fact_mantiz_ticket_text_insights_stage(run_id)
             if changed_ticket_count > 0:
                 spark_res.write_mantiz_ticket_text_insight_changed_tickets_stage(
@@ -247,7 +252,9 @@ def transform_and_load_mantiz_text_insights_op(
                     "SourceLastChangedAt",
                 )
                 spark_res.write_fact_mantiz_ticket_text_insights_stage(result_df, run_id)
-                review_queue_df = build_mantiz_text_insight_review_queue_df(result_df).persist(
+            if detail_row_count > 0:
+                spark_res.write_mantiz_ticket_text_insight_detail_stage(detail_df, run_id)
+                review_queue_df = build_mantiz_text_insight_review_queue_df(detail_df).persist(
                     StorageLevel.MEMORY_AND_DISK,
                 )
                 review_queue_rows = review_queue_df.count()
@@ -256,19 +263,18 @@ def transform_and_load_mantiz_text_insights_op(
                         review_queue_df,
                         run_id,
                     )
-            else:
+            if row_count == 0:
                 max_source_changed_at = to_utc
             merged_rows = sql.replace_fact_mantiz_ticket_text_insights(run_id)
-            failure_concepts = sql.merge_mantiz_failure_concepts(run_id)
-            solution_concepts = sql.merge_mantiz_solution_concepts(run_id)
-            solution_part_concepts = sql.merge_mantiz_solution_part_concepts(run_id)
             review_queue_merged_rows = sql.merge_mantiz_text_insight_review_queue(run_id)
 
             context.log.info(
                 str(row_count)
-                + " Mantiz text insight rows prepared from "
+                + " Mantiz ticket text insight rows prepared from "
                 + str(changed_ticket_count)
-                + " changed tickets; "
+                + " changed tickets and "
+                + str(detail_row_count)
+                + " detail rows; "
                 + str(merged_rows)
                 + " inserted into dwh.factMantizTicketTextInsights; "
                 + str(review_queue_merged_rows)
@@ -291,6 +297,8 @@ def transform_and_load_mantiz_text_insights_op(
     finally:
         if result_df is not None:
             result_df.unpersist()
+        if detail_df is not None:
+            detail_df.unpersist()
         if changed_keys_df is not None:
             changed_keys_df.unpersist()
         if sources_df is not None:
@@ -312,11 +320,9 @@ def transform_and_load_mantiz_text_insights_op(
         "row_count": row_count,
         "merged_rows": merged_rows,
         "changed_ticket_count": changed_ticket_count,
-        "failure_concepts": failure_concepts,
-        "solution_concepts": solution_concepts,
-        "solution_part_concepts": solution_part_concepts,
         "review_queue_rows": review_queue_rows,
         "review_queue_merged_rows": review_queue_merged_rows,
+        "detail_row_count": detail_row_count,
         "start_time": window.get("start_time"),
     }
 
@@ -333,11 +339,9 @@ def finalize_mantiz_text_insights_run_op(context, result: Dict[str, Any]):
     metadata.update(
         {
             "changed_ticket_count": result.get("changed_ticket_count", 0),
-            "failure_concepts": result.get("failure_concepts", 0),
-            "solution_concepts": result.get("solution_concepts", 0),
-            "solution_part_concepts": result.get("solution_part_concepts", 0),
             "review_queue_rows": result.get("review_queue_rows", 0),
             "review_queue_merged_rows": result.get("review_queue_merged_rows", 0),
+            "detail_row_count": result.get("detail_row_count", 0),
         }
     )
     return MaterializeResult(metadata=metadata)

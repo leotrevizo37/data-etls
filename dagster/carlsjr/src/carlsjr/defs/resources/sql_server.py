@@ -491,36 +491,21 @@ INSERT INTO dwh.factMantizTicketTextInsights (
     BranchId,
     EquipmentId,
     EquipmentName,
-    SourceType,
-    SourceId,
-    SourceCreatedAt,
-    SourceUpdatedAt,
-    RawTextExcerpt,
-    NormalizedText,
-    InsightType,
-    InsightPhraseHash,
-    ExtractedEquipmentText,
-    ExtractedFailurePhrase,
-    NormalizedFailurePhrase,
-    FailurePhraseHash,
-    FailureConceptHash,
-    CanonicalFailureCode,
-    FailureConceptStatus,
-    ExtractedSolutionPhrase,
-    NormalizedSolutionPhrase,
-    SolutionPhraseHash,
-    SolutionConceptHash,
-    CanonicalSolutionCode,
-    SolutionConceptStatus,
-    ExtractedSolutionPartText,
-    NormalizedSolutionPartText,
-    SolutionPartHash,
-    SolutionPartConceptHash,
-    CanonicalSolutionPartName,
-    SolutionPartConceptStatus,
-    ExtractionMethod,
-    ExtractionConfidence,
-    IsNewConceptCandidate,
+    FailureCode,
+    FailureSubject,
+    FailureProblem,
+    SolutionCode,
+    SolutionSubject,
+    SolutionPartName,
+    SparePartName,
+    SparePartUnitPrice,
+    SparePartCurrency,
+    InsightStatus,
+    ClassificationMethod,
+    ClassifierConfidence,
+    NeedsReview,
+    InsightsJson,
+    TextEvidenceJson,
     SourceLastChangedAt
 )
 SELECT
@@ -530,278 +515,26 @@ SELECT
     BranchId,
     EquipmentId,
     EquipmentName,
-    SourceType,
-    SourceId,
-    SourceCreatedAt,
-    SourceUpdatedAt,
-    RawTextExcerpt,
-    NormalizedText,
-    InsightType,
-    InsightPhraseHash,
-    ExtractedEquipmentText,
-    ExtractedFailurePhrase,
-    NormalizedFailurePhrase,
-    FailurePhraseHash,
-    FailureConceptHash,
-    CanonicalFailureCode,
-    FailureConceptStatus,
-    ExtractedSolutionPhrase,
-    NormalizedSolutionPhrase,
-    SolutionPhraseHash,
-    SolutionConceptHash,
-    CanonicalSolutionCode,
-    SolutionConceptStatus,
-    ExtractedSolutionPartText,
-    NormalizedSolutionPartText,
-    SolutionPartHash,
-    SolutionPartConceptHash,
-    CanonicalSolutionPartName,
-    SolutionPartConceptStatus,
-    ExtractionMethod,
-    ExtractionConfidence,
-    IsNewConceptCandidate,
+    FailureCode,
+    FailureSubject,
+    FailureProblem,
+    SolutionCode,
+    SolutionSubject,
+    SolutionPartName,
+    SparePartName,
+    SparePartUnitPrice,
+    SparePartCurrency,
+    InsightStatus,
+    ClassificationMethod,
+    ClassifierConfidence,
+    NeedsReview,
+    InsightsJson,
+    TextEvidenceJson,
     SourceLastChangedAt
 FROM stg.factMantizTicketTextInsights
 WHERE RunId = ?;
 
 SELECT @@ROWCOUNT AS AffectedRows;
-"""
-
-
-def build_mantiz_failure_concept_merge_sql() -> str:
-    return """
-SET NOCOUNT ON;
-
-DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
-
-MERGE dwh.dimMantizFailureConcept AS target
-USING (
-    SELECT
-        fact.FailureConceptHash,
-        MAX(fact.CanonicalFailureCode) AS CanonicalFailureCode,
-        MAX(REPLACE(fact.CanonicalFailureCode, N'_', N' ')) AS CanonicalFailureName,
-        MIN(fact.NormalizedFailurePhrase) AS RepresentativeText,
-        MIN(fact.SourceLastChangedAt) AS FirstSeenAt,
-        MAX(fact.SourceLastChangedAt) AS LastSeenAt,
-        COUNT(DISTINCT fact.TicketId) AS TicketCount,
-        MAX(fact.TicketId) AS LastTicketId,
-        MAX(fact.ExtractionMethod) AS CreatedByMethod
-    FROM dwh.factMantizTicketTextInsights AS fact
-    INNER JOIN (
-        SELECT DISTINCT FailureConceptHash
-        FROM stg.factMantizTicketTextInsights
-        WHERE RunId = ?
-        AND FailureConceptHash IS NOT NULL
-    ) AS changed
-        ON fact.FailureConceptHash = changed.FailureConceptHash
-    WHERE fact.FailureConceptHash IS NOT NULL
-    GROUP BY fact.FailureConceptHash
-) AS source
-    ON target.FailureConceptHash = source.FailureConceptHash
-WHEN MATCHED THEN
-    UPDATE SET
-        target.RepresentativeText = COALESCE(target.RepresentativeText, source.RepresentativeText),
-        target.FirstSeenAt =
-            CASE
-                WHEN target.FirstSeenAt IS NULL THEN source.FirstSeenAt
-                WHEN source.FirstSeenAt < target.FirstSeenAt THEN source.FirstSeenAt
-                ELSE target.FirstSeenAt
-            END,
-        target.LastSeenAt =
-            CASE
-                WHEN target.LastSeenAt IS NULL THEN source.LastSeenAt
-                WHEN source.LastSeenAt > target.LastSeenAt THEN source.LastSeenAt
-                ELSE target.LastSeenAt
-            END,
-        target.TicketCount = source.TicketCount,
-        target.LastTicketId = source.LastTicketId,
-        target.CreatedByMethod = COALESCE(target.CreatedByMethod, source.CreatedByMethod),
-        target.ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED BY TARGET THEN
-    INSERT (
-        FailureConceptHash,
-        CanonicalFailureCode,
-        CanonicalFailureName,
-        RepresentativeText,
-        ConceptStatus,
-        FirstSeenAt,
-        LastSeenAt,
-        TicketCount,
-        LastTicketId,
-        CreatedByMethod
-    )
-    VALUES (
-        source.FailureConceptHash,
-        source.CanonicalFailureCode,
-        source.CanonicalFailureName,
-        source.RepresentativeText,
-        N'CANDIDATE',
-        source.FirstSeenAt,
-        source.LastSeenAt,
-        source.TicketCount,
-        source.LastTicketId,
-        source.CreatedByMethod
-    )
-OUTPUT $action INTO @MergeActions;
-
-SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
-"""
-
-
-def build_mantiz_solution_concept_merge_sql() -> str:
-    return """
-SET NOCOUNT ON;
-
-DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
-
-MERGE dwh.dimMantizSolutionConcept AS target
-USING (
-    SELECT
-        fact.SolutionConceptHash,
-        MAX(fact.CanonicalSolutionCode) AS CanonicalSolutionCode,
-        MAX(REPLACE(fact.CanonicalSolutionCode, N'_', N' ')) AS CanonicalSolutionName,
-        MIN(fact.NormalizedSolutionPhrase) AS RepresentativeText,
-        MIN(fact.SourceLastChangedAt) AS FirstSeenAt,
-        MAX(fact.SourceLastChangedAt) AS LastSeenAt,
-        COUNT(DISTINCT fact.TicketId) AS TicketCount,
-        MAX(fact.TicketId) AS LastTicketId,
-        MAX(fact.ExtractionMethod) AS CreatedByMethod
-    FROM dwh.factMantizTicketTextInsights AS fact
-    INNER JOIN (
-        SELECT DISTINCT SolutionConceptHash
-        FROM stg.factMantizTicketTextInsights
-        WHERE RunId = ?
-        AND SolutionConceptHash IS NOT NULL
-    ) AS changed
-        ON fact.SolutionConceptHash = changed.SolutionConceptHash
-    WHERE fact.SolutionConceptHash IS NOT NULL
-    GROUP BY fact.SolutionConceptHash
-) AS source
-    ON target.SolutionConceptHash = source.SolutionConceptHash
-WHEN MATCHED THEN
-    UPDATE SET
-        target.RepresentativeText = COALESCE(target.RepresentativeText, source.RepresentativeText),
-        target.FirstSeenAt =
-            CASE
-                WHEN target.FirstSeenAt IS NULL THEN source.FirstSeenAt
-                WHEN source.FirstSeenAt < target.FirstSeenAt THEN source.FirstSeenAt
-                ELSE target.FirstSeenAt
-            END,
-        target.LastSeenAt =
-            CASE
-                WHEN target.LastSeenAt IS NULL THEN source.LastSeenAt
-                WHEN source.LastSeenAt > target.LastSeenAt THEN source.LastSeenAt
-                ELSE target.LastSeenAt
-            END,
-        target.TicketCount = source.TicketCount,
-        target.LastTicketId = source.LastTicketId,
-        target.CreatedByMethod = COALESCE(target.CreatedByMethod, source.CreatedByMethod),
-        target.ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED BY TARGET THEN
-    INSERT (
-        SolutionConceptHash,
-        CanonicalSolutionCode,
-        CanonicalSolutionName,
-        RepresentativeText,
-        ConceptStatus,
-        FirstSeenAt,
-        LastSeenAt,
-        TicketCount,
-        LastTicketId,
-        CreatedByMethod
-    )
-    VALUES (
-        source.SolutionConceptHash,
-        source.CanonicalSolutionCode,
-        source.CanonicalSolutionName,
-        source.RepresentativeText,
-        N'CANDIDATE',
-        source.FirstSeenAt,
-        source.LastSeenAt,
-        source.TicketCount,
-        source.LastTicketId,
-        source.CreatedByMethod
-    )
-OUTPUT $action INTO @MergeActions;
-
-SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
-"""
-
-
-def build_mantiz_solution_part_concept_merge_sql() -> str:
-    return """
-SET NOCOUNT ON;
-
-DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
-
-MERGE dwh.dimMantizSolutionPartConcept AS target
-USING (
-    SELECT
-        fact.SolutionPartConceptHash,
-        MAX(fact.CanonicalSolutionPartName) AS CanonicalSolutionPartName,
-        MIN(fact.NormalizedSolutionPartText) AS RepresentativeText,
-        MIN(fact.SourceLastChangedAt) AS FirstSeenAt,
-        MAX(fact.SourceLastChangedAt) AS LastSeenAt,
-        COUNT(DISTINCT fact.TicketId) AS TicketCount,
-        MAX(fact.TicketId) AS LastTicketId,
-        MAX(fact.ExtractionMethod) AS CreatedByMethod
-    FROM dwh.factMantizTicketTextInsights AS fact
-    INNER JOIN (
-        SELECT DISTINCT SolutionPartConceptHash
-        FROM stg.factMantizTicketTextInsights
-        WHERE RunId = ?
-        AND SolutionPartConceptHash IS NOT NULL
-    ) AS changed
-        ON fact.SolutionPartConceptHash = changed.SolutionPartConceptHash
-    WHERE fact.SolutionPartConceptHash IS NOT NULL
-    GROUP BY fact.SolutionPartConceptHash
-) AS source
-    ON target.SolutionPartConceptHash = source.SolutionPartConceptHash
-WHEN MATCHED THEN
-    UPDATE SET
-        target.RepresentativeText = COALESCE(target.RepresentativeText, source.RepresentativeText),
-        target.FirstSeenAt =
-            CASE
-                WHEN target.FirstSeenAt IS NULL THEN source.FirstSeenAt
-                WHEN source.FirstSeenAt < target.FirstSeenAt THEN source.FirstSeenAt
-                ELSE target.FirstSeenAt
-            END,
-        target.LastSeenAt =
-            CASE
-                WHEN target.LastSeenAt IS NULL THEN source.LastSeenAt
-                WHEN source.LastSeenAt > target.LastSeenAt THEN source.LastSeenAt
-                ELSE target.LastSeenAt
-            END,
-        target.TicketCount = source.TicketCount,
-        target.LastTicketId = source.LastTicketId,
-        target.CreatedByMethod = COALESCE(target.CreatedByMethod, source.CreatedByMethod),
-        target.ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED BY TARGET THEN
-    INSERT (
-        SolutionPartConceptHash,
-        CanonicalSolutionPartName,
-        RepresentativeText,
-        ConceptStatus,
-        FirstSeenAt,
-        LastSeenAt,
-        TicketCount,
-        LastTicketId,
-        CreatedByMethod
-    )
-    VALUES (
-        source.SolutionPartConceptHash,
-        source.CanonicalSolutionPartName,
-        source.RepresentativeText,
-        N'CANDIDATE',
-        source.FirstSeenAt,
-        source.LastSeenAt,
-        source.TicketCount,
-        source.LastTicketId,
-        source.CreatedByMethod
-    )
-OUTPUT $action INTO @MergeActions;
-
-SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
@@ -1266,6 +999,11 @@ class SqlServerResource:
                 )
                 deleted = cursor.rowcount or 0
                 cursor.execute(
+                    "DELETE FROM stg.MantizTicketTextInsightDetail WHERE RunId = ?",
+                    run_id,
+                )
+                detail_deleted = cursor.rowcount or 0
+                cursor.execute(
                     "DELETE FROM stg.MantizTicketTextInsightChangedTicket WHERE RunId = ?",
                     run_id,
                 )
@@ -1276,7 +1014,7 @@ class SqlServerResource:
                 )
                 review_deleted = cursor.rowcount or 0
                 conn.commit()
-                return int(deleted + changed_deleted + review_deleted)
+                return int(deleted + detail_deleted + changed_deleted + review_deleted)
 
     def replace_fact_mantiz_ticket_text_insights(self, run_id: str) -> int:
         with self._get_connection() as conn:
@@ -1286,36 +1024,6 @@ class SqlServerResource:
                     run_id,
                     run_id,
                 )
-                row = cursor.fetchone()
-                conn.commit()
-                if row is None or row.AffectedRows is None:
-                    return 0
-                return int(row.AffectedRows)
-
-    def merge_mantiz_failure_concepts(self, run_id: str) -> int:
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(build_mantiz_failure_concept_merge_sql(), run_id)
-                row = cursor.fetchone()
-                conn.commit()
-                if row is None or row.AffectedRows is None:
-                    return 0
-                return int(row.AffectedRows)
-
-    def merge_mantiz_solution_concepts(self, run_id: str) -> int:
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(build_mantiz_solution_concept_merge_sql(), run_id)
-                row = cursor.fetchone()
-                conn.commit()
-                if row is None or row.AffectedRows is None:
-                    return 0
-                return int(row.AffectedRows)
-
-    def merge_mantiz_solution_part_concepts(self, run_id: str) -> int:
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(build_mantiz_solution_part_concept_merge_sql(), run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
@@ -1358,26 +1066,19 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT fact.NormalizedText, "
+                    "SELECT queue.RepresentativeText, "
                     "COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) AS Label "
-                    "FROM dwh.factMantizTicketTextInsights AS fact "
-                    "INNER JOIN ctl.MantizTextInsightReviewQueue AS queue "
-                    "ON queue.InsightType = fact.InsightType "
-                    "AND queue.ConceptHash = CASE "
-                    "WHEN fact.InsightType = N'FALLA' THEN fact.FailureConceptHash "
-                    "WHEN fact.InsightType = N'SOLUCION' THEN fact.SolutionConceptHash "
-                    "WHEN fact.InsightType = N'REFACCION_SOLUCION' THEN fact.SolutionPartConceptHash "
-                    "END "
+                    "FROM ctl.MantizTextInsightReviewQueue AS queue "
                     "WHERE queue.InsightType = ? "
                     "AND UPPER(queue.ReviewStatus) = N'APPROVED' "
                     "AND COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) IS NOT NULL "
                     "AND LTRIM(RTRIM(COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode))) <> N'' "
-                    "AND fact.NormalizedText IS NOT NULL "
-                    "AND LTRIM(RTRIM(fact.NormalizedText)) <> N''",
+                    "AND queue.RepresentativeText IS NOT NULL "
+                    "AND LTRIM(RTRIM(queue.RepresentativeText)) <> N''",
                     insight_type,
                 )
                 return [
-                    (str(row.NormalizedText), str(row.Label))
+                    (str(row.RepresentativeText), str(row.Label))
                     for row in cursor.fetchall()
                 ]
 

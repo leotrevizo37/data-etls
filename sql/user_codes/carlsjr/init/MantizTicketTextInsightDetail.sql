@@ -1,6 +1,17 @@
-IF OBJECT_ID(N'stg.factMantizTicketTextInsights', N'U') IS NULL
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.schemas
+        WHERE name = N'stg'
+    )
     BEGIN
-        CREATE TABLE stg.factMantizTicketTextInsights
+        EXEC ('CREATE SCHEMA stg');
+    END;
+GO
+
+IF OBJECT_ID(N'stg.MantizTicketTextInsightDetail', N'U') IS NULL
+    BEGIN
+        CREATE TABLE stg.MantizTicketTextInsightDetail
         (
             RunId NVARCHAR(100) NOT NULL,
             OrganizationId NVARCHAR(100) NOT NULL,
@@ -36,6 +47,9 @@ IF OBJECT_ID(N'stg.factMantizTicketTextInsights', N'U') IS NULL
             SolutionPartConceptHash CHAR(64) NULL,
             CanonicalSolutionPartName NVARCHAR(255) NULL,
             SolutionPartConceptStatus NVARCHAR(20) NULL,
+            ExtractedInsightSubject NVARCHAR(255) NULL,
+            ExtractedProblemQualifier NVARCHAR(100) NULL,
+            NormalizedProblemQualifier NVARCHAR(100) NULL,
             ExtractionMethod NVARCHAR(50) NOT NULL,
             ExtractionConfidence DECIMAL(9, 6) NULL,
             IsNewConceptCandidate BIT NOT NULL,
@@ -54,12 +68,12 @@ IF
             ON o.schema_id = s.schema_id
         WHERE
             s.name = N'stg'
-            AND o.name = N'factMantizTicketTextInsights'
-            AND i.name = N'ix_stg_factMantizTicketTextInsights_run'
+            AND o.name = N'MantizTicketTextInsightDetail'
+            AND i.name = N'ix_stg_MantizTicketTextInsightDetail_run'
     )
     BEGIN
-        CREATE INDEX ix_stg_factMantizTicketTextInsights_run
-            ON stg.factMantizTicketTextInsights
+        CREATE INDEX ix_stg_MantizTicketTextInsightDetail_run
+            ON stg.MantizTicketTextInsightDetail
             (
                 RunId,
                 OrganizationId,

@@ -1,3 +1,14 @@
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.schemas
+        WHERE name = N'ctl'
+    )
+    BEGIN
+        EXEC ('CREATE SCHEMA ctl');
+    END;
+GO
+
 IF OBJECT_ID(N'ctl.MantizTextInsightReviewQueue', N'U') IS NULL
     BEGIN
         CREATE TABLE ctl.MantizTextInsightReviewQueue

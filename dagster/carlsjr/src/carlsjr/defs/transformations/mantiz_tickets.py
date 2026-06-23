@@ -4,6 +4,7 @@ from functools import reduce
 from typing import Optional
 
 from pyspark.sql import DataFrame
+from pyspark.sql import Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DoubleType,
@@ -57,7 +58,7 @@ LIFECYCLE_COLUMNS = [
     "SourceLastChangedAt",
 ]
 
-INSIGHT_COLUMNS = [
+INSIGHT_DETAIL_COLUMNS = [
     "OrganizationId",
     "TicketId",
     "Folio",
@@ -91,9 +92,37 @@ INSIGHT_COLUMNS = [
     "SolutionPartConceptHash",
     "CanonicalSolutionPartName",
     "SolutionPartConceptStatus",
+    "ExtractedInsightSubject",
+    "ExtractedProblemQualifier",
+    "NormalizedProblemQualifier",
     "ExtractionMethod",
     "ExtractionConfidence",
     "IsNewConceptCandidate",
+    "SourceLastChangedAt",
+]
+
+INSIGHT_COLUMNS = [
+    "OrganizationId",
+    "TicketId",
+    "Folio",
+    "BranchId",
+    "EquipmentId",
+    "EquipmentName",
+    "FailureCode",
+    "FailureSubject",
+    "FailureProblem",
+    "SolutionCode",
+    "SolutionSubject",
+    "SolutionPartName",
+    "SparePartName",
+    "SparePartUnitPrice",
+    "SparePartCurrency",
+    "InsightStatus",
+    "ClassificationMethod",
+    "ClassifierConfidence",
+    "NeedsReview",
+    "InsightsJson",
+    "TextEvidenceJson",
     "SourceLastChangedAt",
 ]
 
@@ -409,6 +438,7 @@ def _failure_code_column(text_column):
         .when(text_column.rlike("\\b(fuga de gas|fuga gas|huele a gas)\\b"), F.lit("FUGA_GAS"))
         .when(text_column.rlike("\\b(fuga|tira liquido|pierde liquido)\\b"), F.lit("FUGA"))
         .when(text_column.rlike("\\b(ruido|zumbido|vibra|vibracion|rechina)\\b"), F.lit("RUIDO"))
+        .when(text_column.rlike("\\b(floja|flojo|suelta|suelto|desajustada|desajustado)\\b"), F.lit("FLOJO"))
         .when(text_column.rlike("\\b(roto|quebrado|danado|mal estado|descompuesto)\\b"), F.lit("DANADO"))
         .when(text_column.rlike("\\b(atascado|atorado|bloqueado|trabado)\\b"), F.lit("ATASCADO"))
         .when(text_column.rlike("\\b(puerta no cierra|no cierra|no sella|empaque)\\b"), F.lit("PUERTA_NO_CIERRA"))
@@ -424,7 +454,7 @@ def _solution_code_column(text_column):
         )
         .when(text_column.rlike("\\b(torque|torqueo)\\b"), F.lit("TORQUE"))
         .when(
-            text_column.rlike("\\b(se apreto|se aprieta|apretar|aprieta|se ajusto|se ajusta|ajuste|se acomodo|se acomoda|acomodar|se nivela|nivelacion)\\b"),
+            text_column.rlike("\\b(se apreto|se aprieta|apretar|aprieta|se ajusto|se ajusta|ajuste|se acomodo|se acomoda|acomodo|acomoda|acomodar|reacomodo|reacomoda|reacomodar|se nivela|nivelacion)\\b"),
             F.lit("AJUSTE"),
         )
         .when(text_column.rlike("\\b(se calibro|calibracion|calibro)\\b"), F.lit("CALIBRACION"))
@@ -432,6 +462,19 @@ def _solution_code_column(text_column):
         .when(text_column.rlike("\\b(cable|conector|tarjeta|contacto|voltaje|electrico|electrica)\\b"), F.lit("REPARACION_ELECTRICA"))
         .when(text_column.rlike("\\b(recarga gas|carga gas|refrigerante)\\b"), F.lit("RECARGA_REFRIGERANTE"))
         .when(text_column.rlike("\\b(se reparo|reparacion|reparo|soldadura|solda)\\b"), F.lit("REPARACION"))
+    )
+
+
+def _problem_qualifier_column(text_column):
+    return (
+        F.when(text_column.rlike("\\b(no enfria|no esta enfriando|no congela|sin frio)\\b"), F.lit("NO_ENFRIA"))
+        .when(text_column.rlike("\\b(no calienta|sin calor|no levanta temperatura)\\b"), F.lit("NO_CALIENTA"))
+        .when(text_column.rlike("\\b(no prende|no enciende|no arranca|no funciona)\\b"), F.lit("NO_ENCIENDE"))
+        .when(text_column.rlike("\\b(floja|flojo|suelta|suelto|desajustada|desajustado)\\b"), F.lit("FLOJA"))
+        .when(text_column.rlike("\\b(fuga|gotea|gotera|tira agua|sale agua)\\b"), F.lit("FUGA"))
+        .when(text_column.rlike("\\b(ruido|zumbido|vibra|vibracion|rechina)\\b"), F.lit("RUIDO"))
+        .when(text_column.rlike("\\b(roto|quebrado|danado|mal estado|descompuesto)\\b"), F.lit("DANADO"))
+        .when(text_column.rlike("\\b(atascado|atorado|bloqueado|trabado)\\b"), F.lit("ATASCADO"))
     )
 
 
@@ -470,6 +513,9 @@ def _base_insight_columns(df: DataFrame) -> DataFrame:
         "SolutionPartConceptHash",
         "CanonicalSolutionPartName",
         "SolutionPartConceptStatus",
+        "ExtractedInsightSubject",
+        "ExtractedProblemQualifier",
+        "NormalizedProblemQualifier",
         "ExtractionMethod",
         "ExtractionConfidence",
         "IsNewConceptCandidate",
@@ -482,10 +528,11 @@ def _failure_insights_df(sources_df: DataFrame) -> DataFrame:
     equipment_from_text = _empty_to_null(
         F.regexp_extract(
             F.col("NormalizedText"),
-            "([a-z0-9]+(?: [a-z0-9]+){0,3}) (?:no enfria|no congela|no calienta|no prende|no enciende|fuga|gotea|ruido|roto|danado|atascado)",
+            "([a-z0-9]+(?: [a-z0-9]+){0,3}) (?:no enfria|no congela|no calienta|no prende|no enciende|fuga|gotea|ruido|roto|danado|atascado|floja|flojo|suelta|suelto)",
             1,
         )
     )
+    problem = _problem_qualifier_column(F.col("NormalizedText"))
     return _base_insight_columns(
         sources_df
         .withColumn("CanonicalFailureCode", code)
@@ -501,6 +548,12 @@ def _failure_insights_df(sources_df: DataFrame) -> DataFrame:
         .withColumn("FailureConceptStatus", F.lit("CANDIDATE"))
         .withColumn("InsightPhraseHash", F.col("FailurePhraseHash"))
         .withColumn("ExtractedEquipmentText", F.coalesce(equipment_from_text, F.col("EquipmentName")))
+        .withColumn("ExtractedInsightSubject", F.coalesce(equipment_from_text, F.col("EquipmentName")))
+        .withColumn("ExtractedProblemQualifier", F.coalesce(problem, F.col("CanonicalFailureCode")))
+        .withColumn(
+            "NormalizedProblemQualifier",
+            normalize_text_column(F.coalesce(problem, F.col("CanonicalFailureCode"))),
+        )
         .withColumn("ExtractedSolutionPhrase", F.lit(None).cast("string"))
         .withColumn("NormalizedSolutionPhrase", F.lit(None).cast("string"))
         .withColumn("SolutionPhraseHash", F.lit(None).cast("string"))
@@ -520,7 +573,7 @@ def _failure_insights_df(sources_df: DataFrame) -> DataFrame:
 
 
 def _solution_seed_df(sources_df: DataFrame) -> DataFrame:
-    action_pattern = "(?:se cambia|se cambio|cambiaron|cambio de|reemplazo(?: de)?|reemplaza|reemplazar|sustituye|sustituyo|se instala|instalacion de|se apreto|se aprieta|apretar|aprieta|se ajusto|se ajusta|se acomodo|se acomoda|acomodar|se nivela|se calibro|se limpio|desazolva|se reparo|recarga|carga)"
+    action_pattern = "(?:se cambia|se cambio|cambiaron|cambio de|reemplazo(?: de)?|reemplaza|reemplazar|sustituye|sustituyo|se instala|instalacion de|se apreto|se aprieta|apretar|aprieta|se ajusto|se ajusta|se acomodo|se acomoda|acomodo|acomoda|acomodar|reacomodo|reacomoda|reacomodar|se nivela|se calibro|se limpio|desazolva|se reparo|recarga|carga)"
     part_text = _empty_to_null(
         F.regexp_extract(
             F.col("NormalizedText"),
@@ -528,6 +581,7 @@ def _solution_seed_df(sources_df: DataFrame) -> DataFrame:
             1,
         )
     )
+    problem = _problem_qualifier_column(F.col("NormalizedText"))
     return (
         sources_df
         .withColumn("CanonicalSolutionCode", _solution_code_column(F.col("NormalizedText")))
@@ -555,6 +609,9 @@ def _solution_seed_df(sources_df: DataFrame) -> DataFrame:
             "SolutionPartConceptStatus",
             F.when(F.col("CanonicalSolutionPartName").isNotNull(), F.lit("CANDIDATE")),
         )
+        .withColumn("ExtractedInsightSubject", F.coalesce(part_text, F.col("EquipmentName")))
+        .withColumn("ExtractedProblemQualifier", problem)
+        .withColumn("NormalizedProblemQualifier", normalize_text_column(problem))
     )
 
 
@@ -563,7 +620,7 @@ def _solution_insights_df(solution_seed_df: DataFrame) -> DataFrame:
         solution_seed_df
         .withColumn("InsightType", F.lit("SOLUCION"))
         .withColumn("InsightPhraseHash", F.col("SolutionPhraseHash"))
-        .withColumn("ExtractedEquipmentText", F.col("EquipmentName"))
+        .withColumn("ExtractedEquipmentText", F.col("ExtractedInsightSubject"))
         .withColumn("ExtractedFailurePhrase", F.lit(None).cast("string"))
         .withColumn("NormalizedFailurePhrase", F.lit(None).cast("string"))
         .withColumn("FailurePhraseHash", F.lit(None).cast("string"))
@@ -588,7 +645,7 @@ def _solution_part_insights_df(solution_seed_df: DataFrame) -> DataFrame:
         .filter(F.col("CanonicalSolutionPartName").isNotNull())
         .withColumn("InsightType", F.lit("REFACCION_SOLUCION"))
         .withColumn("InsightPhraseHash", F.col("SolutionPartHash"))
-        .withColumn("ExtractedEquipmentText", F.col("EquipmentName"))
+        .withColumn("ExtractedEquipmentText", F.col("ExtractedInsightSubject"))
         .withColumn("ExtractedFailurePhrase", F.lit(None).cast("string"))
         .withColumn("NormalizedFailurePhrase", F.lit(None).cast("string"))
         .withColumn("FailurePhraseHash", F.lit(None).cast("string"))
@@ -685,6 +742,7 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
     code = F.upper(F.col("PredCanonicalCode"))
     name = F.coalesce(F.col("PredCanonicalName"), code)
     normalized_name = normalize_text_column(name)
+    problem = _problem_qualifier_column(F.col("NormalizedText"))
 
     return _base_insight_columns(
         joined
@@ -766,6 +824,22 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
         .withColumn("ExtractionMethod", F.lit("ML"))
         .withColumn("ExtractionConfidence", F.col("PredClassifierConfidence").cast("double"))
         .withColumn("IsNewConceptCandidate", F.lit(True))
+        .withColumn(
+            "ExtractedInsightSubject",
+            F.coalesce(
+                F.col("NormalizedSolutionPartText"),
+                F.col("ExtractedSolutionPartText"),
+                F.col("EquipmentName"),
+            ),
+        )
+        .withColumn(
+            "ExtractedProblemQualifier",
+            F.coalesce(problem, F.col("CanonicalFailureCode")),
+        )
+        .withColumn(
+            "NormalizedProblemQualifier",
+            normalize_text_column(F.coalesce(problem, F.col("CanonicalFailureCode"))),
+        )
         .select(
             "OrganizationId",
             "TicketId",
@@ -800,6 +874,9 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
             "SolutionPartConceptHash",
             "CanonicalSolutionPartName",
             "SolutionPartConceptStatus",
+            "ExtractedInsightSubject",
+            "ExtractedProblemQualifier",
+            "NormalizedProblemQualifier",
             "ExtractionMethod",
             "ExtractionConfidence",
             "IsNewConceptCandidate",
@@ -808,7 +885,35 @@ def _classifier_prediction_insights_df(sources_df: DataFrame, predictions_df: Da
     )
 
 
-def build_mantiz_ticket_text_insights_df(
+def build_mantiz_ticket_text_insight_detail_from_sources_df(
+    sources_df: DataFrame,
+    classifier_predictions_df: Optional[DataFrame] = None,
+) -> DataFrame:
+    solution_seed_df = _solution_seed_df(sources_df)
+    insights = [
+        _failure_insights_df(sources_df),
+        _solution_insights_df(solution_seed_df),
+        _solution_part_insights_df(solution_seed_df),
+    ]
+    if classifier_predictions_df is not None:
+        insights.append(_classifier_prediction_insights_df(sources_df, classifier_predictions_df))
+    return (
+        reduce(lambda left, right: left.unionByName(right), insights)
+        .dropDuplicates(
+            [
+                "OrganizationId",
+                "TicketId",
+                "SourceType",
+                "SourceId",
+                "InsightType",
+                "InsightPhraseHash",
+            ]
+        )
+        .select(*INSIGHT_DETAIL_COLUMNS)
+    )
+
+
+def build_mantiz_ticket_text_insight_detail_df(
     tickets_df: DataFrame,
     ticket_comments_df: DataFrame,
     branches_df: DataFrame,
@@ -831,27 +936,288 @@ def build_mantiz_ticket_text_insights_df(
         organization_id,
     )
     sources_df = _source_texts_df(context_df, ticket_comments_df)
-    solution_seed_df = _solution_seed_df(sources_df)
-    insights = [
-        _failure_insights_df(sources_df),
-        _solution_insights_df(solution_seed_df),
-        _solution_part_insights_df(solution_seed_df),
-    ]
-    if classifier_predictions_df is not None:
-        insights.append(_classifier_prediction_insights_df(sources_df, classifier_predictions_df))
+    return build_mantiz_ticket_text_insight_detail_from_sources_df(
+        sources_df,
+        classifier_predictions_df,
+    )
+
+
+def _source_priority_column():
     return (
-        reduce(lambda left, right: left.unionByName(right), insights)
-        .dropDuplicates(
-            [
-                "OrganizationId",
-                "TicketId",
-                "SourceType",
-                "SourceId",
-                "InsightType",
-                "InsightPhraseHash",
-            ]
+        F.when(F.col("SourceType") == F.lit("TICKET_RESOLUTION_NOTES"), F.lit(7))
+        .when(F.col("SourceType") == F.lit("TICKET_APPROVAL_NOTES"), F.lit(6))
+        .when(F.col("SourceType") == F.lit("TICKET_CANCELLATION_NOTES"), F.lit(6))
+        .when(F.col("SourceType") == F.lit("TICKET_COMMENT"), F.lit(5))
+        .when(F.col("SourceType") == F.lit("TICKET_DESCRIPTION"), F.lit(4))
+        .when(F.col("SourceType") == F.lit("TICKET_SCHEDULE_NOTES"), F.lit(3))
+        .when(F.col("SourceType") == F.lit("TICKET_TITLE"), F.lit(2))
+        .otherwise(F.lit(1))
+    )
+
+
+def _source_rollup_df(sources_df: DataFrame) -> DataFrame:
+    return (
+        sources_df
+        .groupBy("OrganizationId", "TicketId")
+        .agg(
+            F.max("SourceLastChangedAt").alias("LastTextSourceChangedAt"),
+            F.to_json(
+                F.array_sort(
+                    F.collect_set(
+                        F.struct(
+                            F.col("SourceType").alias("SourceType"),
+                            F.col("SourceId").alias("SourceId"),
+                            F.col("SourceCreatedAt").alias("SourceCreatedAt"),
+                            F.col("SourceUpdatedAt").alias("SourceUpdatedAt"),
+                            F.col("RawTextExcerpt").alias("RawTextExcerpt"),
+                        )
+                    )
+                )
+            ).alias("TextEvidenceJson"),
         )
-        .select(*INSIGHT_COLUMNS)
+    )
+
+
+def _ranked_insights_df(insight_detail_df: DataFrame) -> DataFrame:
+    sort_hash = F.coalesce(
+        F.col("FailureConceptHash"),
+        F.col("SolutionConceptHash"),
+        F.col("SolutionPartConceptHash"),
+        F.col("InsightPhraseHash"),
+    )
+    window = (
+        Window
+        .partitionBy("OrganizationId", "TicketId", "InsightType")
+        .orderBy(
+            F.col("ExtractionConfidence").desc_nulls_last(),
+            F.col("SourcePriority").desc_nulls_last(),
+            F.col("SourceLastChangedAt").desc_nulls_last(),
+            sort_hash.asc_nulls_last(),
+        )
+    )
+    return (
+        insight_detail_df
+        .withColumn("SourcePriority", _source_priority_column())
+        .withColumn("DetailRank", F.row_number().over(window))
+    )
+
+
+def _detail_counts_df(insight_detail_df: DataFrame) -> DataFrame:
+    return (
+        insight_detail_df
+        .groupBy("OrganizationId", "TicketId")
+        .agg(
+            F.count(F.lit(1)).cast("int").alias("DetailInsightCount"),
+            F.max(F.when(F.col("ExtractionMethod") == F.lit("ML"), F.lit(1)).otherwise(F.lit(0))).cast("int").alias("HasMlMethod"),
+            F.max("ExtractionConfidence").alias("ClassifierConfidence"),
+            F.max(F.col("IsNewConceptCandidate").cast("int")).cast("boolean").alias("HasNewConceptCandidate"),
+        )
+    )
+
+
+def _primary_failure_df(ranked_df: DataFrame) -> DataFrame:
+    return (
+        ranked_df
+        .filter(F.col("InsightType") == F.lit("FALLA"))
+        .filter(F.col("DetailRank") == F.lit(1))
+        .select(
+            "OrganizationId",
+            "TicketId",
+            F.col("CanonicalFailureCode").alias("FailureCode"),
+            F.col("ExtractedInsightSubject").alias("FailureSubject"),
+            F.col("ExtractedProblemQualifier").alias("FailureProblem"),
+        )
+    )
+
+
+def _primary_solution_df(ranked_df: DataFrame) -> DataFrame:
+    return (
+        ranked_df
+        .filter(F.col("InsightType") == F.lit("SOLUCION"))
+        .filter(F.col("DetailRank") == F.lit(1))
+        .select(
+            "OrganizationId",
+            "TicketId",
+            F.col("CanonicalSolutionCode").alias("SolutionCode"),
+            F.col("ExtractedInsightSubject").alias("SolutionSubject"),
+            F.col("ExtractedProblemQualifier").alias("PrimarySolutionProblem"),
+        )
+    )
+
+
+def _primary_solution_part_df(ranked_df: DataFrame) -> DataFrame:
+    return (
+        ranked_df
+        .filter(F.col("InsightType") == F.lit("REFACCION_SOLUCION"))
+        .filter(F.col("DetailRank") == F.lit(1))
+        .select(
+            "OrganizationId",
+            "TicketId",
+            F.col("CanonicalSolutionPartName").alias("SolutionPartName"),
+            F.col("ExtractedProblemQualifier").alias("PrimarySolutionPartProblem"),
+        )
+    )
+
+
+def _insights_json_df(insight_detail_df: DataFrame) -> DataFrame:
+    code = F.coalesce(
+        F.col("CanonicalFailureCode"),
+        F.col("CanonicalSolutionCode"),
+        F.col("CanonicalSolutionPartName"),
+    )
+    phrase = F.coalesce(
+        F.col("NormalizedFailurePhrase"),
+        F.col("NormalizedSolutionPhrase"),
+        F.col("NormalizedSolutionPartText"),
+    )
+    concept_hash = F.coalesce(
+        F.col("FailureConceptHash"),
+        F.col("SolutionConceptHash"),
+        F.col("SolutionPartConceptHash"),
+    )
+    return (
+        insight_detail_df
+        .groupBy("OrganizationId", "TicketId")
+        .agg(
+            F.to_json(
+                F.array_sort(
+                    F.collect_set(
+                        F.struct(
+                            F.col("InsightType").alias("Type"),
+                            code.alias("Code"),
+                            phrase.alias("Phrase"),
+                            F.col("ExtractedInsightSubject").alias("Subject"),
+                            F.col("ExtractedProblemQualifier").alias("Problem"),
+                            F.col("CanonicalSolutionPartName").alias("PartName"),
+                            F.col("ExtractionMethod").alias("Method"),
+                            F.col("ExtractionConfidence").alias("Confidence"),
+                            F.col("SourceType").alias("SourceType"),
+                            F.col("SourceId").alias("SourceId"),
+                            concept_hash.alias("ConceptHash"),
+                        )
+                    )
+                )
+            ).alias("InsightsJson")
+        )
+    )
+
+
+def build_mantiz_ticket_text_insights_fact_df(
+    tickets_df: DataFrame,
+    ticket_comments_df: DataFrame,
+    branches_df: DataFrame,
+    clients_df: DataFrame,
+    equipment_instances_df: DataFrame,
+    equipment_catalog_df: DataFrame,
+    failure_types_df: DataFrame,
+    suppliers_df: DataFrame,
+    organization_id: str,
+    insight_detail_df: Optional[DataFrame] = None,
+    classifier_predictions_df: Optional[DataFrame] = None,
+) -> DataFrame:
+    context_df = _ticket_context_df(
+        tickets_df,
+        branches_df,
+        clients_df,
+        equipment_instances_df,
+        equipment_catalog_df,
+        failure_types_df,
+        suppliers_df,
+        organization_id,
+    )
+    sources_df = _source_texts_df(context_df, ticket_comments_df)
+    detail_df = (
+        insight_detail_df
+        if insight_detail_df is not None
+        else build_mantiz_ticket_text_insight_detail_from_sources_df(
+            sources_df,
+            classifier_predictions_df,
+        )
+    )
+    source_rollup = _source_rollup_df(sources_df)
+    ranked = _ranked_insights_df(detail_df)
+    counts = _detail_counts_df(detail_df)
+    insights_json = _insights_json_df(detail_df)
+
+    fact = (
+        context_df
+        .select(
+            "OrganizationId",
+            "TicketId",
+            "Folio",
+            "BranchId",
+            "EquipmentId",
+            "EquipmentName",
+            "CreatedAt",
+            "UpdatedAt",
+        )
+        .join(source_rollup, ["OrganizationId", "TicketId"], "left")
+        .join(counts, ["OrganizationId", "TicketId"], "left")
+        .join(_primary_failure_df(ranked), ["OrganizationId", "TicketId"], "left")
+        .join(_primary_solution_df(ranked), ["OrganizationId", "TicketId"], "left")
+        .join(_primary_solution_part_df(ranked), ["OrganizationId", "TicketId"], "left")
+        .join(insights_json, ["OrganizationId", "TicketId"], "left")
+        .withColumn("DetailInsightCount", F.coalesce(F.col("DetailInsightCount"), F.lit(0)).cast("int"))
+        .withColumn("InsightStatus", F.when(F.col("DetailInsightCount") > F.lit(0), F.lit("CLASSIFIED")).otherwise(F.lit("SIN_CLASIFICAR")))
+        .withColumn(
+            "ClassificationMethod",
+            F.when(F.col("DetailInsightCount") == F.lit(0), F.lit("SIN_CLASIFICAR"))
+            .when(F.coalesce(F.col("HasMlMethod"), F.lit(0)) > F.lit(0), F.lit("ML"))
+            .otherwise(F.lit("RULE")),
+        )
+        .withColumn("ClassifierConfidence", F.coalesce(F.col("ClassifierConfidence"), F.lit(0.0)).cast("double"))
+        .withColumn("NeedsReview", ((F.col("DetailInsightCount") == F.lit(0)) | F.coalesce(F.col("HasNewConceptCandidate"), F.lit(False))).cast("boolean"))
+        .withColumn("InsightsJson", F.coalesce(F.col("InsightsJson"), F.lit("[]")))
+        .withColumn("TextEvidenceJson", F.coalesce(F.col("TextEvidenceJson"), F.lit("[]")))
+        .withColumn("SparePartName", F.col("SolutionPartName"))
+        .withColumn("SparePartUnitPrice", F.lit(None).cast("decimal(18,4)"))
+        .withColumn("SparePartCurrency", F.lit(None).cast("string"))
+        .withColumn(
+            "SourceLastChangedAt",
+            F.greatest(
+                F.coalesce(F.col("LastTextSourceChangedAt"), F.lit("1900-01-01 00:00:00").cast("timestamp")),
+                F.coalesce(F.col("UpdatedAt"), F.col("CreatedAt"), F.lit("1900-01-01 00:00:00").cast("timestamp")),
+            ),
+        )
+    )
+    return fact.select(*INSIGHT_COLUMNS)
+
+
+def build_mantiz_ticket_text_insights_df(
+    tickets_df: DataFrame,
+    ticket_comments_df: DataFrame,
+    branches_df: DataFrame,
+    clients_df: DataFrame,
+    equipment_instances_df: DataFrame,
+    equipment_catalog_df: DataFrame,
+    failure_types_df: DataFrame,
+    suppliers_df: DataFrame,
+    organization_id: str,
+    classifier_predictions_df: Optional[DataFrame] = None,
+) -> DataFrame:
+    detail_df = build_mantiz_ticket_text_insight_detail_df(
+        tickets_df=tickets_df,
+        ticket_comments_df=ticket_comments_df,
+        branches_df=branches_df,
+        clients_df=clients_df,
+        equipment_instances_df=equipment_instances_df,
+        equipment_catalog_df=equipment_catalog_df,
+        failure_types_df=failure_types_df,
+        suppliers_df=suppliers_df,
+        organization_id=organization_id,
+        classifier_predictions_df=classifier_predictions_df,
+    )
+    return build_mantiz_ticket_text_insights_fact_df(
+        tickets_df=tickets_df,
+        ticket_comments_df=ticket_comments_df,
+        branches_df=branches_df,
+        clients_df=clients_df,
+        equipment_instances_df=equipment_instances_df,
+        equipment_catalog_df=equipment_catalog_df,
+        failure_types_df=failure_types_df,
+        suppliers_df=suppliers_df,
+        organization_id=organization_id,
+        insight_detail_df=detail_df,
     )
 
 

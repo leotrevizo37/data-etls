@@ -70,36 +70,24 @@ class MantizMergeSqlTests(unittest.TestCase):
         self.assertIn("target.TicketId = changed.TicketId", sql)
         self.assertIn("INSERT INTO dwh.factMantizTicketTextInsights", sql)
         self.assertIn("FROM stg.factMantizTicketTextInsights", sql)
+        self.assertIn("FailureCode", sql)
+        self.assertIn("InsightsJson", sql)
+        self.assertIn("TextEvidenceJson", sql)
+        self.assertIn("NeedsReview", sql)
+        self.assertNotIn("PrimaryFailureCode", sql)
+        self.assertNotIn("FailureConceptHash", sql)
+        self.assertNotIn("SourceType,", sql)
+        self.assertNotIn("InsightType,", sql)
 
-    def test_failure_concept_merge_preserves_reviewed_status(self) -> None:
+    def test_mantiz_dwh_dimension_merge_helpers_are_removed(self) -> None:
         module = _load_sql_server_module()
-        sql = module.build_mantiz_failure_concept_merge_sql()
-        update_section = _matched_update_section(sql)
 
-        self.assertIn("MERGE dwh.dimMantizFailureConcept", sql)
-        self.assertIn("source.FailureConceptHash", sql)
-        self.assertNotIn("target.ConceptStatus", update_section)
-        self.assertNotIn("N'CANDIDATE'", update_section)
-
-    def test_solution_concept_merge_preserves_reviewed_status(self) -> None:
-        module = _load_sql_server_module()
-        sql = module.build_mantiz_solution_concept_merge_sql()
-        update_section = _matched_update_section(sql)
-
-        self.assertIn("MERGE dwh.dimMantizSolutionConcept", sql)
-        self.assertIn("source.SolutionConceptHash", sql)
-        self.assertNotIn("target.ConceptStatus", update_section)
-        self.assertNotIn("N'CANDIDATE'", update_section)
-
-    def test_solution_part_concept_merge_preserves_reviewed_status(self) -> None:
-        module = _load_sql_server_module()
-        sql = module.build_mantiz_solution_part_concept_merge_sql()
-        update_section = _matched_update_section(sql)
-
-        self.assertIn("MERGE dwh.dimMantizSolutionPartConcept", sql)
-        self.assertIn("source.SolutionPartConceptHash", sql)
-        self.assertNotIn("target.ConceptStatus", update_section)
-        self.assertNotIn("N'CANDIDATE'", update_section)
+        self.assertFalse(hasattr(module, "build_mantiz_failure_concept_merge_sql"))
+        self.assertFalse(hasattr(module, "build_mantiz_solution_concept_merge_sql"))
+        self.assertFalse(hasattr(module, "build_mantiz_solution_part_concept_merge_sql"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_failure_concepts"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_solution_concepts"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_solution_part_concepts"))
 
     def test_review_queue_merge_uses_ctl_and_preserves_review_status(self) -> None:
         module = _load_sql_server_module()

@@ -114,9 +114,13 @@ class MantizMySqlResourceTests(unittest.TestCase):
     def test_mantiz_sql_init_is_split_by_object(self) -> None:
         init_dir = REPO_ROOT / "sql" / "user_codes" / "carlsjr" / "init"
 
-        self.assertTrue((init_dir / "010_dwh_factMantizTicketLifecycle.sql").exists())
-        self.assertTrue((init_dir / "020_dwh_factMantizTicketTextInsights.sql").exists())
-        self.assertTrue((init_dir / "040_ctl_MantizTextInsightReviewQueue.sql").exists())
+        self.assertTrue((init_dir / "factMantizTicketLifecycle.sql").exists())
+        self.assertTrue((init_dir / "factMantizTicketTextInsights.sql").exists())
+        self.assertTrue((init_dir / "MantizTextInsightReviewQueue.sql").exists())
+        self.assertTrue((init_dir / "MantizTicketTextInsightDetail.sql").exists())
+        self.assertTrue((init_dir / "dropMantizDwhDimensions.sql").exists())
+        self.assertFalse(any(path.name[:1].isdigit() for path in init_dir.glob("*.sql")))
+        self.assertFalse(any(path.name.startswith("dimMantiz") for path in init_dir.glob("*.sql")))
         self.assertFalse((init_dir / "factMantizTickets.sql").exists())
 
 

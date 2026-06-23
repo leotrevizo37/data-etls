@@ -1,3 +1,14 @@
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.schemas
+        WHERE name = N'stg'
+    )
+    BEGIN
+        EXEC ('CREATE SCHEMA stg');
+    END;
+GO
+
 IF OBJECT_ID(N'stg.MantizTicketTextInsightChangedTicket', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.MantizTicketTextInsightChangedTicket

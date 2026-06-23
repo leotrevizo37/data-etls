@@ -1,6 +1,7 @@
 import subprocess
 import unittest
 import warnings
+import json
 from datetime import datetime
 from importlib import util
 from pathlib import Path
@@ -52,18 +53,24 @@ if SPARK_TESTS_AVAILABLE:
     assert spec.loader is not None
     spec.loader.exec_module(mantiz_module)
     build_mantiz_ticket_lifecycle_df = mantiz_module.build_mantiz_ticket_lifecycle_df
+    build_mantiz_ticket_text_insight_detail_df = (
+        mantiz_module.build_mantiz_ticket_text_insight_detail_df
+    )
     build_mantiz_ticket_text_insights_df = mantiz_module.build_mantiz_ticket_text_insights_df
     build_mantiz_text_insight_review_queue_df = (
         mantiz_module.build_mantiz_text_insight_review_queue_df
     )
     LIFECYCLE_COLUMNS = mantiz_module.LIFECYCLE_COLUMNS
+    INSIGHT_DETAIL_COLUMNS = mantiz_module.INSIGHT_DETAIL_COLUMNS
     INSIGHT_COLUMNS = mantiz_module.INSIGHT_COLUMNS
     REVIEW_QUEUE_COLUMNS = mantiz_module.REVIEW_QUEUE_COLUMNS
 else:
     build_mantiz_ticket_lifecycle_df = None
+    build_mantiz_ticket_text_insight_detail_df = None
     build_mantiz_ticket_text_insights_df = None
     build_mantiz_text_insight_review_queue_df = None
     LIFECYCLE_COLUMNS = []
+    INSIGHT_DETAIL_COLUMNS = []
     INSIGHT_COLUMNS = []
     REVIEW_QUEUE_COLUMNS = []
 
@@ -348,7 +355,7 @@ class MantizTicketsTransformationTests(unittest.TestCase):
                     "description": "refrigerador no enfria",
                     "scheduleNotes": "",
                     "resolutionNotes": "se cambia reten",
-                    "approvalNotes": "se apreto llave",
+                    "approvalNotes": "se apreto llave floja",
                     "cancellationNotes": "se acomoda termostato",
                 }
             ],
@@ -369,36 +376,58 @@ class MantizTicketsTransformationTests(unittest.TestCase):
         )
 
         self.assertEqual(result.columns, INSIGHT_COLUMNS)
+        self.assertEqual(result.count(), 1)
+
+        row = result.collect()[0]
+        self.assertEqual(row.TicketId, "t-text")
+        self.assertIn(row.FailureCode, {"NO_CALIENTA", "NO_ENFRIA"})
+        self.assertEqual(row.SolutionCode, "CAMBIO_REFACCION")
+        self.assertEqual(row.SolutionPartName, "RETEN")
+        self.assertEqual(row.SparePartName, "RETEN")
+        self.assertEqual(row.InsightStatus, "CLASSIFIED")
+        self.assertEqual(row.ClassificationMethod, "RULE")
+        self.assertGreater(float(row.ClassifierConfidence), 0.0)
+        self.assertTrue(row.NeedsReview)
+
+        insights = json.loads(row.InsightsJson)
+        failure_codes = {item["Code"] for item in insights if item["Type"] == "FALLA"}
+        solution_codes = {item["Code"] for item in insights if item["Type"] == "SOLUCION"}
+        solution_parts = {
+            item["PartName"]
+            for item in insights
+            if item["Type"] == "REFACCION_SOLUCION"
+        }
+        problems = {
+            item["Problem"]
+            for item in insights
+            if item.get("Problem") is not None
+        }
+        text_sources = {item["SourceType"] for item in json.loads(row.TextEvidenceJson)}
+        self.assertTrue({"NO_CALIENTA", "NO_ENFRIA"}.issubset(failure_codes))
+        self.assertEqual(solution_codes, {"CAMBIO_REFACCION", "AJUSTE"})
+        self.assertEqual(solution_parts, {"RETEN", "LLAVE", "TERMOSTATO"})
+        self.assertIn("FLOJA", problems)
         self.assertTrue(
-            {"NO_CALIENTA", "NO_ENFRIA"}.issubset(
-                {
-                    row.CanonicalFailureCode
-                    for row in result.filter("InsightType = 'FALLA'").collect()
-                }
-            ),
-        )
-        self.assertEqual(
-            {
-                row.CanonicalSolutionCode
-                for row in result.filter("InsightType = 'SOLUCION'").collect()
-            },
-            {"CAMBIO_REFACCION", "AJUSTE"},
-        )
-        self.assertEqual(
-            {
-                row.CanonicalSolutionPartName
-                for row in result.filter("InsightType = 'REFACCION_SOLUCION'").collect()
-            },
-            {"RETEN", "LLAVE", "TERMOSTATO"},
-        )
-        self.assertTrue(
-            all(
-                row.IsNewConceptCandidate
-                for row in result.select("IsNewConceptCandidate").collect()
+            {"TICKET_TITLE", "TICKET_DESCRIPTION", "TICKET_RESOLUTION_NOTES"}.issubset(
+                text_sources,
             )
         )
 
-        review_queue = build_mantiz_text_insight_review_queue_df(result)
+        detail = build_mantiz_ticket_text_insight_detail_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+
+        self.assertEqual(detail.columns, INSIGHT_DETAIL_COLUMNS)
+
+        review_queue = build_mantiz_text_insight_review_queue_df(detail)
         self.assertEqual(review_queue.columns, REVIEW_QUEUE_COLUMNS)
         self.assertTrue(
             {"FALLA", "SOLUCION", "REFACCION_SOLUCION"}.issubset(
@@ -452,7 +481,15 @@ class MantizTicketsTransformationTests(unittest.TestCase):
             organization_id="org-carlsjr",
         )
 
-        self.assertEqual(result.count(), 0)
+        self.assertEqual(result.count(), 1)
+        row = result.collect()[0]
+        self.assertEqual(row.InsightStatus, "SIN_CLASIFICAR")
+        self.assertEqual(row.ClassificationMethod, "SIN_CLASIFICAR")
+        self.assertEqual(float(row.ClassifierConfidence), 0.0)
+        self.assertTrue(row.NeedsReview)
+        self.assertEqual(row.InsightsJson, "[]")
+        self.assertEqual(row.TextEvidenceJson, "[]")
+        self.assertIsNone(row.FailureCode)
 
 
 if __name__ == "__main__":
