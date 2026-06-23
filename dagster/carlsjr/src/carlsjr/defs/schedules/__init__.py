@@ -10,6 +10,7 @@ from .factsmartauditscategories_scheduler import (
     smartaudits_categories_sched_every_6h,
     smartaudits_classifier_training_daily,
 )
+from .factmantiztickets_scheduler import mantiz_tickets_sched_every_6h
 from .cleanup_schedule import cleanup_schedule
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
 from .index_maintenance_schedule import index_maintenance_schedule
@@ -25,6 +26,7 @@ __all__ = [
     "sensor_events_sched_every_1h_w",
     "smartaudits_categories_sched_every_6h",
     "smartaudits_classifier_training_daily",
+    "mantiz_tickets_sched_every_6h",
     "cleanup_schedule",
     "factlecturas_cleanup_schedule",
     "index_maintenance_schedule",

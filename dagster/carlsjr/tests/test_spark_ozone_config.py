@@ -134,6 +134,7 @@ spark_df_io_manager_module = _load_module(
 )
 HADOOP_AWS_PACKAGE = spark_module.HADOOP_AWS_PACKAGE
 MSSQL_JDBC_PACKAGE = spark_module.MSSQL_JDBC_PACKAGE
+MYSQL_JDBC_PACKAGE = spark_module.MYSQL_JDBC_PACKAGE
 build_executor_cores = spark_module._build_executor_cores
 build_spark_master_status_url = spark_module._build_spark_master_status_url
 build_spark_resource_profile = spark_module._build_spark_resource_profile
@@ -327,6 +328,19 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_cores"], 2)
         self.assertEqual(profile["min_memory_mb"], 3072)
         self.assertEqual(profile["cores_max"], 2)
+
+    def test_mantiz_profile_uses_executor_sized_defaults(self) -> None:
+        profile = build_spark_resource_profile("mantiz", {})
+
+        self.assertEqual(profile["name"], "mantiz")
+        self.assertEqual(profile["min_cores"], 2)
+        self.assertEqual(profile["min_memory_mb"], 3072)
+        self.assertEqual(profile["cores_max"], 2)
+
+    def test_mysql_jdbc_package_is_included_when_configured(self) -> None:
+        spark_res = _spark_resource(mysql_jdbc_package=MYSQL_JDBC_PACKAGE)
+
+        self.assertIn(MYSQL_JDBC_PACKAGE, spark_res._spark_packages())
 
     def test_spark_retry_policy_uses_defaults_and_env_overrides(self) -> None:
         policy = build_spark_retry_conf(

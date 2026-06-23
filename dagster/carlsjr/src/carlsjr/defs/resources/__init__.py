@@ -5,6 +5,10 @@ from .smartaudits_mysql import (
     smartaudits_mysql_resource,
     SmartAuditsMySqlResource,
 )
+from .mantiz_mysql import (
+    mantiz_mysql_resource,
+    MantizMySqlResource,
+)
 from .transformation_ops import transformation_ops, TransformationOps
 from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOManager
 
@@ -17,6 +21,8 @@ __all__ = [
     "SqlDimServerResource",
     "smartaudits_mysql_resource",
     "SmartAuditsMySqlResource",
+    "mantiz_mysql_resource",
+    "MantizMySqlResource",
     "transformation_ops",
     "TransformationOps",
     "SparkDataFrameParquetIOManager",
