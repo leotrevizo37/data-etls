@@ -31,12 +31,15 @@ DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
 DEFAULT_SPARK_RESOURCE_POLL_SECONDS = 10
 DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS = 3
 DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
+DEFAULT_SPARK_SQL_MAX_PLAN_STRING_LENGTH = "20000"
+DEFAULT_SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS = "100"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "smartaudits": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
+    "mantiz": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
 }
 SPARK_RETRY_POLICY_ENV = {
@@ -428,6 +431,20 @@ class SparkResource:
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
             .set("spark.cores.max", str(self.resource_profile["cores_max"]))
+            .set(
+                "spark.sql.maxPlanStringLength",
+                os.getenv(
+                    "SPARK_SQL_MAX_PLAN_STRING_LENGTH",
+                    DEFAULT_SPARK_SQL_MAX_PLAN_STRING_LENGTH,
+                ),
+            )
+            .set(
+                "spark.sql.debug.maxToStringFields",
+                os.getenv(
+                    "SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS",
+                    DEFAULT_SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS,
+                ),
+            )
         )
         if self.driver_host:
             conf.set("spark.driver.host", self.driver_host)
@@ -654,15 +671,17 @@ class SparkResource:
             if row_count == 0:
                 return 0
 
-            for chunk_id in range(self.jdbc_write_num_chunks):
+            chunk_ids = [
+                row["__chunk_id"]
+                for row in df_chunked.select("__chunk_id").distinct().collect()
+            ]
+            for chunk_id in chunk_ids:
                 df_chunk = (
                     df_chunked
                     .filter(f"__chunk_id = {chunk_id}")
                     .drop("__chunk_id")
                     .coalesce(self.jdbc_write_target_partitions)
                 )
-                if len(df_chunk.head(1)) == 0:
-                    continue
 
                 (
                     df_chunk.write
@@ -962,6 +981,225 @@ class SparkResource:
             chunk_column="NormalizedCommentHash",
         )
 
+    def write_fact_mantiz_ticket_lifecycle_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        lifecycle_columns = [
+            "OrganizationId",
+            "ClientId",
+            "BranchId",
+            "BranchName",
+            "TicketId",
+            "Folio",
+            "EquipmentId",
+            "EquipmentName",
+            "EquipmentCatalogName",
+            "FailureTypeId",
+            "FailureTypeName",
+            "SupplierId",
+            "SupplierName",
+            "TicketStatus",
+            "TicketPriority",
+            "TicketType",
+            "TicketSource",
+            "CreatedAt",
+            "ScheduledAt",
+            "ResolvedAt",
+            "ApprovedAt",
+            "CancelledAt",
+            "UpdatedAt",
+            "OpenToScheduledHours",
+            "ScheduledToResolvedHours",
+            "ResolvedToApprovedHours",
+            "OpenToResolvedHours",
+            "OpenToApprovedHours",
+            "OpenToCancelledHours",
+            "CurrentAgeHours",
+            "IsOpen",
+            "IsScheduled",
+            "IsResolved",
+            "IsApproved",
+            "IsCancelled",
+            "IsTerminal",
+            "HasEquipment",
+            "HasFailureType",
+            "HasPhoto",
+            "HasResolutionPhoto",
+            "SourceLastChangedAt",
+        ]
+        df_stage = (
+            df
+            .select(*lifecycle_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *lifecycle_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factMantizTicketLifecycle",
+            chunk_column="TicketId",
+        )
+
+    def write_fact_mantiz_ticket_text_insights_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        insight_columns = [
+            "OrganizationId",
+            "TicketId",
+            "Folio",
+            "BranchId",
+            "EquipmentId",
+            "EquipmentName",
+            "FailureCode",
+            "FailureSubject",
+            "FailureProblem",
+            "SolutionCode",
+            "SolutionSubject",
+            "SolutionPartName",
+            "SparePartName",
+            "SparePartUnitPrice",
+            "SparePartCurrency",
+            "InsightStatus",
+            "ClassificationMethod",
+            "ClassifierConfidence",
+            "NeedsReview",
+            "InsightsJson",
+            "TextEvidenceJson",
+            "SourceLastChangedAt",
+        ]
+        df_stage = (
+            df
+            .select(*insight_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *insight_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factMantizTicketTextInsights",
+            chunk_column="TicketId",
+        )
+
+    def write_mantiz_ticket_text_insight_detail_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        detail_columns = [
+            "OrganizationId",
+            "TicketId",
+            "Folio",
+            "BranchId",
+            "EquipmentId",
+            "EquipmentName",
+            "SourceType",
+            "SourceId",
+            "SourceCreatedAt",
+            "SourceUpdatedAt",
+            "RawTextExcerpt",
+            "RawText",
+            "NormalizedText",
+            "InsightType",
+            "InsightPhraseHash",
+            "ExtractedEquipmentText",
+            "ExtractedFailurePhrase",
+            "NormalizedFailurePhrase",
+            "FailurePhraseHash",
+            "FailureConceptHash",
+            "CanonicalFailureCode",
+            "FailureConceptStatus",
+            "ExtractedSolutionPhrase",
+            "NormalizedSolutionPhrase",
+            "SolutionPhraseHash",
+            "SolutionConceptHash",
+            "CanonicalSolutionCode",
+            "SolutionConceptStatus",
+            "ExtractedSolutionPartText",
+            "NormalizedSolutionPartText",
+            "SolutionPartHash",
+            "SolutionPartConceptHash",
+            "CanonicalSolutionPartName",
+            "SolutionPartConceptStatus",
+            "ExtractedInsightSubject",
+            "ExtractedProblemQualifier",
+            "NormalizedProblemQualifier",
+            "ExtractionMethod",
+            "ExtractionConfidence",
+            "IsNewConceptCandidate",
+            "SourceLastChangedAt",
+        ]
+        df_stage = (
+            df
+            .select(*detail_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *detail_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.MantizTicketTextInsightDetail",
+            chunk_column="TicketId",
+        )
+
+    def write_mantiz_ticket_text_insight_changed_tickets_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        changed_columns = [
+            "OrganizationId",
+            "TicketId",
+        ]
+        df_stage = (
+            df
+            .select(*changed_columns)
+            .dropDuplicates(changed_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *changed_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.MantizTicketTextInsightChangedTicket",
+            chunk_column="TicketId",
+        )
+
+    def write_mantiz_text_insight_review_queue_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        queue_columns = [
+            "InsightType",
+            "ConceptHash",
+            "CanonicalCode",
+            "CanonicalName",
+            "RepresentativeText",
+            "RepresentativeRawText",
+            "FirstSeenAt",
+            "LastSeenAt",
+            "CandidateCount",
+            "TicketCount",
+            "LastTicketId",
+            "SuggestedByMethod",
+        ]
+        df_stage = (
+            df
+            .select(*queue_columns)
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *queue_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.MantizTextInsightReviewQueue",
+            chunk_column="ConceptHash",
+        )
+
     def read_smartaudits_ai_comment_lookup(self) -> DataFrame:
         spark = self.get_spark()
         return spark.read.jdbc(
@@ -986,6 +1224,31 @@ class SparkResource:
         spark = self.get_spark()
         row = spark.read.parquet(artifact_path).select("content").collect()[0]
         return bytes(row.content)
+
+    def read_mantiz_text_model_artifact(self, artifact_path: str) -> bytes:
+        spark = self.get_spark()
+        row = spark.read.parquet(artifact_path).select("content").collect()[0]
+        return bytes(row.content)
+
+    def write_mantiz_text_model_artifact(
+        self,
+        artifact_path: str,
+        model_version: str,
+        content: bytes,
+    ) -> None:
+        spark = self.get_spark()
+        schema = StructType(
+            [
+                StructField("model_version", StringType(), False),
+                StructField("content", BinaryType(), False),
+            ]
+        )
+        (
+            spark.createDataFrame([(model_version, bytearray(content))], schema)
+            .write
+            .mode("overwrite")
+            .parquet(artifact_path)
+        )
 
     def write_smartaudits_model_artifact(
         self,
@@ -1067,10 +1330,13 @@ def spark_resource(init_context):
     jdbc_write_target_partitions = int(os.getenv("JDBC_WRITE_TARGET_PARTITIONS", "2"))
     jdbc_write_batch_size = int(os.getenv("JDBC_WRITE_BATCH_SIZE", "100"))
     mysql_jdbc_package = ""
-    if os.getenv("SMARTAUDITS_MYSQL_HOST"):
+    if os.getenv("SMARTAUDITS_MYSQL_HOST") or os.getenv("MANTIZ_MYSQL_HOST"):
         mysql_jdbc_package = os.getenv(
-            "SMARTAUDITS_MYSQL_JDBC_PACKAGE",
-            MYSQL_JDBC_PACKAGE,
+            "MANTIZ_MYSQL_JDBC_PACKAGE",
+            os.getenv(
+                "SMARTAUDITS_MYSQL_JDBC_PACKAGE",
+                MYSQL_JDBC_PACKAGE,
+            ),
         )
     spark_res = SparkResource(
         master_url=master_url,

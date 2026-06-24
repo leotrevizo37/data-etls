@@ -1,0 +1,717 @@
+import subprocess
+import unittest
+import warnings
+import json
+from datetime import datetime
+from importlib import util
+from pathlib import Path
+
+try:
+    from pyspark.sql import SparkSession
+except Exception:
+    SparkSession = None
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _java_major_version():
+    try:
+        result = subprocess.run(
+            ["java", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return None
+
+    version_text = (result.stderr or result.stdout or "").splitlines()
+    if not version_text:
+        return None
+
+    first_line = version_text[0]
+    marker = 'version "'
+    if marker not in first_line:
+        return None
+    version = first_line.split(marker, 1)[1].split('"', 1)[0]
+    try:
+        if version.startswith("1."):
+            return int(version.split(".")[1])
+        return int(version.split(".", 1)[0])
+    except ValueError:
+        return None
+
+
+SPARK_TESTS_AVAILABLE = SparkSession is not None and (_java_major_version() or 0) >= 17
+
+if SPARK_TESTS_AVAILABLE:
+    path = PROJECT_ROOT / "src" / "carlsjr" / "defs" / "transformations" / "mantiz_tickets.py"
+    spec = util.spec_from_file_location("carlsjr_mantiz_tickets", path)
+    mantiz_module = util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mantiz_module)
+    build_mantiz_ticket_lifecycle_df = mantiz_module.build_mantiz_ticket_lifecycle_df
+    build_mantiz_ticket_text_insight_detail_df = (
+        mantiz_module.build_mantiz_ticket_text_insight_detail_df
+    )
+    build_mantiz_ticket_text_insight_detail_from_sources_df = (
+        mantiz_module.build_mantiz_ticket_text_insight_detail_from_sources_df
+    )
+    build_mantiz_ticket_context_df = mantiz_module.build_mantiz_ticket_context_df
+    build_mantiz_source_texts_from_context_df = (
+        mantiz_module.build_mantiz_source_texts_from_context_df
+    )
+    build_mantiz_ticket_text_insights_df = mantiz_module.build_mantiz_ticket_text_insights_df
+    build_mantiz_ticket_text_insights_fact_from_prepared_df = (
+        mantiz_module.build_mantiz_ticket_text_insights_fact_from_prepared_df
+    )
+    build_mantiz_text_insight_review_queue_df = (
+        mantiz_module.build_mantiz_text_insight_review_queue_df
+    )
+    LIFECYCLE_COLUMNS = mantiz_module.LIFECYCLE_COLUMNS
+    INSIGHT_DETAIL_COLUMNS = mantiz_module.INSIGHT_DETAIL_COLUMNS
+    INSIGHT_COLUMNS = mantiz_module.INSIGHT_COLUMNS
+    REVIEW_QUEUE_COLUMNS = mantiz_module.REVIEW_QUEUE_COLUMNS
+else:
+    build_mantiz_ticket_lifecycle_df = None
+    build_mantiz_ticket_text_insight_detail_df = None
+    build_mantiz_ticket_text_insight_detail_from_sources_df = None
+    build_mantiz_ticket_context_df = None
+    build_mantiz_source_texts_from_context_df = None
+    build_mantiz_ticket_text_insights_df = None
+    build_mantiz_ticket_text_insights_fact_from_prepared_df = None
+    build_mantiz_text_insight_review_queue_df = None
+    LIFECYCLE_COLUMNS = []
+    INSIGHT_DETAIL_COLUMNS = []
+    INSIGHT_COLUMNS = []
+    REVIEW_QUEUE_COLUMNS = []
+
+
+warnings.simplefilter("ignore", ResourceWarning)
+
+
+TICKET_SCHEMA = """
+id string,
+branchId string,
+equipmentId string,
+failureId string,
+supplierId string,
+folio string,
+status string,
+priority string,
+type string,
+source string,
+createdAt timestamp,
+scheduledAt timestamp,
+resolvedAt timestamp,
+approvedAt timestamp,
+cancelledAt timestamp,
+updatedAt timestamp,
+photo string,
+resolutionPhoto string,
+title string,
+description string,
+scheduleNotes string,
+resolutionNotes string,
+approvalNotes string,
+cancellationNotes string
+"""
+
+COMMENT_SCHEMA = """
+id string,
+ticketId string,
+content string,
+createdAt timestamp,
+updatedAt timestamp
+"""
+
+TICKET_SPARE_PART_SCHEMA = """
+id string,
+ticketId string,
+sparePartId string,
+quantity double,
+unitCost double,
+totalCost double,
+createdAt timestamp
+"""
+
+SPARE_PART_SCHEMA = """
+id string,
+organizationId string,
+name string,
+sku string,
+description string,
+unit string,
+minStock double,
+currentStock double,
+cost double,
+photo string,
+createdAt timestamp,
+updatedAt timestamp
+"""
+
+
+@unittest.skipIf(
+    not SPARK_TESTS_AVAILABLE,
+    "pyspark or Java 17+ is not available in this environment",
+)
+class MantizTicketsTransformationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.spark = (
+            SparkSession.builder
+            .master("local[1]")
+            .appName("carlsjr-mantiz-tickets-tests")
+            .config("spark.ui.enabled", "false")
+            .config("spark.ui.showConsoleProgress", "false")
+            .config("spark.sql.shuffle.partitions", "1")
+            .config("spark.sql.session.timeZone", "UTC")
+            .getOrCreate()
+        )
+        cls.spark.sparkContext.setLogLevel("ERROR")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.spark.stop()
+
+    def _context_frames(self):
+        branches = self.spark.createDataFrame(
+            [("b1", "c1", "Sucursal 1")],
+            "id string, clientId string, name string",
+        )
+        clients = self.spark.createDataFrame(
+            [("c1", "org-carlsjr")],
+            "id string, organizationId string",
+        )
+        equipment_instances = self.spark.createDataFrame(
+            [("e1", "ec1", "Parrilla cocina", "A-1", "SN-1")],
+            "id string, catalogId string, location string, customAssetId string, serialNumber string",
+        )
+        equipment_catalog = self.spark.createDataFrame(
+            [("ec1", "Parrilla")],
+            "id string, name string",
+        )
+        failure_types = self.spark.createDataFrame(
+            [("f1", "Falla general")],
+            "id string, name string",
+        )
+        suppliers = self.spark.createDataFrame(
+            [("s1", "Proveedor 1")],
+            "id string, name string",
+        )
+        return (
+            branches,
+            clients,
+            equipment_instances,
+            equipment_catalog,
+            failure_types,
+            suppliers,
+        )
+
+    def _empty_comments(self):
+        return self.spark.createDataFrame([], COMMENT_SCHEMA)
+
+    def test_lifecycle_calculates_phase_durations_and_preserves_status(self) -> None:
+        tickets = self.spark.createDataFrame(
+            [
+                {
+                    "id": "t-open",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-1",
+                    "status": "ABIERTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": None,
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 1, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                },
+                {
+                    "id": "t-approved",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-2",
+                    "status": "APROBADO",
+                    "priority": "Media",
+                    "type": "PREVENTIVO",
+                    "source": "WEB",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": datetime(2026, 1, 1, 2, 0),
+                    "resolvedAt": datetime(2026, 1, 1, 5, 0),
+                    "approvedAt": datetime(2026, 1, 1, 8, 0),
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 8, 0),
+                    "photo": "photo.jpg",
+                    "resolutionPhoto": "resolution.jpg",
+                    "title": "",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                },
+                {
+                    "id": "t-cancelled",
+                    "branchId": "b1",
+                    "equipmentId": None,
+                    "failureId": None,
+                    "supplierId": None,
+                    "folio": "F-3",
+                    "status": "CANCELADO",
+                    "priority": "Baja",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": None,
+                    "approvedAt": None,
+                    "cancelledAt": datetime(2026, 1, 1, 4, 0),
+                    "updatedAt": datetime(2026, 1, 1, 4, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                },
+                {
+                    "id": "t-orphan",
+                    "branchId": "missing",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-4",
+                    "status": "ABIERTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": None,
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 1, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                },
+            ],
+            TICKET_SCHEMA,
+        )
+        frames = self._context_frames()
+
+        result = build_mantiz_ticket_lifecycle_df(
+            tickets_df=tickets,
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+            as_of_timestamp="2026-01-02 00:00:00",
+        )
+
+        self.assertEqual(result.columns, LIFECYCLE_COLUMNS)
+        self.assertEqual(result.count(), 3)
+        self.assertEqual(
+            {row.TicketId for row in result.select("TicketId").collect()},
+            {"t-open", "t-approved", "t-cancelled"},
+        )
+
+        approved = result.filter("TicketId = 't-approved'").collect()[0]
+        self.assertEqual(approved.TicketStatus, "APROBADO")
+        self.assertEqual(float(approved.OpenToScheduledHours), 2.0)
+        self.assertEqual(float(approved.ScheduledToResolvedHours), 3.0)
+        self.assertEqual(float(approved.ResolvedToApprovedHours), 3.0)
+        self.assertEqual(float(approved.OpenToResolvedHours), 5.0)
+        self.assertEqual(float(approved.OpenToApprovedHours), 8.0)
+        self.assertTrue(approved.IsApproved)
+        self.assertTrue(approved.IsTerminal)
+        self.assertTrue(approved.HasPhoto)
+        self.assertTrue(approved.HasResolutionPhoto)
+        self.assertIsNone(approved.CurrentAgeHours)
+
+        open_ticket = result.filter("TicketId = 't-open'").collect()[0]
+        self.assertTrue(open_ticket.IsOpen)
+        self.assertEqual(float(open_ticket.CurrentAgeHours), 24.0)
+
+        cancelled = result.filter("TicketId = 't-cancelled'").collect()[0]
+        self.assertTrue(cancelled.IsCancelled)
+        self.assertTrue(cancelled.IsTerminal)
+        self.assertFalse(cancelled.HasEquipment)
+        self.assertFalse(cancelled.HasFailureType)
+        self.assertEqual(float(cancelled.OpenToCancelledHours), 4.0)
+
+    def test_text_insights_extract_failures_solutions_and_solution_parts(self) -> None:
+        tickets = self.spark.createDataFrame(
+            [
+                {
+                    "id": "t-text",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-10",
+                    "status": "RESUELTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": datetime(2026, 1, 1, 2, 0),
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 2, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "Parrilla no calienta",
+                    "description": "refrigerador no enfria",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "se cambia reten",
+                    "approvalNotes": "se apreto llave floja",
+                    "cancellationNotes": "se acomoda termostato",
+                }
+            ],
+            TICKET_SCHEMA,
+        )
+        frames = self._context_frames()
+
+        result = build_mantiz_ticket_text_insights_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+
+        self.assertEqual(result.columns, INSIGHT_COLUMNS)
+        self.assertEqual(result.count(), 1)
+
+        row = result.collect()[0]
+        self.assertEqual(row.TicketId, "t-text")
+        self.assertIn(row.FailureCode, {"NO_CALIENTA", "NO_ENFRIA"})
+        self.assertEqual(row.SolutionCode, "CAMBIO_REFACCION")
+        self.assertEqual(row.SolutionPartName, "RETEN")
+        self.assertIsNone(row.SparePartName)
+        self.assertEqual(row.InsightStatus, "CLASSIFIED")
+        self.assertEqual(row.ClassificationMethod, "RULE")
+        self.assertGreater(float(row.ClassifierConfidence), 0.0)
+        self.assertTrue(row.NeedsReview)
+
+        insights = json.loads(row.InsightsJson)
+        failure_codes = {item["Code"] for item in insights if item["Type"] == "FALLA"}
+        solution_codes = {item["Code"] for item in insights if item["Type"] == "SOLUCION"}
+        solution_parts = {
+            item["PartName"]
+            for item in insights
+            if item["Type"] == "REFACCION_SOLUCION"
+        }
+        problems = {
+            item["Problem"]
+            for item in insights
+            if item.get("Problem") is not None
+        }
+        text_sources = {item["SourceType"] for item in json.loads(row.TextEvidenceJson)}
+        self.assertTrue({"NO_CALIENTA", "NO_ENFRIA"}.issubset(failure_codes))
+        self.assertEqual(solution_codes, {"CAMBIO_REFACCION", "AJUSTE"})
+        self.assertEqual(solution_parts, {"RETEN", "LLAVE", "TERMOSTATO"})
+        self.assertIn("FLOJA", problems)
+        self.assertTrue(
+            {"TICKET_TITLE", "TICKET_DESCRIPTION", "TICKET_RESOLUTION_NOTES"}.issubset(
+                text_sources,
+            )
+        )
+
+        detail = build_mantiz_ticket_text_insight_detail_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+
+        self.assertEqual(detail.columns, INSIGHT_DETAIL_COLUMNS)
+        self.assertTrue(
+            any(
+                row.RawText == "se cambia reten"
+                for row in detail.select("RawText").collect()
+            )
+        )
+
+        review_queue = build_mantiz_text_insight_review_queue_df(detail)
+        self.assertEqual(review_queue.columns, REVIEW_QUEUE_COLUMNS)
+        raw_texts = {
+            row.RepresentativeRawText
+            for row in review_queue.select("RepresentativeRawText").collect()
+        }
+        self.assertIn("se cambia reten", raw_texts)
+        self.assertTrue(
+            {"FALLA", "SOLUCION", "REFACCION_SOLUCION"}.issubset(
+                {row.InsightType for row in review_queue.select("InsightType").collect()}
+            )
+        )
+
+    def test_text_insights_keeps_solution_part_separate_from_spare_part(self) -> None:
+        tickets = self.spark.createDataFrame(
+            [
+                {
+                    "id": "t-spare",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-12",
+                    "status": "RESUELTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": datetime(2026, 1, 1, 2, 0),
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 2, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "Parrilla no calienta",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "se cambia reten",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                }
+            ],
+            TICKET_SCHEMA,
+        )
+        ticket_spare_parts = self.spark.createDataFrame(
+            [
+                (
+                    "tsp1",
+                    "t-spare",
+                    "sp1",
+                    1.0,
+                    125.50,
+                    125.50,
+                    datetime(2026, 1, 1, 3, 0),
+                )
+            ],
+            TICKET_SPARE_PART_SCHEMA,
+        )
+        spare_parts = self.spark.createDataFrame(
+            [
+                (
+                    "sp1",
+                    "org-carlsjr",
+                    "Reten original Mantiz",
+                    "RET-1",
+                    "",
+                    "pieza",
+                    0.0,
+                    0.0,
+                    110.00,
+                    "",
+                    datetime(2026, 1, 1, 0, 0),
+                    datetime(2026, 1, 1, 1, 0),
+                )
+            ],
+            SPARE_PART_SCHEMA,
+        )
+        frames = self._context_frames()
+
+        result = build_mantiz_ticket_text_insights_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+            ticket_spare_parts_df=ticket_spare_parts,
+            spare_parts_df=spare_parts,
+        )
+
+        row = result.collect()[0]
+        self.assertEqual(row.SolutionPartName, "RETEN")
+        self.assertEqual(row.SparePartName, "Reten original Mantiz")
+        self.assertEqual(float(row.SparePartUnitPrice), 125.50)
+        self.assertIsNone(row.SparePartCurrency)
+
+    def test_text_insights_prepared_path_handles_many_tickets_and_comments(self) -> None:
+        ticket_rows = []
+        comment_rows = []
+        for index in range(30):
+            ticket_id = "t-scale-" + str(index)
+            ticket_rows.append(
+                {
+                    "id": ticket_id,
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-S-" + str(index),
+                    "status": "RESUELTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": datetime(2026, 1, 1, 2, 0),
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 2, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": "Parrilla no calienta" if index % 2 == 0 else "Refrigerador no enfria",
+                    "description": "parrilla no calienta" if index % 2 == 0 else "refrigerador no enfria",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "se apreto llave floja" if index % 3 == 0 else "se cambia reten",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                }
+            )
+            comment_rows.append(
+                (
+                    "comment-" + str(index),
+                    ticket_id,
+                    "se acomoda termostato" if index % 5 == 0 else "",
+                    datetime(2026, 1, 1, 1, 0),
+                    datetime(2026, 1, 1, 1, 0),
+                )
+            )
+
+        tickets = self.spark.createDataFrame(ticket_rows, TICKET_SCHEMA)
+        comments = self.spark.createDataFrame(comment_rows, COMMENT_SCHEMA)
+        frames = self._context_frames()
+        context = build_mantiz_ticket_context_df(
+            tickets_df=tickets,
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+        sources = build_mantiz_source_texts_from_context_df(context, comments)
+        detail = build_mantiz_ticket_text_insight_detail_from_sources_df(sources)
+        result = build_mantiz_ticket_text_insights_fact_from_prepared_df(
+            context_df=context,
+            sources_df=sources,
+            insight_detail_df=detail,
+        )
+
+        self.assertEqual(result.count(), 30)
+        self.assertEqual(
+            result.groupBy("TicketId").count().filter("count <> 1").count(),
+            0,
+        )
+        self.assertEqual(result.filter("SparePartName IS NOT NULL").count(), 0)
+
+        sample = result.filter("TicketId = 't-scale-0'").collect()[0]
+        self.assertEqual(sample.SolutionCode, "AJUSTE")
+        self.assertEqual(sample.SolutionPartName, "LLAVE")
+        self.assertEqual(sample.FailureCode, "NO_CALIENTA")
+        self.assertTrue(sample.NeedsReview)
+        self.assertGreater(len(json.loads(sample.InsightsJson)), 1)
+
+        review_queue = build_mantiz_text_insight_review_queue_df(detail)
+        self.assertGreater(
+            review_queue.filter("RepresentativeRawText = 'se apreto llave floja'").count(),
+            0,
+        )
+
+    def test_empty_text_does_not_generate_insights(self) -> None:
+        tickets = self.spark.createDataFrame(
+            [
+                {
+                    "id": "t-empty",
+                    "branchId": "b1",
+                    "equipmentId": "e1",
+                    "failureId": "f1",
+                    "supplierId": "s1",
+                    "folio": "F-11",
+                    "status": "ABIERTO",
+                    "priority": "Alta",
+                    "type": "CORRECTIVO",
+                    "source": "APP",
+                    "createdAt": datetime(2026, 1, 1, 0, 0),
+                    "scheduledAt": None,
+                    "resolvedAt": None,
+                    "approvedAt": None,
+                    "cancelledAt": None,
+                    "updatedAt": datetime(2026, 1, 1, 1, 0),
+                    "photo": "",
+                    "resolutionPhoto": "",
+                    "title": " ",
+                    "description": "",
+                    "scheduleNotes": "",
+                    "resolutionNotes": "",
+                    "approvalNotes": "",
+                    "cancellationNotes": "",
+                }
+            ],
+            TICKET_SCHEMA,
+        )
+        frames = self._context_frames()
+
+        result = build_mantiz_ticket_text_insights_df(
+            tickets_df=tickets,
+            ticket_comments_df=self._empty_comments(),
+            branches_df=frames[0],
+            clients_df=frames[1],
+            equipment_instances_df=frames[2],
+            equipment_catalog_df=frames[3],
+            failure_types_df=frames[4],
+            suppliers_df=frames[5],
+            organization_id="org-carlsjr",
+        )
+
+        self.assertEqual(result.count(), 1)
+        row = result.collect()[0]
+        self.assertEqual(row.InsightStatus, "SIN_CLASIFICAR")
+        self.assertEqual(row.ClassificationMethod, "SIN_CLASIFICAR")
+        self.assertEqual(float(row.ClassifierConfidence), 0.0)
+        self.assertTrue(row.NeedsReview)
+        self.assertEqual(row.InsightsJson, "[]")
+        self.assertEqual(row.TextEvidenceJson, "[]")
+        self.assertIsNone(row.FailureCode)
+
+
+if __name__ == "__main__":
+    unittest.main()
