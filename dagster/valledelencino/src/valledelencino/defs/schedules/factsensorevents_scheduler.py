@@ -4,7 +4,7 @@ from ..jobs import fact_sensor_events_job
 
 
 sensor_events_sched_every_6h = ScheduleDefinition(
-    name="sensor_events_sched_every_6h",
+    name="021_sense_sensor_events_every_6h",
     job=fact_sensor_events_job,
     cron_schedule="40 */6 * * *",
     execution_timezone="America/Ciudad_Juarez",
@@ -12,7 +12,7 @@ sensor_events_sched_every_6h = ScheduleDefinition(
 )
 
 sensor_events_sched_every_1h_w = ScheduleDefinition(
-    name="sensor_events_sched_every_1h_w",
+    name="021_sense_sensor_events_every_1h_w",
     job=fact_sensor_events_job,
     cron_schedule="40 5-16 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",

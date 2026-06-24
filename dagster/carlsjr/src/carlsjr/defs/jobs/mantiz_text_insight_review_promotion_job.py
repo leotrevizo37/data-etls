@@ -19,6 +19,6 @@ def promote_mantiz_text_insight_reviews_op(context) -> dict:
     return metadata
 
 
-@job(tags={"job_type": "mantiz", "user_code": "carlsjr"})
+@job(name="102_mantiz_text_insight_review_promotion", tags={"job_type": "mantiz", "user_code": "carlsjr"})
 def mantiz_text_insight_review_promotion_job():
     promote_mantiz_text_insight_reviews_op()
