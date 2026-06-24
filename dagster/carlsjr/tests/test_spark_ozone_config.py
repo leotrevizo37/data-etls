@@ -385,7 +385,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
     def test_spark_app_context_uses_dagster_run_tags(self) -> None:
         class _Run:
-            job_name = "fact_lecturas_ingestion_job"
+            job_name = "010_sense_lecturas_ingestion"
             run_id = "abcdef123456"
             tags = {"user_code": "carlsjr", "job_type": "lecturas"}
 
@@ -401,7 +401,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(context["job_type"], "lecturas")
         self.assertEqual(
             context["app_name"],
-            "carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            "carlsjr/010_sense_lecturas_ingestion/abcdef12",
         )
 
     def test_wait_for_spark_capacity_fails_when_cluster_is_full(self) -> None:
@@ -422,7 +422,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
             master_url="spark://spark-master:7077",
             executor_mem="2G",
             executor_cores=1,
-            app_name="carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            app_name="carlsjr/010_sense_lecturas_ingestion/abcdef12",
             job_type="lecturas",
             driver_host="10.0.0.5",
             driver_port="17001",
@@ -434,7 +434,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         self.assertEqual(
             conf.get("spark.app.name"),
-            "carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            "carlsjr/010_sense_lecturas_ingestion/abcdef12",
         )
         self.assertEqual(conf.get("spark.executor.memory"), "2G")
         self.assertEqual(conf.get("spark.executor.cores"), "1")
