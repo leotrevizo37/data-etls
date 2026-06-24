@@ -132,14 +132,15 @@ class MantizMySqlResourceTests(unittest.TestCase):
         self.assertIn("mantiz_text_insight_review_promotion_job", defs_init)
 
     def test_mantiz_sql_init_is_split_by_object(self) -> None:
-        init_dir = REPO_ROOT / "sql" / "user_codes" / "carlsjr" / "init"
+        init_dir = REPO_ROOT / "sql" / "init"
 
-        self.assertTrue((init_dir / "factMantizTicketLifecycle.sql").exists())
-        self.assertTrue((init_dir / "factMantizTicketTextInsights.sql").exists())
-        self.assertTrue((init_dir / "MantizTextInsightReviewQueue.sql").exists())
-        self.assertTrue((init_dir / "MantizTicketTextInsightDetail.sql").exists())
+        self.assertTrue((init_dir / "200_dwh_factMantizTicketLifecycle.sql").exists())
+        self.assertTrue((init_dir / "202_dwh_factMantizTicketTextInsights.sql").exists())
+        self.assertTrue((init_dir / "207_ctl_MantizTextInsightReviewQueue.sql").exists())
+        self.assertTrue((init_dir / "205_stg_MantizTicketTextInsightDetail.sql").exists())
+        self.assertFalse((init_dir / "mantizSchemas.sql").exists())
         self.assertFalse((init_dir / "dropMantizDwhDimensions.sql").exists())
-        self.assertFalse(any(path.name[:1].isdigit() for path in init_dir.glob("*.sql")))
+        self.assertTrue(all(path.name[:3].isdigit() for path in init_dir.glob("*.sql")))
         self.assertFalse(any(path.name.startswith("dimMantiz") for path in init_dir.glob("*.sql")))
         self.assertFalse((init_dir / "factMantizTickets.sql").exists())
 
