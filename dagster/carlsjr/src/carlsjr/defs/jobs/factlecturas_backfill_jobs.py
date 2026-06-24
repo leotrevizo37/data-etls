@@ -131,6 +131,7 @@ def backfill_factlecturas_by_sensor_op(context) -> Dict[str, Any]:
 
 
 @job(
+    name="012_sense_lecturas_backfill_daily",
     config=fact_lecturas_backfill_daily_config,
     tags={"job_type": "lecturas", "user_code": USER_CODE, "backfill": "factlecturas_daily"},
 )
@@ -139,6 +140,7 @@ def fact_lecturas_backfill_daily_job():
 
 
 @job(
+    name="013_sense_lecturas_backfill_sensor",
     tags={"job_type": "lecturas", "user_code": USER_CODE, "backfill": "factlecturas_sensor"},
 )
 def fact_lecturas_sensor_backfill_job():

@@ -2,7 +2,7 @@ from dagster import AssetKey, AssetSelection, define_asset_job, in_process_execu
 
 
 fact_mantiz_tickets_job = define_asset_job(
-    name="fact_mantiz_tickets_job",
+    name="100_mantiz_tickets",
     selection=AssetSelection.keys(
         AssetKey(["carlsjr", "dwh_factmantizticketlifecycle"]),
         AssetKey(["carlsjr", "dwh_factmantiztickettextinsights"]),
