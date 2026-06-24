@@ -149,6 +149,22 @@ class MantizMergeSqlTests(unittest.TestCase):
         self.assertIn(".mapPartitions(", section)
         self.assertIn(".broadcast(", section)
 
+    def test_text_insights_materializes_lineage_before_jdbc_writes(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "assets"
+            / "dwh_factMantizTicketTextInsights.py"
+        )
+        source = path.read_text(encoding="utf-8")
+
+        self.assertIn("def _materialize_mantiz_text_insights_df", source)
+        self.assertIn(".localCheckpoint(", source)
+        self.assertIn("StorageLevel.MEMORY_AND_DISK", source)
+        self.assertIn("write_fact_mantiz_ticket_text_insights_stage", source)
+
 
 if __name__ == "__main__":
     unittest.main()

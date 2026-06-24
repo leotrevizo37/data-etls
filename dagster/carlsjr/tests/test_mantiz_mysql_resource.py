@@ -150,12 +150,24 @@ class MantizMySqlResourceTests(unittest.TestCase):
             / "carlsjr"
             / "defs"
             / "assets"
-            / "mantiz_common.py"
+            / "dwh_factMantizTicketTextInsights.py"
         ).read_text()
 
         self.assertIn("OR EXISTS (", source)
         self.assertIn("FROM TicketComment tc", source)
         self.assertNotIn("LEFT JOIN TicketComment", source)
+
+    def test_mantiz_common_asset_helper_does_not_exist(self) -> None:
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "src"
+                / "carlsjr"
+                / "defs"
+                / "assets"
+                / "mantiz_common.py"
+            ).exists()
+        )
 
 
 if __name__ == "__main__":

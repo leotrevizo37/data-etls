@@ -447,6 +447,8 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(conf.get("spark.task.maxFailures"), "8")
         self.assertEqual(conf.get("spark.shuffle.io.maxRetries"), "10")
         self.assertEqual(conf.get("spark.network.timeout"), "800s")
+        self.assertEqual(conf.get("spark.sql.maxPlanStringLength"), "20000")
+        self.assertEqual(conf.get("spark.sql.debug.maxToStringFields"), "100")
 
     def test_wait_for_spark_capacity_fails_when_worker_network_is_unreachable(self) -> None:
         spark_res = _spark_resource(

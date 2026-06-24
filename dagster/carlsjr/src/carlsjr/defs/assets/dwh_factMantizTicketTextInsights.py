@@ -1,8 +1,9 @@
 from datetime import datetime
 import os
+from time import perf_counter
 from typing import Any, Dict, Optional
 
-from dagster import In, MaterializeResult, Out, RetryRequested, graph_asset, op
+from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
 from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 
@@ -19,26 +20,272 @@ from ..transformations.mantiz_text_classifier import (
     load_mantiz_model_bytes,
     predict_mantiz_text,
 )
-from .mantiz_common import (
-    MANTIZ_MAX_RETRIES,
-    MANTIZ_RETRY_DELAY_SECONDS,
-    MANTIZ_RETRY_POLICY,
-    TEXT_INSIGHTS_INGESTION_NAME,
-    branches_for_changed_text_tickets_query,
-    changed_text_tickets_query,
-    clients_for_changed_text_tickets_query,
-    comments_for_changed_tickets_query,
-    equipment_catalog_for_changed_text_tickets_query,
-    equipment_instances_for_changed_text_tickets_query,
-    failure_types_for_changed_text_tickets_query,
-    finalize_run,
-    read_mysql_query,
-    spare_parts_for_changed_text_tickets_query,
-    start_run,
-    suppliers_for_changed_text_tickets_query,
-    ticket_spare_parts_for_changed_text_tickets_query,
-    validate_mantiz_config,
+
+
+MANTIZ_TEXT_INSIGHTS_MAX_RETRIES = 3
+MANTIZ_TEXT_INSIGHTS_RETRY_DELAY_SECONDS = 60
+MANTIZ_TEXT_INSIGHTS_RETRY_POLICY = RetryPolicy(
+    max_retries=MANTIZ_TEXT_INSIGHTS_MAX_RETRIES,
+    delay=MANTIZ_TEXT_INSIGHTS_RETRY_DELAY_SECONDS,
 )
+TEXT_INSIGHTS_INGESTION_NAME = "factMantizTicketTextInsights"
+
+
+def _mysql_datetime(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _mysql_literal(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _read_mantiz_text_insights_mysql_query(
+    spark_res: SparkResource,
+    mysql: MantizMySqlResource,
+    query: str,
+    alias: str,
+) -> DataFrame:
+    spark = spark_res.get_spark()
+    return (
+        spark.read
+        .format("jdbc")
+        .option("dbtable", "(" + query + ") AS " + alias)
+        .options(**mysql.get_basic_options())
+        .load()
+    )
+
+
+def _changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    from_str = _mysql_datetime(from_utc)
+    to_str = _mysql_datetime(to_utc)
+    org = _mysql_literal(organization_id)
+    return (
+        "SELECT DISTINCT t.* "
+        "FROM Ticket t "
+        "LEFT JOIN Branch b ON b.id = t.branchId "
+        "LEFT JOIN Client c ON c.id = b.clientId "
+        "WHERE c.organizationId = " + org + " "
+        "AND ("
+        "(COALESCE(t.updatedAt, t.createdAt) >= '" + from_str + "' "
+        "AND COALESCE(t.updatedAt, t.createdAt) < '" + to_str + "') "
+        "OR EXISTS ("
+        "SELECT 1 FROM TicketComment tc "
+        "WHERE tc.ticketId = t.id "
+        "AND COALESCE(tc.updatedAt, tc.createdAt) >= '" + from_str + "' "
+        "AND COALESCE(tc.updatedAt, tc.createdAt) < '" + to_str + "'"
+        ")"
+        ")"
+    )
+
+
+def _branches_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT b.id, b.clientId, b.name "
+        "FROM Branch b "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.branchId = b.id"
+    )
+
+
+def _clients_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    org = _mysql_literal(organization_id)
+    return (
+        "SELECT DISTINCT c.id, c.organizationId "
+        "FROM Client c "
+        "INNER JOIN Branch b ON b.clientId = c.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.branchId = b.id "
+        "WHERE c.organizationId = " + org
+    )
+
+
+def _equipment_instances_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ei.id, ei.catalogId, ei.location, ei.customAssetId, ei.serialNumber "
+        "FROM EquipmentInstance ei "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.equipmentId = ei.id"
+    )
+
+
+def _equipment_catalog_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ec.id, ec.name "
+        "FROM EquipmentCatalog ec "
+        "INNER JOIN EquipmentInstance ei ON ei.catalogId = ec.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.equipmentId = ei.id"
+    )
+
+
+def _failure_types_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT ft.id, ft.name "
+        "FROM FailureType ft "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.failureId = ft.id"
+    )
+
+
+def _suppliers_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT s.id, s.name "
+        "FROM Supplier s "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.supplierId = s.id"
+    )
+
+
+def _ticket_spare_parts_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT DISTINCT tsp.* "
+        "FROM TicketSparePart tsp "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.id = tsp.ticketId"
+    )
+
+
+def _spare_parts_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    org = _mysql_literal(organization_id)
+    return (
+        "SELECT DISTINCT sp.* "
+        "FROM SparePart sp "
+        "INNER JOIN TicketSparePart tsp ON tsp.sparePartId = sp.id "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON changed_tickets.id = tsp.ticketId "
+        "WHERE sp.organizationId = " + org
+    )
+
+
+def _comments_for_changed_text_tickets_query(
+    from_utc: datetime,
+    to_utc: datetime,
+    organization_id: str,
+) -> str:
+    changed_tickets = _changed_text_tickets_query(from_utc, to_utc, organization_id)
+    return (
+        "SELECT tc.* "
+        "FROM TicketComment tc "
+        "INNER JOIN (" + changed_tickets + ") changed_tickets "
+        "ON tc.ticketId = changed_tickets.id"
+    )
+
+
+def _validate_mantiz_text_insights_config(mysql: MantizMySqlResource) -> None:
+    if not mysql.organization_id:
+        raise ValueError("MANTIZ_ORGANIZATION_ID is required")
+
+
+def _get_mantiz_text_insights_start_date() -> datetime:
+    start_date = os.getenv("MANTIZ_START_DATE", "2026-01-01")
+    return datetime.strptime(start_date, "%Y-%m-%d")
+
+
+def _start_mantiz_text_insights_run(context) -> Dict[str, Any]:
+    start_time = perf_counter()
+    sql: SqlServerResource = context.resources.sqlserver
+
+    last_loaded_at = sql.get_watermark(TEXT_INSIGHTS_INGESTION_NAME)
+    if last_loaded_at is None:
+        last_loaded_at = _get_mantiz_text_insights_start_date()
+
+    from_utc = last_loaded_at.replace(microsecond=0)
+    to_utc = datetime.utcnow().replace(microsecond=0)
+    sql.mark_run_started(TEXT_INSIGHTS_INGESTION_NAME)
+
+    context.log.info(
+        TEXT_INSIGHTS_INGESTION_NAME
+        + " run window from "
+        + str(from_utc)
+        + " to "
+        + str(to_utc)
+    )
+
+    return {
+        "from_utc": from_utc,
+        "to_utc": to_utc,
+        "original_last_loaded_at": last_loaded_at,
+        "start_time": start_time,
+    }
+
+
+def _finalize_mantiz_text_insights_run(context, result: Dict[str, Any]):
+    sql: SqlServerResource = context.resources.sqlserver
+
+    to_utc: datetime = result["to_utc"]
+    original_last_loaded_at: datetime = result["original_last_loaded_at"]
+    max_source_changed_at: Optional[datetime] = result["max_source_changed_at"]
+    succeeded: bool = result["succeeded"]
+    error_message: Optional[str] = result["error_message"]
+
+    if not succeeded:
+        new_watermark = original_last_loaded_at
+    elif max_source_changed_at is None:
+        new_watermark = to_utc
+    else:
+        new_watermark = max(max_source_changed_at, original_last_loaded_at)
+
+    sql.mark_run_completed(
+        ingestion_name=TEXT_INSIGHTS_INGESTION_NAME,
+        new_last_loaded_at=new_watermark,
+        succeeded=succeeded,
+        error_message=error_message,
+    )
+
+    start_time = result.get("start_time")
+    elapsed = round(perf_counter() - start_time, 3) if start_time else 0.0
+
+    return MaterializeResult(
+        metadata={
+            "row_count": result.get("row_count", 0),
+            "merged_rows": result.get("merged_rows", 0),
+            "elapsed_seconds": elapsed,
+        }
+    )
 
 
 def _load_active_mantiz_text_model_payloads(
@@ -136,21 +383,28 @@ def _predict_mantiz_text_partition(rows, model_payloads, threshold):
             )
 
 
+def _materialize_mantiz_text_insights_df(df: DataFrame) -> DataFrame:
+    return df.localCheckpoint(
+        eager=True,
+        storageLevel=StorageLevel.MEMORY_AND_DISK,
+    )
+
+
 @op(
     required_resource_keys={"sqlserver"},
     ins={},
     out=Out(Dict[str, Any]),
-    retry_policy=MANTIZ_RETRY_POLICY,
+    retry_policy=MANTIZ_TEXT_INSIGHTS_RETRY_POLICY,
 )
 def start_mantiz_text_insights_run_and_get_range_op(context) -> Dict[str, Any]:
-    return start_run(context, TEXT_INSIGHTS_INGESTION_NAME)
+    return _start_mantiz_text_insights_run(context)
 
 
 @op(
     required_resource_keys={"sqlserver", "spark", "mantiz_mysql"},
     ins={"window": In(Dict[str, Any])},
     out=Out(Dict[str, Any]),
-    retry_policy=MANTIZ_RETRY_POLICY,
+    retry_policy=MANTIZ_TEXT_INSIGHTS_RETRY_POLICY,
 )
 def transform_and_load_mantiz_text_insights_op(
     context,
@@ -159,7 +413,7 @@ def transform_and_load_mantiz_text_insights_op(
     sql: SqlServerResource = context.resources.sqlserver
     spark_res: SparkResource = context.resources.spark
     mysql: MantizMySqlResource = context.resources.mantiz_mysql
-    validate_mantiz_config(mysql)
+    _validate_mantiz_text_insights_config(mysql)
 
     from_utc: datetime = window["from_utc"]
     to_utc: datetime = window["to_utc"]
@@ -187,10 +441,10 @@ def transform_and_load_mantiz_text_insights_op(
         if retry_number > 0:
             sql.clear_fact_mantiz_ticket_text_insights_stage(run_id)
 
-        tickets_df = read_mysql_query(
+        tickets_df = _read_mantiz_text_insights_mysql_query(
             spark_res,
             mysql,
-            changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+            _changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
             "changed_mantiz_text_tickets",
         )
 
@@ -198,58 +452,58 @@ def transform_and_load_mantiz_text_insights_op(
             context.log.info("No Mantiz text insight tickets found in window.")
             succeeded = True
         else:
-            branches_df = read_mysql_query(
+            branches_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                branches_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _branches_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_branches",
             )
-            clients_df = read_mysql_query(
+            clients_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                clients_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _clients_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_clients",
             )
-            equipment_instances_df = read_mysql_query(
+            equipment_instances_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                equipment_instances_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _equipment_instances_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_equipment_instances",
             )
-            equipment_catalog_df = read_mysql_query(
+            equipment_catalog_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                equipment_catalog_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _equipment_catalog_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_equipment_catalog",
             )
-            failure_types_df = read_mysql_query(
+            failure_types_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                failure_types_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _failure_types_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_failure_types",
             )
-            suppliers_df = read_mysql_query(
+            suppliers_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                suppliers_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _suppliers_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_suppliers",
             )
-            ticket_spare_parts_df = read_mysql_query(
+            ticket_spare_parts_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                ticket_spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _ticket_spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_ticket_spare_parts",
             )
-            spare_parts_df = read_mysql_query(
+            spare_parts_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _spare_parts_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_spare_parts",
             )
-            comments_df = read_mysql_query(
+            comments_df = _read_mantiz_text_insights_mysql_query(
                 spark_res,
                 mysql,
-                comments_for_changed_tickets_query(from_utc, to_utc, mysql.organization_id),
+                _comments_for_changed_text_tickets_query(from_utc, to_utc, mysql.organization_id),
                 "changed_mantiz_ticket_comments",
             )
 
@@ -262,8 +516,9 @@ def transform_and_load_mantiz_text_insights_op(
                 failure_types_df=failure_types_df,
                 suppliers_df=suppliers_df,
                 organization_id=mysql.organization_id,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
-            changed_keys_df = (
+            )
+            context_df = _materialize_mantiz_text_insights_df(context_df)
+            changed_keys_df = _materialize_mantiz_text_insights_df(
                 context_df
                 .select("OrganizationId", "TicketId")
                 .dropDuplicates(["OrganizationId", "TicketId"])
@@ -271,7 +526,8 @@ def transform_and_load_mantiz_text_insights_op(
             sources_df = build_mantiz_source_texts_from_context_df(
                 context_df=context_df,
                 ticket_comments_df=comments_df,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
+            )
+            sources_df = _materialize_mantiz_text_insights_df(sources_df)
             classifier_predictions_df = _build_mantiz_classifier_predictions_df(
                 context,
                 spark_res,
@@ -282,14 +538,16 @@ def transform_and_load_mantiz_text_insights_op(
             detail_df = build_mantiz_ticket_text_insight_detail_from_sources_df(
                 sources_df=sources_df,
                 classifier_predictions_df=classifier_predictions_df,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
+            )
+            detail_df = _materialize_mantiz_text_insights_df(detail_df)
             result_df = build_mantiz_ticket_text_insights_fact_from_prepared_df(
                 context_df=context_df,
                 sources_df=sources_df,
                 insight_detail_df=detail_df,
                 ticket_spare_parts_df=ticket_spare_parts_df,
                 spare_parts_df=spare_parts_df,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
+            )
+            result_df = _materialize_mantiz_text_insights_df(result_df)
 
             sql.clear_fact_mantiz_ticket_text_insights_stage(run_id)
             changed_ticket_count = spark_res.write_mantiz_ticket_text_insight_changed_tickets_stage(
@@ -312,11 +570,15 @@ def transform_and_load_mantiz_text_insights_op(
                 run_id,
             )
             if detail_row_count > 0:
-                review_queue_df = build_mantiz_text_insight_review_queue_df(detail_df)
+                review_queue_df = _materialize_mantiz_text_insights_df(
+                    build_mantiz_text_insight_review_queue_df(detail_df)
+                )
                 review_queue_rows = spark_res.write_mantiz_text_insight_review_queue_stage(
                     review_queue_df,
                     run_id,
                 )
+                review_queue_df.unpersist()
+                review_queue_df = None
             detail_df.unpersist()
             detail_df = None
             if row_count == 0:
@@ -344,10 +606,10 @@ def transform_and_load_mantiz_text_insights_op(
             sql.clear_fact_mantiz_ticket_text_insights_stage(run_id)
         except Exception:
             pass
-        if retry_number < MANTIZ_MAX_RETRIES:
+        if retry_number < MANTIZ_TEXT_INSIGHTS_MAX_RETRIES:
             raise RetryRequested(
-                max_retries=MANTIZ_MAX_RETRIES,
-                seconds_to_wait=MANTIZ_RETRY_DELAY_SECONDS,
+                max_retries=MANTIZ_TEXT_INSIGHTS_MAX_RETRIES,
+                seconds_to_wait=MANTIZ_TEXT_INSIGHTS_RETRY_DELAY_SECONDS,
             ) from ex
         succeeded = False
     finally:
@@ -389,10 +651,10 @@ def transform_and_load_mantiz_text_insights_op(
     required_resource_keys={"sqlserver"},
     ins={"result": In(Dict[str, Any])},
     out=Out(),
-    retry_policy=MANTIZ_RETRY_POLICY,
+    retry_policy=MANTIZ_TEXT_INSIGHTS_RETRY_POLICY,
 )
 def finalize_mantiz_text_insights_run_op(context, result: Dict[str, Any]):
-    materialized = finalize_run(context, TEXT_INSIGHTS_INGESTION_NAME, result)
+    materialized = _finalize_mantiz_text_insights_run(context, result)
     metadata = dict(materialized.metadata or {})
     metadata.update(
         {

@@ -31,6 +31,8 @@ DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
 DEFAULT_SPARK_RESOURCE_POLL_SECONDS = 10
 DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS = 3
 DEFAULT_SPARK_DRIVER_BIND_ADDRESS = "0.0.0.0"
+DEFAULT_SPARK_SQL_MAX_PLAN_STRING_LENGTH = "20000"
+DEFAULT_SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS = "100"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
@@ -429,6 +431,20 @@ class SparkResource:
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
             .set("spark.cores.max", str(self.resource_profile["cores_max"]))
+            .set(
+                "spark.sql.maxPlanStringLength",
+                os.getenv(
+                    "SPARK_SQL_MAX_PLAN_STRING_LENGTH",
+                    DEFAULT_SPARK_SQL_MAX_PLAN_STRING_LENGTH,
+                ),
+            )
+            .set(
+                "spark.sql.debug.maxToStringFields",
+                os.getenv(
+                    "SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS",
+                    DEFAULT_SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS,
+                ),
+            )
         )
         if self.driver_host:
             conf.set("spark.driver.host", self.driver_host)
