@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: dagster/mcdonalds
+        working-directory: dagster
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +19,12 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             dagster/requirements.txt
+            dagster/bafar_poc_gabinete/pyproject.toml
+            dagster/carlsjr/pyproject.toml
             dagster/mcdonalds/pyproject.toml
+            dagster/mcdonalds_cdp/pyproject.toml
+            dagster/smartfit/pyproject.toml
+            dagster/valledelencino/pyproject.toml
 
       - uses: actions/setup-java@v4
         with:
@@ -29,15 +34,28 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r ../requirements.txt
+          pip install -r requirements.txt
           pip install coverage pytest
-          pip install -e .
+          pip install -e bafar_poc_gabinete
+          pip install -e carlsjr
+          pip install -e mcdonalds
+          pip install -e mcdonalds_cdp
+          pip install -e smartfit
+          pip install -e valledelencino
 
       - name: Run tests with coverage
         env:
           PYTHONWARNINGS: ignore::ResourceWarning
         run: |
-          python -m coverage run --source=src/mcdonalds -m unittest discover tests -p "test_*.py"
+          coverage_source="bafar_poc_gabinete/src/bafar_poc_gabinete,carlsjr/src/carlsjr,mcdonalds/src/mcdonalds,mcdonalds_cdp/src/mcdonalds_cdp,smartfit/src/smartfit,valledelencino/src/valledelencino"
+          python -m coverage erase
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover bafar_poc_gabinete/tests -p "test_*.py"
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover carlsjr/tests -p "test_*.py"
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover mcdonalds/tests -p "test_*.py"
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover mcdonalds_cdp/tests -p "test_*.py"
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover smartfit/tests -p "test_*.py"
+          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover valledelencino/tests -p "test_*.py"
+          python -m coverage combine
           python -m coverage report --show-missing
           python -m coverage xml -o coverage.xml
 
@@ -45,5 +63,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: python-coverage
-          path: dagster/mcdonalds/coverage.xml
+          path: dagster/coverage.xml
           if-no-files-found: error
