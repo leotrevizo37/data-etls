@@ -181,7 +181,7 @@ def _reclassify_unclassified_rows(
             comment_lookup_df = spark_res.read_smartaudits_ai_comment_lookup()
         except Exception as exc:
             context.log.warning(
-                "Could not read dwh.dimSmartauditsAiCommentLookup: %s",
+                "Could not read ctl.SmartauditsAiCommentLookup: %s",
                 exc,
             )
 

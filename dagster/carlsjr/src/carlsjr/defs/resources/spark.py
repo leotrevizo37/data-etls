@@ -1204,7 +1204,7 @@ class SparkResource:
         spark = self.get_spark()
         return spark.read.jdbc(
             url=self._build_wh_path()["url"],
-            table="dwh.dimSmartauditsAiCommentLookup",
+            table="ctl.SmartauditsAiCommentLookup",
             properties=self._build_wh_path()["properties"],
         )
 

@@ -224,7 +224,7 @@ SET NOCOUNT ON;
 
 DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
 
-MERGE dwh.dimSmartauditsAiCommentLookup AS target
+MERGE ctl.SmartauditsAiCommentLookup AS target
 USING (
     SELECT
         NormalizedCommentHash,
