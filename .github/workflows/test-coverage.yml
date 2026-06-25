@@ -47,15 +47,14 @@ jobs:
         env:
           PYTHONWARNINGS: ignore::ResourceWarning
         run: |
-          coverage_source="bafar_poc_gabinete/src/bafar_poc_gabinete,carlsjr/src/carlsjr,mcdonalds/src/mcdonalds,mcdonalds_cdp/src/mcdonalds_cdp,smartfit/src/smartfit,valledelencino/src/valledelencino"
           python -m coverage erase
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover bafar_poc_gabinete/tests -p "test_*.py"
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover carlsjr/tests -p "test_*.py"
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover mcdonalds/tests -p "test_*.py"
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover mcdonalds_cdp/tests -p "test_*.py"
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover smartfit/tests -p "test_*.py"
-          python -m coverage run --parallel-mode --source="$coverage_source" -m unittest discover valledelencino/tests -p "test_*.py"
-          python -m coverage combine
+          (cd bafar_poc_gabinete && python -m coverage run --parallel-mode --source=src/bafar_poc_gabinete -m unittest discover tests -p "test_*.py")
+          (cd carlsjr && python -m coverage run --parallel-mode --source=src/carlsjr -m unittest discover tests -p "test_*.py")
+          (cd mcdonalds && python -m coverage run --parallel-mode --source=src/mcdonalds -m unittest discover tests -p "test_*.py")
+          (cd mcdonalds_cdp && python -m coverage run --parallel-mode --source=src/mcdonalds_cdp -m unittest discover tests -p "test_*.py")
+          (cd smartfit && python -m coverage run --parallel-mode --source=src/smartfit -m unittest discover tests -p "test_*.py")
+          (cd valledelencino && python -m coverage run --parallel-mode --source=src/valledelencino -m unittest discover tests -p "test_*.py")
+          python -m coverage combine bafar_poc_gabinete carlsjr mcdonalds mcdonalds_cdp smartfit valledelencino
           python -m coverage report --show-missing
           python -m coverage xml -o coverage.xml
 
