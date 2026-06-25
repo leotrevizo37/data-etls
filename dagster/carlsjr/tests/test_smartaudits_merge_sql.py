@@ -64,7 +64,7 @@ class SmartAuditsMergeSqlTests(unittest.TestCase):
         module = _load_sql_server_module()
         sql = module.build_smartaudits_comment_lookup_promotion_sql()
 
-        self.assertIn("MERGE dwh.dimSmartauditsAiCommentLookup", sql)
+        self.assertIn("MERGE ctl.SmartauditsAiCommentLookup", sql)
         self.assertIn("target.NormalizedCommentHash = source.NormalizedCommentHash", sql)
         self.assertIn("target.AiResult = source.AiResult", sql)
         self.assertIn("target.ClassificationMethod = N'HUMAN'", sql)

@@ -22,9 +22,9 @@ IF OBJECT_ID(N'ctl.SmartauditsClassifierModels', N'U') IS NOT NULL
     END;
 GO
 
-IF OBJECT_ID(N'dwh.dimSmartauditsAiCommentLookup', N'U') IS NOT NULL
+IF OBJECT_ID(N'ctl.SmartauditsAiCommentLookup', N'U') IS NOT NULL
     BEGIN
-        DROP TABLE dwh.dimSmartauditsAiCommentLookup;
+        DROP TABLE ctl.SmartauditsAiCommentLookup;
     END;
 GO
 
