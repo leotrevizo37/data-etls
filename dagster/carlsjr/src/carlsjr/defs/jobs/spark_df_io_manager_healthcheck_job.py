@@ -28,7 +28,7 @@ def read_spark_df_io_manager_healthcheck_op(context, df: DataFrame) -> None:
     context.log.info("Read spark_df_io_manager healthcheck DataFrame.")
 
 
-@job
+@job(name="089_maintenance_spark_healthcheck")
 def spark_df_io_manager_healthcheck_job():
     read_spark_df_io_manager_healthcheck_op(
         write_spark_df_io_manager_healthcheck_op()

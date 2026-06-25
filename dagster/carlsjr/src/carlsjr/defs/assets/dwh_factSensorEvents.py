@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
 from pyspark import StorageLevel
 from pyspark.sql import DataFrame
+from pyspark.sql.functions import col
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import datalake_readings_extended
@@ -127,50 +128,43 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     retry_number = getattr(context, "retry_number", 0)
 
     events_df: Optional[DataFrame] = None
-    presence_extended_df: Optional[DataFrame] = None
-    temperature_extended_df: Optional[DataFrame] = None
+    readings_extended_df: Optional[DataFrame] = None
     try:
         dimensions_df = spark_res.read_dim_prod_dimensions()
-        presence_extended_df = datalake_readings_extended(
+        readings_from = min(from_utc, temperature_from_utc)
+        readings_extended_df = datalake_readings_extended(
             spark_res=spark_res,
             raw_dimensions=dimensions_df,
-            fetch_readings_from=from_utc,
-            fetch_readings_to=to_utc,
-        )
-        temperature_extended_df = datalake_readings_extended(
-            spark_res=spark_res,
-            raw_dimensions=dimensions_df,
-            fetch_readings_from=temperature_from_utc,
+            fetch_readings_from=readings_from,
             fetch_readings_to=to_utc,
         )
 
-        if presence_extended_df is None and temperature_extended_df is None:
+        if readings_extended_df is None:
             context.log.info("No extended readings found after joining dimensions.")
             succeeded = True
         else:
+            readings_extended_df = readings_extended_df.localCheckpoint(
+                eager=True,
+                storageLevel=StorageLevel.MEMORY_AND_DISK,
+            )
             to_utc_str = to_utc.strftime("%Y-%m-%d %H:%M:%S")
-            transformations = []
-            if presence_extended_df is not None:
-                presence_extended_df = presence_extended_df.persist(
-                    StorageLevel.MEMORY_AND_DISK
-                )
-                transformations.append(
-                    (
-                        "sensor_events",
-                        (presence_extended_df, to_utc_str),
-                    )
-                )
-            if temperature_extended_df is not None:
-                temperature_extended_df = temperature_extended_df.persist(
-                    StorageLevel.MEMORY_AND_DISK
-                )
-                expected_values_df = spark_res.read_dim_sensor_expected_values()
-                transformations.append(
-                    (
-                        "temperature_events",
-                        (temperature_extended_df, expected_values_df, to_utc_str),
-                    )
-                )
+            presence_extended_df = readings_extended_df.filter(
+                col("LocalTimeSpan") >= from_utc
+            )
+            temperature_extended_df = readings_extended_df.filter(
+                col("LocalTimeSpan") >= temperature_from_utc
+            )
+            expected_values_df = spark_res.read_dim_sensor_expected_values()
+            transformations = [
+                (
+                    "sensor_events",
+                    (presence_extended_df, to_utc_str),
+                ),
+                (
+                    "temperature_events",
+                    (temperature_extended_df, expected_values_df, to_utc_str),
+                ),
+            ]
 
             for method, args in transformations:
                 context.log.info("Materializing dataframe for method: " + method)
@@ -179,9 +173,6 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                 if df is None:
                     context.log.info("No dataframe returned for method: " + method)
                     continue
-                if len(df.head(1)) == 0:
-                    context.log.info("No rows for method: " + method)
-                    continue
                 if events_df is None:
                     events_df = df
                 else:
@@ -189,12 +180,16 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
 
             if events_df is None:
                 context.log.info("No rows across sensor event transformations.")
+                readings_extended_df.unpersist(blocking=True)
+                readings_extended_df = None
                 succeeded = True
                 row_count = 0
                 max_time_span = None
             else:
                 events_df = events_df.persist(StorageLevel.MEMORY_AND_DISK)
                 row_count = spark_res.write_fact_sensor_events(events_df)
+                readings_extended_df.unpersist(blocking=True)
+                readings_extended_df = None
                 if row_count > 0:
                     max_time_span = spark_res.get_max_time_span(
                         events_df,
@@ -243,10 +238,8 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     finally:
         if events_df is not None:
             events_df.unpersist()
-        if presence_extended_df is not None:
-            presence_extended_df.unpersist()
-        if temperature_extended_df is not None:
-            temperature_extended_df.unpersist()
+        if readings_extended_df is not None:
+            readings_extended_df.unpersist()
 
     return {
         "from_utc": from_utc,

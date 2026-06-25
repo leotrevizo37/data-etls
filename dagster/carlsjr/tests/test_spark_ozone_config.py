@@ -134,6 +134,7 @@ spark_df_io_manager_module = _load_module(
 )
 HADOOP_AWS_PACKAGE = spark_module.HADOOP_AWS_PACKAGE
 MSSQL_JDBC_PACKAGE = spark_module.MSSQL_JDBC_PACKAGE
+MYSQL_JDBC_PACKAGE = spark_module.MYSQL_JDBC_PACKAGE
 build_executor_cores = spark_module._build_executor_cores
 build_spark_master_status_url = spark_module._build_spark_master_status_url
 build_spark_resource_profile = spark_module._build_spark_resource_profile
@@ -328,6 +329,19 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_memory_mb"], 3072)
         self.assertEqual(profile["cores_max"], 2)
 
+    def test_mantiz_profile_uses_executor_sized_defaults(self) -> None:
+        profile = build_spark_resource_profile("mantiz", {})
+
+        self.assertEqual(profile["name"], "mantiz")
+        self.assertEqual(profile["min_cores"], 2)
+        self.assertEqual(profile["min_memory_mb"], 3072)
+        self.assertEqual(profile["cores_max"], 2)
+
+    def test_mysql_jdbc_package_is_included_when_configured(self) -> None:
+        spark_res = _spark_resource(mysql_jdbc_package=MYSQL_JDBC_PACKAGE)
+
+        self.assertIn(MYSQL_JDBC_PACKAGE, spark_res._spark_packages())
+
     def test_spark_retry_policy_uses_defaults_and_env_overrides(self) -> None:
         policy = build_spark_retry_conf(
             {
@@ -371,7 +385,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
     def test_spark_app_context_uses_dagster_run_tags(self) -> None:
         class _Run:
-            job_name = "fact_lecturas_ingestion_job"
+            job_name = "010_sense_lecturas_ingestion"
             run_id = "abcdef123456"
             tags = {"user_code": "carlsjr", "job_type": "lecturas"}
 
@@ -387,7 +401,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(context["job_type"], "lecturas")
         self.assertEqual(
             context["app_name"],
-            "carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            "carlsjr/010_sense_lecturas_ingestion/abcdef12",
         )
 
     def test_wait_for_spark_capacity_fails_when_cluster_is_full(self) -> None:
@@ -408,7 +422,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
             master_url="spark://spark-master:7077",
             executor_mem="2G",
             executor_cores=1,
-            app_name="carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            app_name="carlsjr/010_sense_lecturas_ingestion/abcdef12",
             job_type="lecturas",
             driver_host="10.0.0.5",
             driver_port="17001",
@@ -420,7 +434,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         self.assertEqual(
             conf.get("spark.app.name"),
-            "carlsjr/fact_lecturas_ingestion_job/abcdef12",
+            "carlsjr/010_sense_lecturas_ingestion/abcdef12",
         )
         self.assertEqual(conf.get("spark.executor.memory"), "2G")
         self.assertEqual(conf.get("spark.executor.cores"), "1")
@@ -433,6 +447,8 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(conf.get("spark.task.maxFailures"), "8")
         self.assertEqual(conf.get("spark.shuffle.io.maxRetries"), "10")
         self.assertEqual(conf.get("spark.network.timeout"), "800s")
+        self.assertEqual(conf.get("spark.sql.maxPlanStringLength"), "20000")
+        self.assertEqual(conf.get("spark.sql.debug.maxToStringFields"), "100")
 
     def test_wait_for_spark_capacity_fails_when_worker_network_is_unreachable(self) -> None:
         spark_res = _spark_resource(

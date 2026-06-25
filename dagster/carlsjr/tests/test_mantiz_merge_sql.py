@@ -1,0 +1,170 @@
+import importlib.util
+import inspect
+import re
+import sys
+import types
+import unittest
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _install_stubs() -> None:
+    if "pyodbc" not in sys.modules:
+        pyodbc = types.ModuleType("pyodbc")
+        pyodbc.Connection = object
+        pyodbc.Error = Exception
+        sys.modules["pyodbc"] = pyodbc
+
+    dagster = sys.modules.get("dagster")
+    if dagster is None:
+        dagster = types.ModuleType("dagster")
+        sys.modules["dagster"] = dagster
+    if not hasattr(dagster, "resource"):
+        def resource(fn=None, **_kwargs):
+            return fn if fn else lambda wrapped: wrapped
+        dagster.resource = resource
+
+
+def _load_sql_server_module():
+    _install_stubs()
+    path = PROJECT_ROOT / "src" / "carlsjr" / "defs" / "resources" / "sql_server.py"
+    spec = importlib.util.spec_from_file_location("carlsjr_sql_server_resource", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def _matched_update_section(sql: str) -> str:
+    match = re.search(
+        r"WHEN MATCHED THEN\s+UPDATE SET(?P<section>.*?)WHEN NOT MATCHED BY TARGET",
+        sql,
+        flags=re.S,
+    )
+    assert match is not None
+    return match.group("section")
+
+
+class MantizMergeSqlTests(unittest.TestCase):
+    def test_lifecycle_merge_is_idempotent_by_organization_and_ticket(self) -> None:
+        module = _load_sql_server_module()
+        sql = module.build_fact_mantiz_ticket_lifecycle_merge_sql()
+
+        self.assertIn("MERGE dwh.factMantizTicketLifecycle", sql)
+        self.assertIn("target.OrganizationId = source.OrganizationId", sql)
+        self.assertIn("target.TicketId = source.TicketId", sql)
+        self.assertIn("target.TicketStatus = source.TicketStatus", sql)
+        self.assertIn("target.OpenToScheduledHours = source.OpenToScheduledHours", sql)
+        self.assertIn("target.CurrentAgeHours = source.CurrentAgeHours", sql)
+        self.assertIn("WHERE RunId = ?", sql)
+
+    def test_text_insights_replace_deletes_changed_tickets_before_insert(self) -> None:
+        module = _load_sql_server_module()
+        sql = module.build_fact_mantiz_ticket_text_insights_replace_sql()
+
+        self.assertIn("DELETE target", sql)
+        self.assertIn("FROM dwh.factMantizTicketTextInsights AS target", sql)
+        self.assertIn("FROM stg.MantizTicketTextInsightChangedTicket", sql)
+        self.assertIn("target.OrganizationId = changed.OrganizationId", sql)
+        self.assertIn("target.TicketId = changed.TicketId", sql)
+        self.assertIn("INSERT INTO dwh.factMantizTicketTextInsights", sql)
+        self.assertIn("FROM stg.factMantizTicketTextInsights", sql)
+        self.assertIn("FailureCode", sql)
+        self.assertIn("InsightsJson", sql)
+        self.assertIn("TextEvidenceJson", sql)
+        self.assertIn("NeedsReview", sql)
+        self.assertNotIn("PrimaryFailureCode", sql)
+        self.assertNotIn("FailureConceptHash", sql)
+        self.assertNotIn("SourceType,", sql)
+        self.assertNotIn("InsightType,", sql)
+
+    def test_mantiz_dwh_dimension_merge_helpers_are_removed(self) -> None:
+        module = _load_sql_server_module()
+
+        self.assertFalse(hasattr(module, "build_mantiz_failure_concept_merge_sql"))
+        self.assertFalse(hasattr(module, "build_mantiz_solution_concept_merge_sql"))
+        self.assertFalse(hasattr(module, "build_mantiz_solution_part_concept_merge_sql"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_failure_concepts"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_solution_concepts"))
+        self.assertFalse(hasattr(module.SqlServerResource, "merge_mantiz_solution_part_concepts"))
+
+    def test_review_queue_merge_uses_ctl_and_preserves_review_status(self) -> None:
+        module = _load_sql_server_module()
+        sql = module.build_mantiz_text_insight_review_queue_merge_sql()
+        update_section = _matched_update_section(sql)
+
+        self.assertIn("MERGE ctl.MantizTextInsightReviewQueue", sql)
+        self.assertIn("FROM stg.MantizTextInsightReviewQueue", sql)
+        self.assertIn("target.InsightType = source.InsightType", sql)
+        self.assertIn("target.ConceptHash = source.ConceptHash", sql)
+        self.assertIn("RepresentativeRawText", sql)
+        self.assertNotIn("target.ReviewStatus", update_section)
+        self.assertNotIn("target.ReviewedBy", update_section)
+
+    def test_review_queue_promotion_uses_ctl_without_dwh_dimensions(self) -> None:
+        module = _load_sql_server_module()
+        sql = module.build_mantiz_text_insight_review_promotion_sql()
+
+        self.assertIn("UPDATE ctl.MantizTextInsightReviewQueue", sql)
+        self.assertIn("ConceptStatus = N'ACTIVE'", sql)
+        self.assertIn("ConceptStatus = N'REJECTED'", sql)
+        self.assertIn("ReviewStatus = N'PROMOTED'", sql)
+        self.assertIn("ReviewedCanonicalCode", sql)
+        self.assertNotIn("dwh.dimMantiz", sql)
+        self.assertTrue(hasattr(module.SqlServerResource, "promote_mantiz_text_insight_reviews"))
+
+    def test_training_samples_include_promoted_active_reviews(self) -> None:
+        module = _load_sql_server_module()
+        source = inspect.getsource(
+            module.SqlServerResource.get_mantiz_text_classifier_training_samples,
+        )
+
+        self.assertIn("N'PROMOTED'", source)
+        self.assertIn("queue.ConceptStatus", source)
+        self.assertIn("N'ACTIVE'", source)
+        self.assertIn("N'REJECTED'", source)
+        self.assertIn("RepresentativeRawText", source)
+
+    def test_mantiz_classifier_prediction_uses_partition_prediction_without_collect(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "assets"
+            / "dwh_factMantizTicketTextInsights.py"
+        )
+        source = path.read_text(encoding="utf-8")
+        match = re.search(
+            r"def _build_mantiz_classifier_predictions_df\(.*?^def _predict_mantiz_text_partition",
+            source,
+            flags=re.S | re.M,
+        )
+        self.assertIsNotNone(match)
+        section = match.group(0)
+
+        self.assertNotIn(".collect()", section)
+        self.assertIn(".mapPartitions(", section)
+        self.assertIn(".broadcast(", section)
+
+    def test_text_insights_materializes_lineage_before_jdbc_writes(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "assets"
+            / "dwh_factMantizTicketTextInsights.py"
+        )
+        source = path.read_text(encoding="utf-8")
+
+        self.assertIn("def _materialize_mantiz_text_insights_df", source)
+        self.assertIn(".localCheckpoint(", source)
+        self.assertIn("StorageLevel.MEMORY_AND_DISK", source)
+        self.assertIn("write_fact_mantiz_ticket_text_insights_stage", source)
+
+
+if __name__ == "__main__":
+    unittest.main()

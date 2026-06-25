@@ -43,6 +43,6 @@ def run_index_maintenance_op(context):
     return Output(value=result, metadata=INDEX_MAINTENANCE_DEFAULTS)
 
 
-@job(tags={"job_type": "mantenimiento", "user_code": "mcdonalds_cdp"})
+@job(name="081_maintenance_index", tags={"job_type": "mantenimiento", "user_code": "mcdonalds_cdp"})
 def index_maintenance_job():
     run_index_maintenance_op()

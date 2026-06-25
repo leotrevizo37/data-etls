@@ -642,15 +642,17 @@ class SparkResource:
             if row_count == 0:
                 return 0
 
-            for chunk_id in range(self.jdbc_write_num_chunks):
+            chunk_ids = [
+                row["__chunk_id"]
+                for row in df_chunked.select("__chunk_id").distinct().collect()
+            ]
+            for chunk_id in chunk_ids:
                 df_chunk = (
                     df_chunked
                     .filter(f"__chunk_id = {chunk_id}")
                     .drop("__chunk_id")
                     .coalesce(self.jdbc_write_target_partitions)
                 )
-                if len(df_chunk.head(1)) == 0:
-                    continue
 
                 (
                     df_chunk.write

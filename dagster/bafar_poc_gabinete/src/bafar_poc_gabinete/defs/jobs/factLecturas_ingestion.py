@@ -2,7 +2,7 @@ from dagster import AssetKey, AssetSelection, define_asset_job
 
 
 fact_lecturas_ingestion_job = define_asset_job(
-    name="fact_lecturas_ingestion_job",
+    name="010_sense_lecturas_ingestion",
     selection=AssetSelection.keys(AssetKey(["bafar_poc_gabinete", "dwh_factlecturas"])),
     tags={"job_type": "lecturas", "user_code": "bafar_poc_gabinete"},
 )

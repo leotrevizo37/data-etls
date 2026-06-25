@@ -12,6 +12,8 @@ __all__ = [
     "temperature_events",
     "cisterna",
     "cuartos_refrigeracion",
+    "mantiz_tickets",
+    "mantiz_text_classifier",
     "smartaudits_categories",
     "smartaudits_classifier",
 ]
@@ -25,6 +27,8 @@ _MODULE_BY_EXPORT = {
     "sensor_events": ".sensor_events",
     "temperature_events": ".temperature_events",
     "cuartos_refrigeracion": ".cuartos_refrigeracion",
+    "mantiz_tickets": ".mantiz_tickets",
+    "mantiz_text_classifier": ".mantiz_text_classifier",
     "smartaudits_categories": ".smartaudits_categories",
     "smartaudits_classifier": ".smartaudits_classifier",
 }

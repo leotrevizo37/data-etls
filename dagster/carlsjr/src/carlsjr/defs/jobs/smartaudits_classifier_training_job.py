@@ -181,7 +181,7 @@ def _reclassify_unclassified_rows(
             comment_lookup_df = spark_res.read_smartaudits_ai_comment_lookup()
         except Exception as exc:
             context.log.warning(
-                "Could not read dwh.dimSmartauditsAiCommentLookup: %s",
+                "Could not read ctl.SmartauditsAiCommentLookup: %s",
                 exc,
             )
 
@@ -383,6 +383,6 @@ def train_smartaudits_classifier_op(context) -> dict:
     return metadata
 
 
-@job(tags={"job_type": "smartaudits", "user_code": "carlsjr"})
+@job(name="111_smartaudits_classifier_training", tags={"job_type": "smartaudits", "user_code": "carlsjr"})
 def smartaudits_classifier_training_job():
     train_smartaudits_classifier_op()
