@@ -7,7 +7,7 @@ on:
 jobs:
   python:
     runs-on: ubuntu-latest
-    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/')
+    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || github.head_ref == 'stage'
     defaults:
       run:
         working-directory: dagster
@@ -29,6 +29,8 @@ jobs:
           pip install -e smartfit
           pip install -e mcdonalds_cdp
           pip install -e bafar_poc_gabinete
+          pip install -e carlsjr
+          pip install -e valledelencino
 
       - name: Ruff
         run: ruff check .

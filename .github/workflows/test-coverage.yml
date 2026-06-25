@@ -7,6 +7,7 @@ on:
 jobs:
   test-coverage:
     runs-on: ubuntu-latest
+    if: github.base_ref == 'stage' || github.base_ref == 'main'
     defaults:
       run:
         working-directory: dagster
