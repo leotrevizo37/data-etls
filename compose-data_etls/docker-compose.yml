@@ -536,6 +536,7 @@ services:
 
   spark-master:
     user: "0:0"
+    init: true
     build:
       context: ..
       dockerfile: spark/Dockerfile
@@ -568,11 +569,13 @@ services:
       - data-dagster
     healthcheck:
       test: [
-        "CMD-SHELL",
-        "python3 -c 'import os,socket; host=os.popen(\"hostname -i\").read().strip().split()[0]; port=int(os.environ.get(\"SPARK_MASTER_PORT\", \"7077\")); s=socket.socket(); s.settimeout(2); s.connect((host,port)); s.close()'"
+        "CMD",
+        "python3",
+        "-c",
+        "import os,socket; host=os.environ.get('SPARK_MASTER_BIND_HOST') or os.environ.get('SPARK_MASTER_HOST') or 'localhost'; addr=socket.gethostbyname(host); port=int(os.environ.get('SPARK_MASTER_PORT', '7077')); socket.create_connection((addr, port), 4).close()"
       ]
-      interval: 10s
-      timeout: 5s
+      interval: 90s
+      timeout: 10s
       retries: 10
       start_period: 20s
 
@@ -589,7 +592,7 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
-      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-86400}"
+      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-10800}"
     ports:
       - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
       - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"

@@ -376,8 +376,6 @@ class SparkResource:
                 "com.microsoft.azure:azure-storage:8.6.6",
                 MSSQL_JDBC_PACKAGE,
             ])
-        if self._ozone_s3_enabled():
-            packages.append(HADOOP_AWS_PACKAGE)
         return packages
 
     def _build_ozone_s3_options(self) -> Dict[str, str]:

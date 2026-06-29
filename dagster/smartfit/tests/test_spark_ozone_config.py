@@ -252,7 +252,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertIs(manager._prepare_for_write(df), df)
         self.assertEqual(df.repartition_calls, [])
 
-    def test_spark_packages_preserve_adls_jdbc_and_add_hadoop_aws(self) -> None:
+    def test_spark_packages_preserve_adls_jdbc_without_dynamic_hadoop_aws(self) -> None:
         spark_res = _spark_resource(
             ozone_s3_endpoint="http://ozone-01:9878",
             adls_account_name="proddatalake",
@@ -261,8 +261,8 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         packages = spark_res._spark_packages()
 
-        self.assertIn(HADOOP_AWS_PACKAGE, packages)
         self.assertIn(MSSQL_JDBC_PACKAGE, packages)
+        self.assertNotIn(HADOOP_AWS_PACKAGE, packages)
 
     def test_spark_df_io_manager_joins_remote_s3a_paths(self) -> None:
         manager = SparkDataFrameParquetIOManager(
