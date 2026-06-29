@@ -33,12 +33,20 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
 ENV PATH="/opt/mssql-tools18/bin:${PATH}"
 
 COPY dagster/requirements.txt /tmp/requirements.txt
-COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
-COPY dagster/smartfit /opt/dagster/app/smartfit
-COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
-COPY dagster/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete
-COPY dagster/valledelencino /opt/dagster/app/valledelencino
-COPY dagster/carlsjr /opt/dagster/app/carlsjr
 
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir -r /tmp/requirements.txt
+
+RUN spark_jars_dir="$(python -c 'import pathlib, pyspark; print(pathlib.Path(pyspark.__file__).resolve().parent / "jars")')" \
+  && mkdir -p "${spark_jars_dir}" \
+  && curl -fL --retry 3 --retry-delay 5 -o "${spark_jars_dir}/hadoop-aws-3.4.1.jar" \
+       https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar \
+  && curl -fL --retry 3 --retry-delay 5 -o "${spark_jars_dir}/software.amazon.awssdk_bundle-2.24.6.jar" \
+       https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar
+
+COPY dagster/mcdonalds /opt/dagster/app/mcdonalds
+COPY dagster/smartfit /opt/dagster/app/smartfit
+COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
+COPY dagster/bafar_poc_gabinete /opt/dagster/app/bafar_poc_gabinete
+COPY dagster/valledelencino /opt/dagster/app/valledelencino
+COPY dagster/carlsjr /opt/dagster/app/carlsjr
