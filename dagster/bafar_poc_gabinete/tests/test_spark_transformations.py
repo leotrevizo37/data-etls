@@ -445,6 +445,17 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
 
+    def test_factreadingsmeasurement_uses_stage_merge_without_window_cleanup(self) -> None:
+        operations_path = PROJECT_SRC / "bafar_poc_gabinete" / "defs" / "assets" / "operations_assets.py"
+        source = operations_path.read_text(encoding="utf-8")
+        write_section = source.split("def write_factreadingsmeasurement_op", 1)[1].split("@op(", 1)[0]
+        graph_section = source.split("def operations_assets", 1)[1]
+
+        self.assertIn("write_fact_operations_stage(", write_section)
+        self.assertIn("merge_fact_readings_measurement(", write_section)
+        self.assertNotIn("delete_range(", write_section)
+        self.assertNotIn("window_cleanup(fetch_from_ts)", graph_section)
+
 
 if __name__ == "__main__":
     unittest.main()
