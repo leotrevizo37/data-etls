@@ -6,6 +6,80 @@ import pyodbc
 from dagster import resource
 
 
+def build_fact_readings_measurement_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factReadingsMeasurement AS target
+USING (
+    SELECT
+        OperationId,
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        LocationId,
+        DeviceType,
+        SensorType,
+        LocalTimeSpan,
+        MeasurementValue,
+        MeasurementStdDev,
+        Anomalies,
+        ReadingsCount
+    FROM stg.factReadingsMeasurement
+    WHERE RunId = ?
+) AS source
+    ON target.OperationId = source.OperationId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.SensorId = source.SensorId,
+        target.SensorTyId = source.SensorTyId,
+        target.DeviceId = source.DeviceId,
+        target.LocationId = source.LocationId,
+        target.DeviceType = source.DeviceType,
+        target.SensorType = source.SensorType,
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.MeasurementValue = source.MeasurementValue,
+        target.MeasurementStdDev = source.MeasurementStdDev,
+        target.Anomalies = source.Anomalies,
+        target.ReadingsCount = source.ReadingsCount,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        OperationId,
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        LocationId,
+        DeviceType,
+        SensorType,
+        LocalTimeSpan,
+        MeasurementValue,
+        MeasurementStdDev,
+        Anomalies,
+        ReadingsCount
+    )
+    VALUES (
+        source.OperationId,
+        source.SensorId,
+        source.SensorTyId,
+        source.DeviceId,
+        source.LocationId,
+        source.DeviceType,
+        source.SensorType,
+        source.LocalTimeSpan,
+        source.MeasurementValue,
+        source.MeasurementStdDev,
+        source.Anomalies,
+        source.ReadingsCount
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_smartaudits_categories_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
