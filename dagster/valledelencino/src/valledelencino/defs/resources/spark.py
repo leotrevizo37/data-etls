@@ -9,7 +9,7 @@ import time
 from urllib.parse import urlparse
 from urllib.request import urlopen
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, max as spark_max, upper
+from pyspark.sql.functions import col, lit, max as spark_max, upper
 from pyspark.sql.types import DoubleType, StringType, StructField, StructType, TimestampType
 from pyspark import SparkConf, StorageLevel
 from dagster import resource
@@ -809,6 +809,22 @@ class SparkResource:
         return self._write_jdbc_in_chunks(
             df,
             table="dwh.factReadingsMeasurement",
+            chunk_column="OperationId",
+        )
+
+    def write_fact_operations_stage(self, df: DataFrame, run_id: str) -> int:
+        operation_columns = df.columns
+        df_stage = (
+            df
+            .select(*operation_columns)
+            .dropDuplicates(["OperationId"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *operation_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factReadingsMeasurement",
             chunk_column="OperationId",
         )
 
