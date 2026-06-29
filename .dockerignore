@@ -1,0 +1,47 @@
+.git/
+.github/
+.idea/
+.agents/
+.codex/
+.codex-docker-config/
+
+# Local environment files are runtime inputs, not image build inputs.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python caches and test artifacts should never be sent in the build context.
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
+.ruff_cache/
+**/.ruff_cache/
+.mypy_cache/
+**/.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+cover/
+
+# Local virtual environments and generated work areas.
+.venv/
+venv/
+env/
+ENV/
+tmp/
+
+# Dagster runtime state is mounted at runtime when needed.
+dagster/dagster_home/history/
+dagster/dagster_home/logs/
+dagster/dagster_home/storage/
+dagster/dagster_home/.logs_queue/
+dagster/dagster_home/.nux/
+dagster/dagster_home/*.db
+dagster/dagster_home/**/*.db
+
+# Editor and OS noise.
+*.log
+Thumbs.db
+.DS_Store
