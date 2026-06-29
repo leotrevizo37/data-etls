@@ -841,6 +841,22 @@ class SparkResource:
             chunk_column="OperationId",
         )
 
+    def write_fact_operations_stage(self, df: DataFrame, run_id: str) -> int:
+        operation_columns = df.columns
+        df_stage = (
+            df
+            .select(*operation_columns)
+            .dropDuplicates(["OperationId"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *operation_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factReadingsMeasurement",
+            chunk_column="OperationId",
+        )
+
 
     def get_max_time_span(self, df: DataFrame, time_span_type: str) -> Optional[datetime]:
         row = df.agg(spark_max(time_span_type).alias("max_ts")).collect()[0]
