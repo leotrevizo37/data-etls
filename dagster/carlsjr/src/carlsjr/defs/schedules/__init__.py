@@ -6,6 +6,9 @@ from .factoperations_scheduler import (operations_sched_every_6h,
                                        operations_sched_every_w)
 from .factsensorevents_scheduler import (sensor_events_sched_every_6h,
                                          sensor_events_sched_every_1h_w)
+from .sense_operational_scheduler import (sense_operational_sched_every_6h,
+                                          sense_operational_sched_every_1h_w,
+                                          sense_operational_sched_every_w)
 from .factsmartauditscategories_scheduler import (
     smartaudits_categories_sched_every_6h,
     smartaudits_classifier_training_daily,
@@ -24,6 +27,9 @@ __all__ = [
     "operations_sched_every_w",
     "sensor_events_sched_every_6h",
     "sensor_events_sched_every_1h_w",
+    "sense_operational_sched_every_6h",
+    "sense_operational_sched_every_1h_w",
+    "sense_operational_sched_every_w",
     "smartaudits_categories_sched_every_6h",
     "smartaudits_classifier_training_daily",
     "mantiz_tickets_sched_every_6h",

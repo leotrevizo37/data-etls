@@ -9,6 +9,7 @@ from .factlecturas_backfill_jobs import (
     fact_lecturas_sensor_backfill_job,
 )
 from .factsensorevents_job import fact_sensor_events_job
+from .sense_operational_job import sense_operational_job
 from .factsmartauditscategories_job import fact_smartaudits_categories_job
 from .factmantiztickets_job import fact_mantiz_tickets_job
 from .mantiz_text_classifier_training_job import mantiz_text_classifier_training_job
@@ -20,13 +21,14 @@ from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck
 __all__ = [
     "fact_lecturas_ingestion_job",
     "fact_operations_tables_job",
+    "fact_sensor_events_job",
+    "sense_operational_job",
     "refresh_dimensions_job",
     "cleanup_job",
     "factlecturas_cleanup_job",
     "index_maintenance_job",
     "fact_lecturas_backfill_daily_job",
     "fact_lecturas_sensor_backfill_job",
-    "fact_sensor_events_job",
     "fact_smartaudits_categories_job",
     "fact_mantiz_tickets_job",
     "mantiz_text_classifier_training_job",

@@ -9,18 +9,20 @@ from .factlecturas_backfill_jobs import (
     fact_lecturas_sensor_backfill_job,
 )
 from .factsensorevents_job import fact_sensor_events_job
+from .sense_operational_job import sense_operational_job
 from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck_job
 
 
 __all__ = [
     "fact_lecturas_ingestion_job",
     "fact_operations_tables_job",
+    "fact_sensor_events_job",
+    "sense_operational_job",
     "refresh_dimensions_job",
     "cleanup_job",
     "factlecturas_cleanup_job",
     "index_maintenance_job",
     "fact_lecturas_backfill_daily_job",
     "fact_lecturas_sensor_backfill_job",
-    "fact_sensor_events_job",
     "spark_df_io_manager_healthcheck_job",
 ]

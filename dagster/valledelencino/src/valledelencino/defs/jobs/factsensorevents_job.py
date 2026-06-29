@@ -1,10 +1,1 @@
-from dagster import AssetKey, AssetSelection, define_asset_job
-
-
-fact_sensor_events_job = define_asset_job(
-    name="021_sense_sensor_events",
-    selection=AssetSelection.keys(
-        AssetKey(["valledelencino", "dwh_factsensorevents"]),
-    ),
-    tags={"job_type": "lecturas", "user_code": "valledelencino"},
-)
+fact_sensor_events_job = None

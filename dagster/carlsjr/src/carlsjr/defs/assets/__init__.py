@@ -1,4 +1,4 @@
-from .operations_assets import operations_assets
+from .sense_operational_assets import sense_operational_assets
 from .source_assets import (dbo_sensors,
                             dbo_sensor_tys,
                             dbo_devices,
@@ -6,7 +6,6 @@ from .source_assets import (dbo_sensors,
                             dbo_sublocations,
                             dbo_sublocation_tys)
 from .dwh_factLecturas import dwh_factlecturas
-from .dwh_factSensorEvents import dwh_factsensorevents
 from .dwh_factSmartauditsCategories import dwh_factsmartauditscategories
 from .dwh_factMantizTicketLifecycle import dwh_factmantizticketlifecycle
 from .dwh_factMantizTicketTextInsights import dwh_factmantiztickettextinsights
@@ -22,11 +21,10 @@ __all__ = [
     "dbo_sublocations",
     "dbo_sublocation_tys",
     "dwh_factlecturas",
-    "dwh_factsensorevents",
     "dwh_factsmartauditscategories",
     "dwh_factmantizticketlifecycle",
     "dwh_factmantiztickettextinsights",
-    "operations_assets",
+    "sense_operational_assets",
     "data_transformations",
     "dwh_dimsidonproddimensions",
     "cleanup_old_runs"

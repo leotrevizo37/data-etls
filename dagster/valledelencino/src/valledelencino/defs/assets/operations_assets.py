@@ -508,19 +508,6 @@ def upstream_deps_gate(context,
         context.log.info("Updating deps..." + str(deps))
     return None
 
-@graph_multi_asset(
-    outs={
-        "dwh_factReadingsMeasurement": AssetOut(
-            key=AssetKey(["valledelencino", "dwh_factReadingsMeasurement"])),
-        "ctl_IngestionControl" : AssetOut(
-            key=AssetKey(["valledelencino", "ctl_IngestionControl"])),
-    },
-    ins={
-        "data_transformations": AssetIn(
-            key=AssetKey(["valledelencino", "data_transformations"]), dagster_type=Nothing),
-    },
-    group_name="valledelencino",
-)
 def operations_assets(data_transformations):
     deps = upstream_deps_gate(data_transformations)
     fetch_from_ts = start_operations_run_and_get_range_op(deps)

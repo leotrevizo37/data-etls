@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from time import perf_counter
 from typing import Any, Dict, Optional
 
-from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
+from dagster import AssetKey, In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
 from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
@@ -259,7 +259,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
 @op(
     required_resource_keys={"sqlserver"},
     ins={"result": In(Dict[str, Any])},
-    out=Out(),
+    out={"dwh_factsensorevents": Out()},
     retry_policy=SENSOR_EVENTS_RETRY_POLICY,
 )
 def finalize_run_opff(context, result: Dict[str, Any]):
@@ -305,6 +305,7 @@ def finalize_run_opff(context, result: Dict[str, Any]):
     elapsed = round(perf_counter() - start_time, 3) if start_time else 0.0
 
     return MaterializeResult(
+        asset_key=AssetKey(["carlsjr", "dwh_factsensorevents"]),
         metadata={
             "row_count": result.get("row_count", 0),
             "elapsed_seconds": elapsed,
@@ -319,11 +320,6 @@ def finalize_run_opff(context, result: Dict[str, Any]):
     )
 
 
-@graph_asset(
-    name="dwh_factsensorevents",
-    group_name="carlsjr",
-    key_prefix=["carlsjr"],
-)
 def dwh_factsensorevents():
     window = start_run_and_get_range_opff()
     result = transform_and_load_sensor_events_op(window)
