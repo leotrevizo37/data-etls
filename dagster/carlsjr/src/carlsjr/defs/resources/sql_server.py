@@ -943,6 +943,27 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factReadingsMeasurement WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_readings_measurement(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_readings_measurement_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
     def clear_fact_smartaudits_categories_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
