@@ -111,37 +111,6 @@ def start_operations_run_and_get_range_op(
 
     return window
 
-@op(
-    required_resource_keys={
-        "sqlserver"
-    },
-    ins={
-        "window": In(Dict[str, Any])
-    },
-    out=Out(Optional[str]),
-    retry_policy=OPERATIONS_RETRY_POLICY,
-)
-def window_cleanup(
-        context: OpExecutionContext,
-        window: Dict[str, Any]) -> Optional[str]:
-    sqlserver: SqlServerResource = context.resources.sqlserver
-
-    context.log.info("Deleting incomplete last period from "
-                     "factReadingsMeasurement...")
-    deleted_rows = sqlserver.delete_range(
-        schema_name="dwh",
-        table_name="factReadingsMeasurement",
-        time_column="LocalTimeSpan",
-        from_utc=window["delete_from"],
-        to_utc=window["delete_to_exclusive"],
-    )
-    if deleted_rows is None or deleted_rows == 0:
-        context.log.info("No rows deleted from "
-                         "dwh.factReadingsMeasurement for this period.")
-    else:
-        context.log.info("Deleted "
-                         + str(deleted_rows)
-                         + " rows from dwh.factReadingsMeasurement.")
 
 @op(
     required_resource_keys={
