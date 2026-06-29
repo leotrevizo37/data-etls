@@ -390,8 +390,6 @@ class SparkResource:
                 "com.microsoft.azure:azure-storage:8.6.6",
                 MSSQL_JDBC_PACKAGE,
             ])
-        if self._ozone_s3_enabled():
-            packages.append(HADOOP_AWS_PACKAGE)
         if self.mysql_jdbc_package:
             packages.append(self.mysql_jdbc_package)
         return packages
