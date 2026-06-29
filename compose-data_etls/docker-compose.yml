@@ -507,6 +507,33 @@ services:
       - "${DAGSTER_WEB_PORT:-3000}:3000"
     command: [
       "dagster-webserver",
+      "--read-only",
+      "-h", "0.0.0.0",
+      "-p", "3000",
+      "-w", "/opt/dagster/app/workspace.yaml"
+    ]
+
+  dagster-web-admin:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: data-dagster-web-admin
+    <<: *dagster_common
+    depends_on:
+      dagster-user-code-mcd:
+        condition: service_healthy
+      dagster-user-code-smft:
+        condition: service_healthy
+      dagster-user-code-mcd-cdp:
+        condition: service_healthy
+      dagster-postgres:
+        condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${DAGSTER_ADMIN_WEB_PORT:-3001}:3000"
+    command: [
+      "dagster-webserver",
       "-h", "0.0.0.0",
       "-p", "3000",
       "-w", "/opt/dagster/app/workspace.yaml"
