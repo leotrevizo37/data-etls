@@ -35,6 +35,7 @@ DEFAULT_SPARK_SQL_MAX_PLAN_STRING_LENGTH = "20000"
 DEFAULT_SPARK_SQL_DEBUG_MAX_TO_STRING_FIELDS = "100"
 DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
+    "maintenance": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
@@ -268,7 +269,11 @@ def _build_spark_app_context(
     )
     run_id = getattr(dagster_run, "run_id", "") or os.getenv("SPARK_RUN_ID", "manual")
     user_code = tags.get("user_code") or os.getenv("SPARK_USER_CODE", default_user_code)
-    job_type = tags.get("job_type") or os.getenv("SPARK_JOB_TYPE", "default")
+    job_type = tags.get("job_type") or os.getenv("SPARK_JOB_TYPE")
+    if not job_type and "_maintenance_" in job_name.lower():
+        job_type = "maintenance"
+    if not job_type:
+        job_type = "default"
     if tags.get("backfill"):
         job_type = "backfill"
 

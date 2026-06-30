@@ -388,6 +388,23 @@ class SparkOzoneConfigTests(unittest.TestCase):
             "smartfit/010_sense_lecturas_ingestion/abcdef12",
         )
 
+    def test_spark_app_context_infers_maintenance_job_type_from_job_name(self) -> None:
+        class _Run:
+            job_name = "089_maintenance_spark_healthcheck"
+            run_id = "abcdef123456"
+            tags = {"user_code": "smartfit"}
+
+        class _InitContext:
+            dagster_run = _Run()
+
+        context = spark_module._build_spark_app_context(
+            _InitContext(),
+            default_app_name="FactLecturasIngestion",
+            default_user_code="smartfit",
+        )
+
+        self.assertEqual(context["job_type"], "maintenance")
+
     def test_wait_for_spark_capacity_fails_when_cluster_is_full(self) -> None:
         spark_res = _spark_resource(
             master_url="spark://spark-master:7077",
