@@ -9,6 +9,17 @@ IF
     END;
 GO
 
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.schemas
+        WHERE name = N'stg'
+    )
+    BEGIN
+        EXEC ('CREATE SCHEMA stg');
+    END;
+GO
+
 IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
     BEGIN
         CREATE TABLE dwh.factReadingsMeasurement
@@ -31,6 +42,27 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             CONSTRAINT PK_factReadingsMeasurement
             PRIMARY KEY CLUSTERED (OperationId)
             WITH (IGNORE_DUP_KEY = ON) -- noqa: PRS
+        );
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
+    BEGIN
+        CREATE TABLE stg.factReadingsMeasurement
+        (
+            RunId NVARCHAR(100) NOT NULL,
+            OperationId UNIQUEIDENTIFIER NOT NULL,
+            SensorId UNIQUEIDENTIFIER NOT NULL,
+            SensorTyId UNIQUEIDENTIFIER NOT NULL,
+            DeviceId UNIQUEIDENTIFIER NOT NULL,
+            LocationId UNIQUEIDENTIFIER NOT NULL,
+            DeviceType VARCHAR(255) NOT NULL,
+            SensorType VARCHAR(255) NOT NULL,
+            LocalTimeSpan DATETIME2(0) NOT NULL,
+            MeasurementValue DECIMAL(9, 4) NULL,
+            MeasurementStdDev DECIMAL(9, 4) NULL,
+            Anomalies INT NULL,
+            ReadingsCount INT NULL
         );
     END;
 GO
@@ -89,5 +121,24 @@ IF
     BEGIN
         CREATE INDEX ix_factReadingsMeasurement_timespan_sensorid
             ON dwh.factReadingsMeasurement (LocalTimeSpan, SensorId);
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON i.object_id = o.object_id
+        INNER JOIN sys.schemas AS s
+            ON o.schema_id = s.schema_iD
+        WHERE
+            s.name = N'stg'
+            AND o.name = N'factReadingsMeasurement'
+            AND i.name = N'ix_stg_factReadingsMeasurement_run'
+    )
+    BEGIN
+        CREATE INDEX ix_stg_factReadingsMeasurement_run
+            ON stg.factReadingsMeasurement (RunId, OperationId);
     END;
 GO

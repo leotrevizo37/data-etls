@@ -181,7 +181,7 @@ def _reclassify_unclassified_rows(
             comment_lookup_df = spark_res.read_smartaudits_ai_comment_lookup()
         except Exception as exc:
             context.log.warning(
-                "Could not read dwh.dimSmartauditsAiCommentLookup: %s",
+                "Could not read ctl.SmartauditsAiCommentLookup: %s",
                 exc,
             )
 
@@ -201,6 +201,12 @@ def _reclassify_unclassified_rows(
             checkpoints_df=_read_mysql_table(spark_res, mysql, "checkpoints"),
             sublocations_df=_read_mysql_table(spark_res, mysql, "sublocations"),
             locations_df=_read_mysql_table(spark_res, mysql, "locations"),
+            users_df=_read_mysql_query(
+                spark_res,
+                mysql,
+                "SELECT Id, name, lastName FROM asp_net_users",
+                "smartaudits_users",
+            ),
             priority_types_df=_read_mysql_table(spark_res, mysql, "priority_types"),
             task_categories_df=_read_mysql_table(spark_res, mysql, "task_categories"),
             categories_df=_read_mysql_table(spark_res, mysql, "categories"),
@@ -383,6 +389,6 @@ def train_smartaudits_classifier_op(context) -> dict:
     return metadata
 
 
-@job(tags={"job_type": "smartaudits", "user_code": "carlsjr"})
+@job(name="111_smartaudits_classifier_training", tags={"job_type": "smartaudits", "user_code": "carlsjr"})
 def smartaudits_classifier_training_job():
     train_smartaudits_classifier_op()

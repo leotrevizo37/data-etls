@@ -94,7 +94,7 @@ def start_operations_run_and_get_range_op(
     if window["watermark_in_future"]:
         context.log.warning(
             "factReadingsMeasurement watermark %s is ahead of current local hour %s. "
-            "This run will clean future rows and clamp processing to the current local window.",
+            "This run will clamp processing to the current local window.",
             window["from_local"],
             window["max_local_hour"],
         )
@@ -105,9 +105,6 @@ def start_operations_run_and_get_range_op(
         + str(window["fetch_from"])
         + " to "
         + str(window["max_local_hour"])
-        + " (cleanup<"
-        + str(window["delete_to_exclusive"])
-        + ")"
         + " [tz=America/Ciudad_Juarez]"
         + deps
     )
@@ -313,7 +310,8 @@ def write_factreadingsmeasurement_op(
     start_time = perf_counter()
     spark_res = context.resources.spark
 
-    inserted = 0
+    staged_rows = 0
+    merged_rows = 0
     rows_with_readings_count_gt_0 = 0
     max_time_span: Optional[datetime] = None
     succeeded = False
@@ -321,24 +319,16 @@ def write_factreadingsmeasurement_op(
 
     sqlserver: SqlServerResource = context.resources.sqlserver
     retry_number = getattr(context, "retry_number", 0)
+    run_id = context.run_id
 
-    def cleanup_partial_write() -> None:
-        deleted_rows = sqlserver.delete_range(
-            schema_name="dwh",
-            table_name="factReadingsMeasurement",
-            time_column="LocalTimeSpan",
-            from_utc=window["delete_from"],
-            to_utc=window["delete_to_exclusive"],
-        )
-        context.log.info(
-            "Deleted "
-            + str(deleted_rows or 0)
-            + " partial factReadingsMeasurement rows before retry."
-        )
+    def clear_stage() -> int:
+        return sqlserver.clear_fact_readings_measurement_stage(run_id)
 
     def add_asset_metadata() -> None:
         metadata: Dict[str, Any] = {
-            "row_count": inserted,
+            "row_count": merged_rows,
+            "staged_row_count": staged_rows,
+            "merged_rows": merged_rows,
             "rows_with_readings_count_gt_0": rows_with_readings_count_gt_0,
             "elapsed_seconds": round(perf_counter() - start_time, 3),
             "from_local": str(window["fetch_from"]),
@@ -352,7 +342,12 @@ def write_factreadingsmeasurement_op(
 
     try:
         if retry_number > 0:
-            cleanup_partial_write()
+            cleared_rows = clear_stage()
+            context.log.info(
+                "Cleared "
+                + str(cleared_rows)
+                + " factReadingsMeasurement stage rows before retry."
+            )
 
         if len(devices_df.columns) <= 1 or len(devices_df.head(1)) == 0:
             succeeded = True
@@ -360,7 +355,7 @@ def write_factreadingsmeasurement_op(
             rows_with_readings_count_gt_0 = devices_df.filter(
                 col("ReadingsCount") > 0
             ).count()
-            inserted = spark_res.write_fact_operations(
+            staged_rows = spark_res.write_fact_operations_stage(
                 devices_df
                 .select(
                     "OperationId",
@@ -376,19 +371,30 @@ def write_factreadingsmeasurement_op(
                     "ReadingsCount",
                     "Anomalies",
                     "Sales"
-                )
+                ),
+                run_id,
             )
+            merged_rows = sqlserver.merge_fact_readings_measurement(run_id)
             max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
             succeeded = True
-            context.log.info(str(inserted) + "rows inserted.")
+            context.log.info(
+                str(staged_rows)
+                + " rows staged and "
+                + str(merged_rows)
+                + " rows merged into dwh.factReadingsMeasurement."
+            )
     except Exception as ex:
         error_message = str(ex)
         succeeded = False
         try:
-            cleanup_partial_write()
+            cleared_rows = clear_stage()
+            context.log.warning(
+                "Cleared %s factReadingsMeasurement stage rows after failed write.",
+                cleared_rows,
+            )
         except Exception as cleanup_ex:
             context.log.warning(
-                "Could not clean partial factReadingsMeasurement rows before retry: %s",
+                "Could not clean factReadingsMeasurement staging rows before retry: %s",
                 cleanup_ex,
             )
         if retry_number < OPERATIONS_MAX_RETRIES:
@@ -402,6 +408,11 @@ def write_factreadingsmeasurement_op(
                 max_retries=OPERATIONS_MAX_RETRIES,
                 seconds_to_wait=OPERATIONS_RETRY_DELAY_SECONDS,
             ) from ex
+    finally:
+        try:
+            clear_stage()
+        except Exception:
+            pass
 
     add_asset_metadata()
 
@@ -413,6 +424,9 @@ def write_factreadingsmeasurement_op(
             "max_time_span": max_time_span,
             "succeeded": succeeded,
             "error_message": error_message,
+            "row_count": merged_rows,
+            "staged_rows": staged_rows,
+            "merged_rows": merged_rows,
         },
     )
 
@@ -514,8 +528,7 @@ def upstream_deps_gate(context,
 def operations_assets(data_transformations):
     deps = upstream_deps_gate(data_transformations)
     fetch_from_ts = start_operations_run_and_get_range_op(deps)
-    cleaning = window_cleanup(fetch_from_ts)
-    raw_dims_df = load_raw_dimensions_op(cleaning)
+    raw_dims_df = load_raw_dimensions_op(deps)
     readings_extended_df = load_datalake_readings_extended_op(
         raw_dims_df=raw_dims_df,
         window=fetch_from_ts

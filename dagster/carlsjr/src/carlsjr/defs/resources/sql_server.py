@@ -6,6 +6,80 @@ import pyodbc
 from dagster import resource
 
 
+def build_fact_readings_measurement_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factReadingsMeasurement AS target
+USING (
+    SELECT
+        OperationId,
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        LocationId,
+        DeviceType,
+        SensorType,
+        LocalTimeSpan,
+        MeasurementValue,
+        MeasurementStdDev,
+        Anomalies,
+        ReadingsCount
+    FROM stg.factReadingsMeasurement
+    WHERE RunId = ?
+) AS source
+    ON target.OperationId = source.OperationId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.SensorId = source.SensorId,
+        target.SensorTyId = source.SensorTyId,
+        target.DeviceId = source.DeviceId,
+        target.LocationId = source.LocationId,
+        target.DeviceType = source.DeviceType,
+        target.SensorType = source.SensorType,
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.MeasurementValue = source.MeasurementValue,
+        target.MeasurementStdDev = source.MeasurementStdDev,
+        target.Anomalies = source.Anomalies,
+        target.ReadingsCount = source.ReadingsCount,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        OperationId,
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        LocationId,
+        DeviceType,
+        SensorType,
+        LocalTimeSpan,
+        MeasurementValue,
+        MeasurementStdDev,
+        Anomalies,
+        ReadingsCount
+    )
+    VALUES (
+        source.OperationId,
+        source.SensorId,
+        source.SensorTyId,
+        source.DeviceId,
+        source.LocationId,
+        source.DeviceType,
+        source.SensorType,
+        source.LocalTimeSpan,
+        source.MeasurementValue,
+        source.MeasurementStdDev,
+        source.Anomalies,
+        source.ReadingsCount
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_smartaudits_categories_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
@@ -26,6 +100,8 @@ USING (
         SublocationName,
         CheckpointName,
         TaskName,
+        ExecutorName,
+        AuditorName,
         TaskCategory,
         Priority,
         ResultCategory,
@@ -54,6 +130,8 @@ WHEN MATCHED THEN
         target.SublocationName = source.SublocationName,
         target.CheckpointName = source.CheckpointName,
         target.TaskName = source.TaskName,
+        target.ExecutorName = source.ExecutorName,
+        target.AuditorName = source.AuditorName,
         target.TaskCategory = source.TaskCategory,
         target.Priority = source.Priority,
         target.ResultCategory = source.ResultCategory,
@@ -80,6 +158,8 @@ WHEN NOT MATCHED BY TARGET THEN
         SublocationName,
         CheckpointName,
         TaskName,
+        ExecutorName,
+        AuditorName,
         TaskCategory,
         Priority,
         ResultCategory,
@@ -105,6 +185,8 @@ WHEN NOT MATCHED BY TARGET THEN
         source.SublocationName,
         source.CheckpointName,
         source.TaskName,
+        source.ExecutorName,
+        source.AuditorName,
         source.TaskCategory,
         source.Priority,
         source.ResultCategory,
@@ -224,7 +306,7 @@ SET NOCOUNT ON;
 
 DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
 
-MERGE dwh.dimSmartauditsAiCommentLookup AS target
+MERGE ctl.SmartauditsAiCommentLookup AS target
 USING (
     SELECT
         NormalizedCommentHash,
@@ -277,6 +359,403 @@ AND ReviewedResultCategory IS NOT NULL
 AND LTRIM(RTRIM(ReviewedResultCategory)) <> N'';
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_mantiz_ticket_lifecycle_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factMantizTicketLifecycle AS target
+USING (
+    SELECT
+        OrganizationId,
+        ClientId,
+        BranchId,
+        BranchName,
+        TicketId,
+        Folio,
+        EquipmentId,
+        EquipmentName,
+        EquipmentCatalogName,
+        FailureTypeId,
+        FailureTypeName,
+        SupplierId,
+        SupplierName,
+        TicketStatus,
+        TicketPriority,
+        TicketType,
+        TicketSource,
+        CreatedAt,
+        ScheduledAt,
+        ResolvedAt,
+        ApprovedAt,
+        CancelledAt,
+        UpdatedAt,
+        OpenToScheduledHours,
+        ScheduledToResolvedHours,
+        ResolvedToApprovedHours,
+        OpenToResolvedHours,
+        OpenToApprovedHours,
+        OpenToCancelledHours,
+        CurrentAgeHours,
+        IsOpen,
+        IsScheduled,
+        IsResolved,
+        IsApproved,
+        IsCancelled,
+        IsTerminal,
+        HasEquipment,
+        HasFailureType,
+        HasPhoto,
+        HasResolutionPhoto,
+        SourceLastChangedAt
+    FROM stg.factMantizTicketLifecycle
+    WHERE RunId = ?
+) AS source
+    ON target.OrganizationId = source.OrganizationId
+    AND target.TicketId = source.TicketId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.ClientId = source.ClientId,
+        target.BranchId = source.BranchId,
+        target.BranchName = source.BranchName,
+        target.Folio = source.Folio,
+        target.EquipmentId = source.EquipmentId,
+        target.EquipmentName = source.EquipmentName,
+        target.EquipmentCatalogName = source.EquipmentCatalogName,
+        target.FailureTypeId = source.FailureTypeId,
+        target.FailureTypeName = source.FailureTypeName,
+        target.SupplierId = source.SupplierId,
+        target.SupplierName = source.SupplierName,
+        target.TicketStatus = source.TicketStatus,
+        target.TicketPriority = source.TicketPriority,
+        target.TicketType = source.TicketType,
+        target.TicketSource = source.TicketSource,
+        target.CreatedAt = source.CreatedAt,
+        target.ScheduledAt = source.ScheduledAt,
+        target.ResolvedAt = source.ResolvedAt,
+        target.ApprovedAt = source.ApprovedAt,
+        target.CancelledAt = source.CancelledAt,
+        target.UpdatedAt = source.UpdatedAt,
+        target.OpenToScheduledHours = source.OpenToScheduledHours,
+        target.ScheduledToResolvedHours = source.ScheduledToResolvedHours,
+        target.ResolvedToApprovedHours = source.ResolvedToApprovedHours,
+        target.OpenToResolvedHours = source.OpenToResolvedHours,
+        target.OpenToApprovedHours = source.OpenToApprovedHours,
+        target.OpenToCancelledHours = source.OpenToCancelledHours,
+        target.CurrentAgeHours = source.CurrentAgeHours,
+        target.IsOpen = source.IsOpen,
+        target.IsScheduled = source.IsScheduled,
+        target.IsResolved = source.IsResolved,
+        target.IsApproved = source.IsApproved,
+        target.IsCancelled = source.IsCancelled,
+        target.IsTerminal = source.IsTerminal,
+        target.HasEquipment = source.HasEquipment,
+        target.HasFailureType = source.HasFailureType,
+        target.HasPhoto = source.HasPhoto,
+        target.HasResolutionPhoto = source.HasResolutionPhoto,
+        target.SourceLastChangedAt = source.SourceLastChangedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        OrganizationId,
+        ClientId,
+        BranchId,
+        BranchName,
+        TicketId,
+        Folio,
+        EquipmentId,
+        EquipmentName,
+        EquipmentCatalogName,
+        FailureTypeId,
+        FailureTypeName,
+        SupplierId,
+        SupplierName,
+        TicketStatus,
+        TicketPriority,
+        TicketType,
+        TicketSource,
+        CreatedAt,
+        ScheduledAt,
+        ResolvedAt,
+        ApprovedAt,
+        CancelledAt,
+        UpdatedAt,
+        OpenToScheduledHours,
+        ScheduledToResolvedHours,
+        ResolvedToApprovedHours,
+        OpenToResolvedHours,
+        OpenToApprovedHours,
+        OpenToCancelledHours,
+        CurrentAgeHours,
+        IsOpen,
+        IsScheduled,
+        IsResolved,
+        IsApproved,
+        IsCancelled,
+        IsTerminal,
+        HasEquipment,
+        HasFailureType,
+        HasPhoto,
+        HasResolutionPhoto,
+        SourceLastChangedAt
+    )
+    VALUES (
+        source.OrganizationId,
+        source.ClientId,
+        source.BranchId,
+        source.BranchName,
+        source.TicketId,
+        source.Folio,
+        source.EquipmentId,
+        source.EquipmentName,
+        source.EquipmentCatalogName,
+        source.FailureTypeId,
+        source.FailureTypeName,
+        source.SupplierId,
+        source.SupplierName,
+        source.TicketStatus,
+        source.TicketPriority,
+        source.TicketType,
+        source.TicketSource,
+        source.CreatedAt,
+        source.ScheduledAt,
+        source.ResolvedAt,
+        source.ApprovedAt,
+        source.CancelledAt,
+        source.UpdatedAt,
+        source.OpenToScheduledHours,
+        source.ScheduledToResolvedHours,
+        source.ResolvedToApprovedHours,
+        source.OpenToResolvedHours,
+        source.OpenToApprovedHours,
+        source.OpenToCancelledHours,
+        source.CurrentAgeHours,
+        source.IsOpen,
+        source.IsScheduled,
+        source.IsResolved,
+        source.IsApproved,
+        source.IsCancelled,
+        source.IsTerminal,
+        source.HasEquipment,
+        source.HasFailureType,
+        source.HasPhoto,
+        source.HasResolutionPhoto,
+        source.SourceLastChangedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_mantiz_ticket_text_insights_replace_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DELETE target
+FROM dwh.factMantizTicketTextInsights AS target
+INNER JOIN (
+    SELECT DISTINCT OrganizationId, TicketId
+    FROM stg.MantizTicketTextInsightChangedTicket
+    WHERE RunId = ?
+) AS changed
+    ON target.OrganizationId = changed.OrganizationId
+    AND target.TicketId = changed.TicketId;
+
+INSERT INTO dwh.factMantizTicketTextInsights (
+    OrganizationId,
+    TicketId,
+    Folio,
+    BranchId,
+    EquipmentId,
+    EquipmentName,
+    FailureCode,
+    FailureSubject,
+    FailureProblem,
+    SolutionCode,
+    SolutionSubject,
+    SolutionPartName,
+    SparePartName,
+    SparePartUnitPrice,
+    SparePartCurrency,
+    InsightStatus,
+    ClassificationMethod,
+    ClassifierConfidence,
+    NeedsReview,
+    InsightsJson,
+    TextEvidenceJson,
+    SourceLastChangedAt
+)
+SELECT
+    OrganizationId,
+    TicketId,
+    Folio,
+    BranchId,
+    EquipmentId,
+    EquipmentName,
+    FailureCode,
+    FailureSubject,
+    FailureProblem,
+    SolutionCode,
+    SolutionSubject,
+    SolutionPartName,
+    SparePartName,
+    SparePartUnitPrice,
+    SparePartCurrency,
+    InsightStatus,
+    ClassificationMethod,
+    ClassifierConfidence,
+    NeedsReview,
+    InsightsJson,
+    TextEvidenceJson,
+    SourceLastChangedAt
+FROM stg.factMantizTicketTextInsights
+WHERE RunId = ?;
+
+SELECT @@ROWCOUNT AS AffectedRows;
+"""
+
+
+def build_mantiz_text_insight_review_queue_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE ctl.MantizTextInsightReviewQueue AS target
+USING (
+    SELECT
+        InsightType,
+        ConceptHash,
+        CanonicalCode,
+        CanonicalName,
+        RepresentativeText,
+        RepresentativeRawText,
+        FirstSeenAt,
+        LastSeenAt,
+        CandidateCount,
+        TicketCount,
+        LastTicketId,
+        SuggestedByMethod
+    FROM stg.MantizTextInsightReviewQueue
+    WHERE RunId = ?
+) AS source
+    ON target.InsightType = source.InsightType
+    AND target.ConceptHash = source.ConceptHash
+WHEN MATCHED THEN
+    UPDATE SET
+        target.CanonicalCode = COALESCE(target.ReviewedCanonicalCode, target.CanonicalCode, source.CanonicalCode),
+        target.CanonicalName = COALESCE(target.ReviewedCanonicalName, target.CanonicalName, source.CanonicalName),
+        target.RepresentativeText = COALESCE(target.RepresentativeText, source.RepresentativeText),
+        target.RepresentativeRawText = COALESCE(target.RepresentativeRawText, source.RepresentativeRawText),
+        target.CandidateCount =
+            CASE
+                WHEN target.LastSeenAt IS NULL THEN target.CandidateCount + source.CandidateCount
+                WHEN source.LastSeenAt IS NULL THEN target.CandidateCount
+                WHEN source.LastSeenAt > target.LastSeenAt THEN target.CandidateCount + source.CandidateCount
+                ELSE target.CandidateCount
+            END,
+        target.TicketCount = source.TicketCount,
+        target.FirstSeenAt =
+            CASE
+                WHEN target.FirstSeenAt IS NULL THEN source.FirstSeenAt
+                WHEN source.FirstSeenAt IS NULL THEN target.FirstSeenAt
+                WHEN source.FirstSeenAt < target.FirstSeenAt THEN source.FirstSeenAt
+                ELSE target.FirstSeenAt
+            END,
+        target.LastSeenAt =
+            CASE
+                WHEN target.LastSeenAt IS NULL THEN source.LastSeenAt
+                WHEN source.LastSeenAt IS NULL THEN target.LastSeenAt
+                WHEN source.LastSeenAt > target.LastSeenAt THEN source.LastSeenAt
+                ELSE target.LastSeenAt
+            END,
+        target.LastTicketId = COALESCE(source.LastTicketId, target.LastTicketId),
+        target.SuggestedByMethod = COALESCE(target.SuggestedByMethod, source.SuggestedByMethod),
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        InsightType,
+        ConceptHash,
+        CanonicalCode,
+        CanonicalName,
+        RepresentativeText,
+        RepresentativeRawText,
+        ConceptStatus,
+        CandidateCount,
+        TicketCount,
+        FirstSeenAt,
+        LastSeenAt,
+        LastTicketId,
+        SuggestedByMethod,
+        ReviewStatus
+    )
+    VALUES (
+        source.InsightType,
+        source.ConceptHash,
+        source.CanonicalCode,
+        source.CanonicalName,
+        source.RepresentativeText,
+        source.RepresentativeRawText,
+        N'CANDIDATE',
+        source.CandidateCount,
+        source.TicketCount,
+        source.FirstSeenAt,
+        source.LastSeenAt,
+        source.LastTicketId,
+        source.SuggestedByMethod,
+        N'PENDING'
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_mantiz_text_insight_review_promotion_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @PromotedRows INT = 0;
+
+UPDATE ctl.MantizTextInsightReviewQueue
+SET
+    CanonicalCode = COALESCE(
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+        CanonicalCode
+    ),
+    CanonicalName = COALESCE(
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalName)), N''),
+        NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+        CanonicalName
+    ),
+    ConceptStatus = N'ACTIVE',
+    ReviewStatus = N'PROMOTED',
+    ReviewedAt = COALESCE(ReviewedAt, SYSUTCDATETIME()),
+    ModifiedAt = SYSUTCDATETIME()
+WHERE UPPER(ReviewStatus) = N'APPROVED'
+AND COALESCE(
+    NULLIF(LTRIM(RTRIM(ReviewedCanonicalCode)), N''),
+    NULLIF(LTRIM(RTRIM(CanonicalCode)), N'')
+) IS NOT NULL;
+
+SET @PromotedRows = @PromotedRows + @@ROWCOUNT;
+
+UPDATE ctl.MantizTextInsightReviewQueue
+SET
+    ConceptStatus = N'REJECTED',
+    ReviewStatus = N'PROMOTED',
+    ReviewedAt = COALESCE(ReviewedAt, SYSUTCDATETIME()),
+    ModifiedAt = SYSUTCDATETIME()
+WHERE UPPER(ReviewStatus) = N'REJECTED';
+
+SET @PromotedRows = @PromotedRows + @@ROWCOUNT;
+
+SELECT @PromotedRows AS AffectedRows;
 """
 
 
@@ -472,6 +951,27 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factReadingsMeasurement WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_readings_measurement(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_readings_measurement_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
     def clear_fact_smartaudits_categories_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
@@ -518,6 +1018,16 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_smartaudits_comment_lookup_promotion_sql())
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def promote_mantiz_text_insight_reviews(self) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_mantiz_text_insight_review_promotion_sql())
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
@@ -609,6 +1119,174 @@ class SqlServerResource:
                     training_rows,
                     1 if promote else 0,
                     1 if promote else 0,
+                    model_version,
+                    artifact_path,
+                    accuracy,
+                    macro_f1,
+                    training_rows,
+                    1 if promote else 0,
+                    1 if promote else 0,
+                )
+                conn.commit()
+
+    def clear_fact_mantiz_ticket_lifecycle_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factMantizTicketLifecycle WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_mantiz_ticket_lifecycle(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_mantiz_ticket_lifecycle_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_mantiz_ticket_text_insights_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factMantizTicketTextInsights WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount or 0
+                cursor.execute(
+                    "DELETE FROM stg.MantizTicketTextInsightDetail WHERE RunId = ?",
+                    run_id,
+                )
+                detail_deleted = cursor.rowcount or 0
+                cursor.execute(
+                    "DELETE FROM stg.MantizTicketTextInsightChangedTicket WHERE RunId = ?",
+                    run_id,
+                )
+                changed_deleted = cursor.rowcount or 0
+                cursor.execute(
+                    "DELETE FROM stg.MantizTextInsightReviewQueue WHERE RunId = ?",
+                    run_id,
+                )
+                review_deleted = cursor.rowcount or 0
+                conn.commit()
+                return int(deleted + detail_deleted + changed_deleted + review_deleted)
+
+    def replace_fact_mantiz_ticket_text_insights(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    build_fact_mantiz_ticket_text_insights_replace_sql(),
+                    run_id,
+                    run_id,
+                )
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def merge_mantiz_text_insight_review_queue(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_mantiz_text_insight_review_queue_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def get_active_mantiz_text_classifier_models(self) -> Dict[str, Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT InsightType, ModelVersion, ArtifactPath, Accuracy, MacroF1 "
+                    "FROM ctl.MantizTextInsightClassifierModels "
+                    "WHERE IsActive = 1"
+                )
+                rows = cursor.fetchall()
+                return {
+                    str(row.InsightType): {
+                        "model_version": row.ModelVersion,
+                        "artifact_path": row.ArtifactPath,
+                        "accuracy": row.Accuracy,
+                        "macro_f1": row.MacroF1,
+                    }
+                    for row in rows
+                }
+
+    def get_mantiz_text_classifier_training_samples(
+        self,
+        insight_type: str,
+    ) -> list[tuple[str, str]]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COALESCE(queue.RepresentativeRawText, queue.RepresentativeText) AS RepresentativeText, "
+                    "COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) AS Label "
+                    "FROM ctl.MantizTextInsightReviewQueue AS queue "
+                    "WHERE queue.InsightType = ? "
+                    "AND ("
+                    "UPPER(queue.ReviewStatus) IN (N'APPROVED', N'PROMOTED') "
+                    "OR UPPER(queue.ConceptStatus) = N'ACTIVE'"
+                    ") "
+                    "AND UPPER(queue.ConceptStatus) <> N'REJECTED' "
+                    "AND COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode) IS NOT NULL "
+                    "AND LTRIM(RTRIM(COALESCE(queue.ReviewedCanonicalCode, queue.CanonicalCode))) <> N'' "
+                    "AND COALESCE(queue.RepresentativeRawText, queue.RepresentativeText) IS NOT NULL "
+                    "AND LTRIM(RTRIM(COALESCE(queue.RepresentativeRawText, queue.RepresentativeText))) <> N''",
+                    insight_type,
+                )
+                return [
+                    (str(row.RepresentativeText), str(row.Label))
+                    for row in cursor.fetchall()
+                ]
+
+    def register_mantiz_text_classifier_model(
+        self,
+        insight_type: str,
+        model_version: str,
+        artifact_path: str,
+        accuracy: Optional[float],
+        macro_f1: Optional[float],
+        training_rows: int,
+        promote: bool,
+    ) -> None:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                if promote:
+                    cursor.execute(
+                        "UPDATE ctl.MantizTextInsightClassifierModels "
+                        "SET IsActive = 0 "
+                        "WHERE InsightType = ? "
+                        "AND IsActive = 1",
+                        insight_type,
+                    )
+                cursor.execute(
+                    "MERGE ctl.MantizTextInsightClassifierModels AS target "
+                    "USING (SELECT ? AS InsightType, ? AS ModelVersion) AS source "
+                    "ON target.InsightType = source.InsightType "
+                    "AND target.ModelVersion = source.ModelVersion "
+                    "WHEN MATCHED THEN UPDATE SET "
+                    "ArtifactPath = ?, Accuracy = ?, MacroF1 = ?, "
+                    "TrainingRows = ?, IsActive = ?, "
+                    "PromotedAt = CASE WHEN ? = 1 THEN SYSUTCDATETIME() ELSE PromotedAt END "
+                    "WHEN NOT MATCHED THEN INSERT "
+                    "(InsightType, ModelVersion, ArtifactPath, Accuracy, MacroF1, TrainingRows, IsActive, PromotedAt) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN SYSUTCDATETIME() ELSE NULL END);",
+                    insight_type,
+                    model_version,
+                    artifact_path,
+                    accuracy,
+                    macro_f1,
+                    training_rows,
+                    1 if promote else 0,
+                    1 if promote else 0,
+                    insight_type,
                     model_version,
                     artifact_path,
                     accuracy,

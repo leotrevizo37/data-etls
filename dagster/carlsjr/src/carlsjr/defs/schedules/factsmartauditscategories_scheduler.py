@@ -4,7 +4,7 @@ from ..jobs import fact_smartaudits_categories_job, smartaudits_classifier_train
 
 
 smartaudits_categories_sched_every_6h = ScheduleDefinition(
-    name="smartaudits_categories_sched_every_6h",
+    name="110_smartaudits_categories_every_6h",
     job=fact_smartaudits_categories_job,
     cron_schedule="25 */6 * * *",
     execution_timezone="America/Ciudad_Juarez",
@@ -12,7 +12,7 @@ smartaudits_categories_sched_every_6h = ScheduleDefinition(
 )
 
 smartaudits_classifier_training_daily = ScheduleDefinition(
-    name="smartaudits_classifier_training_daily",
+    name="111_smartaudits_classifier_training_daily",
     job=smartaudits_classifier_training_job,
     cron_schedule="10 2 * * *",
     execution_timezone="America/Ciudad_Juarez",

@@ -136,6 +136,8 @@ services:
       POSTGRES_USER: ${DAGSTER_PG_USER}
       POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD}
       POSTGRES_DB: ${DAGSTER_PG_DB}
+    ports:
+      - "127.0.0.1:${DAGSTER_POSTGRES_PORT:-5433}:5432"
     volumes:
       - dagster_postgres_data:/var/lib/postgresql/data
     networks:
@@ -446,6 +448,19 @@ services:
       SMARTAUDITS_CLASSIFIER_MIN_ACCURACY: ${CARLSJR_SMARTAUDITS_CLASSIFIER_MIN_ACCURACY:-0.85}
       SMARTAUDITS_CLASSIFIER_MIN_MACRO_F1: ${CARLSJR_SMARTAUDITS_CLASSIFIER_MIN_MACRO_F1:-0.80}
       SMARTAUDITS_CLASSIFIER_RETRAIN_UNCLASSIFIED_THRESHOLD: ${CARLSJR_SMARTAUDITS_CLASSIFIER_RETRAIN_UNCLASSIFIED_THRESHOLD:-100}
+      MANTIZ_MYSQL_HOST: ${CARLSJR_MANTIZ_MYSQL_HOST:-${MANTIZ_MYSQL_HOST:-}}
+      MANTIZ_MYSQL_PORT: ${CARLSJR_MANTIZ_MYSQL_PORT:-${MANTIZ_MYSQL_PORT:-3306}}
+      MANTIZ_MYSQL_DATABASE: ${CARLSJR_MANTIZ_MYSQL_DATABASE:-${MANTIZ_MYSQL_DATABASE:-}}
+      MANTIZ_MYSQL_USER: ${CARLSJR_MANTIZ_MYSQL_USER:-${MANTIZ_MYSQL_USER:-}}
+      MANTIZ_MYSQL_PASSWORD: ${CARLSJR_MANTIZ_MYSQL_PASSWORD:-${MANTIZ_MYSQL_PASSWORD:-}}
+      MANTIZ_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL: ${CARLSJR_MANTIZ_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:-${MANTIZ_MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:-true}}
+      MANTIZ_ORGANIZATION_ID: ${CARLSJR_MANTIZ_ORGANIZATION_ID:-${MANTIZ_ORGANIZATION_ID:-}}
+      MANTIZ_START_DATE: ${CARLSJR_MANTIZ_START_DATE:-${MANTIZ_START_DATE:-2026-01-01}}
+      MANTIZ_TEXT_CLASSIFIER_CONFIDENCE_THRESHOLD: ${CARLSJR_MANTIZ_TEXT_CLASSIFIER_CONFIDENCE_THRESHOLD:-0.75}
+      MANTIZ_TEXT_CLASSIFIER_MIN_TRAINING_ROWS: ${CARLSJR_MANTIZ_TEXT_CLASSIFIER_MIN_TRAINING_ROWS:-25}
+      MANTIZ_TEXT_CLASSIFIER_MIN_ACCURACY: ${CARLSJR_MANTIZ_TEXT_CLASSIFIER_MIN_ACCURACY:-0.75}
+      MANTIZ_TEXT_CLASSIFIER_MIN_MACRO_F1: ${CARLSJR_MANTIZ_TEXT_CLASSIFIER_MIN_MACRO_F1:-0.70}
+      MANTIZ_TEXT_MODEL_BASE_PATH: ${CARLSJR_MANTIZ_TEXT_MODEL_BASE_PATH:-s3a://data-etls/models/carlsjr/mantiz/text_insights}
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_DRIVER_PORT: ${CARLSJR_SPARK_DRIVER_PORT}
@@ -494,6 +509,33 @@ services:
       - "${DAGSTER_WEB_PORT:-3000}:3000"
     command: [
       "dagster-webserver",
+      "--read-only",
+      "-h", "0.0.0.0",
+      "-p", "3000",
+      "-w", "/opt/dagster/app/workspace.yaml"
+    ]
+
+  dagster-web-admin:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: data-dagster-web-admin
+    <<: *dagster_common
+    depends_on:
+      dagster-user-code-mcd:
+        condition: service_healthy
+      dagster-user-code-smft:
+        condition: service_healthy
+      dagster-user-code-mcd-cdp:
+        condition: service_healthy
+      dagster-postgres:
+        condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${DAGSTER_ADMIN_WEB_PORT:-3001}:3000"
+    command: [
+      "dagster-webserver",
       "-h", "0.0.0.0",
       "-p", "3000",
       "-w", "/opt/dagster/app/workspace.yaml"
@@ -523,6 +565,7 @@ services:
 
   spark-master:
     user: "0:0"
+    init: true
     build:
       context: ..
       dockerfile: spark/Dockerfile
@@ -555,11 +598,13 @@ services:
       - data-dagster
     healthcheck:
       test: [
-        "CMD-SHELL",
-        "python3 -c 'import os,socket; host=os.popen(\"hostname -i\").read().strip().split()[0]; port=int(os.environ.get(\"SPARK_MASTER_PORT\", \"7077\")); s=socket.socket(); s.settimeout(2); s.connect((host,port)); s.close()'"
+        "CMD",
+        "python3",
+        "-c",
+        "import os,socket; host=os.environ.get('SPARK_MASTER_BIND_HOST') or os.environ.get('SPARK_MASTER_HOST') or 'localhost'; addr=socket.gethostbyname(host); port=int(os.environ.get('SPARK_MASTER_PORT', '7077')); socket.create_connection((addr, port), 4).close()"
       ]
-      interval: 10s
-      timeout: 5s
+      interval: 90s
+      timeout: 10s
       retries: 10
       start_period: 20s
 
@@ -576,7 +621,7 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
-      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-86400}"
+      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-10800}"
     ports:
       - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
       - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"

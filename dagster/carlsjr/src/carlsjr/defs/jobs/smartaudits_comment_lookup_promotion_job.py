@@ -19,6 +19,6 @@ def promote_smartaudits_comment_lookup_op(context) -> dict:
     return metadata
 
 
-@job(tags={"job_type": "smartaudits", "user_code": "carlsjr"})
+@job(name="112_smartaudits_comment_lookup_promotion", tags={"job_type": "smartaudits", "user_code": "carlsjr"})
 def smartaudits_comment_lookup_promotion_job():
     promote_smartaudits_comment_lookup_op()

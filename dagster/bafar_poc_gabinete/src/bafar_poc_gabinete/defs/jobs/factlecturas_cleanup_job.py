@@ -48,6 +48,6 @@ def delete_old_factlecturas_op(context):
         }
     )
 
-@job(tags={"job_type": "limpieza", "user_code": "bafar_poc_gabinete"})
+@job(name="011_sense_lecturas_cleanup", tags={"job_type": "limpieza", "user_code": "bafar_poc_gabinete"})
 def factlecturas_cleanup_job():
     delete_old_factlecturas_op()

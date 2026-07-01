@@ -252,7 +252,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertIs(manager._prepare_for_write(df), df)
         self.assertEqual(df.repartition_calls, [])
 
-    def test_spark_packages_preserve_adls_jdbc_and_add_hadoop_aws(self) -> None:
+    def test_spark_packages_preserve_adls_jdbc_without_dynamic_hadoop_aws(self) -> None:
         spark_res = _spark_resource(
             ozone_s3_endpoint="http://ozone-01:9878",
             adls_account_name="proddatalake",
@@ -261,8 +261,8 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         packages = spark_res._spark_packages()
 
-        self.assertIn(HADOOP_AWS_PACKAGE, packages)
         self.assertIn(MSSQL_JDBC_PACKAGE, packages)
+        self.assertNotIn(HADOOP_AWS_PACKAGE, packages)
 
     def test_spark_df_io_manager_joins_remote_s3a_paths(self) -> None:
         manager = SparkDataFrameParquetIOManager(
@@ -369,7 +369,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
     def test_spark_app_context_uses_dagster_run_tags(self) -> None:
         class _Run:
-            job_name = "fact_lecturas_ingestion_job"
+            job_name = "010_sense_lecturas_ingestion"
             run_id = "abcdef123456"
             tags = {"user_code": "mcdonalds_cdp", "job_type": "lecturas"}
 
@@ -385,8 +385,25 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(context["job_type"], "lecturas")
         self.assertEqual(
             context["app_name"],
-            "mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+            "mcdonalds_cdp/010_sense_lecturas_ingestion/abcdef12",
         )
+
+    def test_spark_app_context_infers_maintenance_job_type_from_job_name(self) -> None:
+        class _Run:
+            job_name = "089_maintenance_spark_healthcheck"
+            run_id = "abcdef123456"
+            tags = {"user_code": "mcdonalds_cdp"}
+
+        class _InitContext:
+            dagster_run = _Run()
+
+        context = spark_module._build_spark_app_context(
+            _InitContext(),
+            default_app_name="FactLecturasIngestion",
+            default_user_code="mcdonalds_cdp",
+        )
+
+        self.assertEqual(context["job_type"], "maintenance")
 
     def test_wait_for_spark_capacity_fails_when_cluster_is_full(self) -> None:
         spark_res = _spark_resource(
@@ -406,7 +423,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
             master_url="spark://spark-master:7077",
             executor_mem="2G",
             executor_cores=1,
-            app_name="mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+            app_name="mcdonalds_cdp/010_sense_lecturas_ingestion/abcdef12",
             job_type="lecturas",
             driver_host="10.0.0.5",
             driver_port="17001",
@@ -418,7 +435,7 @@ class SparkOzoneConfigTests(unittest.TestCase):
 
         self.assertEqual(
             conf.get("spark.app.name"),
-            "mcdonalds_cdp/fact_lecturas_ingestion_job/abcdef12",
+            "mcdonalds_cdp/010_sense_lecturas_ingestion/abcdef12",
         )
         self.assertEqual(conf.get("spark.executor.memory"), "2G")
         self.assertEqual(conf.get("spark.executor.cores"), "1")

@@ -44,6 +44,8 @@ class SmartAuditsMergeSqlTests(unittest.TestCase):
         self.assertIn("target.PlanResultId = source.PlanResultId", sql)
         self.assertIn("target.LocationId = source.LocationId", sql)
         self.assertIn("target.SublocationId = source.SublocationId", sql)
+        self.assertIn("target.ExecutorName = source.ExecutorName", sql)
+        self.assertIn("target.AuditorName = source.AuditorName", sql)
         self.assertIn("target.Priority = source.Priority", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
@@ -64,7 +66,7 @@ class SmartAuditsMergeSqlTests(unittest.TestCase):
         module = _load_sql_server_module()
         sql = module.build_smartaudits_comment_lookup_promotion_sql()
 
-        self.assertIn("MERGE dwh.dimSmartauditsAiCommentLookup", sql)
+        self.assertIn("MERGE ctl.SmartauditsAiCommentLookup", sql)
         self.assertIn("target.NormalizedCommentHash = source.NormalizedCommentHash", sql)
         self.assertIn("target.AiResult = source.AiResult", sql)
         self.assertIn("target.ClassificationMethod = N'HUMAN'", sql)

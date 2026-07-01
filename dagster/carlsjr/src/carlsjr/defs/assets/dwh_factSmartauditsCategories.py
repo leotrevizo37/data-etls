@@ -250,7 +250,7 @@ def transform_and_load_smartaudits_categories_op(
                 comment_lookup_df = spark_res.read_smartaudits_ai_comment_lookup()
             except Exception as exc:
                 context.log.warning(
-                    "Could not read dwh.dimSmartauditsAiCommentLookup: %s",
+                    "Could not read ctl.SmartauditsAiCommentLookup: %s",
                     exc,
                 )
 
@@ -289,6 +289,12 @@ def transform_and_load_smartaudits_categories_op(
                 checkpoints_df=_read_mysql_table(spark_res, mysql, "checkpoints"),
                 sublocations_df=_read_mysql_table(spark_res, mysql, "sublocations"),
                 locations_df=_read_mysql_table(spark_res, mysql, "locations"),
+                users_df=_read_mysql_query(
+                    spark_res,
+                    mysql,
+                    "SELECT Id, name, lastName FROM asp_net_users",
+                    "smartaudits_users",
+                ),
                 priority_types_df=_read_mysql_table(spark_res, mysql, "priority_types"),
                 task_categories_df=_read_mysql_table(spark_res, mysql, "task_categories"),
                 categories_df=_read_mysql_table(spark_res, mysql, "categories"),
