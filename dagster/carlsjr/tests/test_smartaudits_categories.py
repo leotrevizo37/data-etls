@@ -62,6 +62,8 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
                     "id": 1,
                     "workPlanId": 10,
                     "okAI": 0,
+                    "userId": " exec-1 ",
+                    "validatorUserId": " aud-1 ",
                     "reviewDate": datetime(2026, 3, 31, 10, 0),
                     "reviewAIDate": datetime(2026, 3, 31, 10, 5),
                 },
@@ -69,6 +71,8 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
                     "id": 2,
                     "workPlanId": 20,
                     "okAI": 1,
+                    "userId": "exec-2",
+                    "validatorUserId": None,
                     "reviewDate": datetime(2026, 3, 31, 11, 0),
                     "reviewAIDate": datetime(2026, 3, 31, 11, 5),
                 },
@@ -76,6 +80,8 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
                     "id": 3,
                     "workPlanId": 30,
                     "okAI": 0,
+                    "userId": "exec-3",
+                    "validatorUserId": "aud-3",
                     "reviewDate": datetime(2026, 3, 31, 12, 0),
                     "reviewAIDate": datetime(2026, 3, 31, 12, 5),
                 },
@@ -166,6 +172,15 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
         locations = self.spark.createDataFrame(
             [{"id": "mx-loc-1", "Name": "Sucursal 1"}]
         )
+        users = self.spark.createDataFrame(
+            [
+                {"Id": "EXEC-1", "name": "  juan  ", "lastName": " perez "},
+                {"Id": "AUD-1", "name": " maria ", "lastName": " lopez  "},
+                {"Id": "EXEC-2", "name": "ana", "lastName": "ramirez"},
+                {"Id": "EXEC-3", "name": "luis", "lastName": "garcia"},
+                {"Id": "AUD-3", "name": "carlos", "lastName": "diaz"},
+            ]
+        )
         priority_types = self.spark.createDataFrame(
             [
                 {"id": 1, "name": "Alta"},
@@ -192,6 +207,7 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints,
             sublocations,
             locations,
+            users,
             priority_types,
             task_categories,
             categories,
@@ -207,9 +223,10 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            priority_types_df=frames[7],
-            task_categories_df=frames[8],
-            categories_df=frames[9],
+            users_df=frames[7],
+            priority_types_df=frames[8],
+            task_categories_df=frames[9],
+            categories_df=frames[10],
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )
 
@@ -287,6 +304,17 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
 
         self.assertEqual(row.Priority, "Alta")
 
+    def test_executor_and_auditor_names_are_normalized(self) -> None:
+        row = (
+            self._result_df()
+            .filter("PlanResultId = 1")
+            .select("ExecutorName", "AuditorName")
+            .collect()[0]
+        )
+
+        self.assertEqual(row.ExecutorName, "JUAN PEREZ")
+        self.assertEqual(row.AuditorName, "MARIA LOPEZ")
+
     def test_unmatched_failed_comment_can_use_ml_prediction(self) -> None:
         frames = self._base_frames()
         predictions = self.spark.createDataFrame(
@@ -308,9 +336,10 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            priority_types_df=frames[7],
-            task_categories_df=frames[8],
-            categories_df=frames[9],
+            users_df=frames[7],
+            priority_types_df=frames[8],
+            task_categories_df=frames[9],
+            categories_df=frames[10],
             classifier_predictions_df=predictions,
         )
 
@@ -350,9 +379,10 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            priority_types_df=frames[7],
-            task_categories_df=frames[8],
-            categories_df=frames[9],
+            users_df=frames[7],
+            priority_types_df=frames[8],
+            task_categories_df=frames[9],
+            categories_df=frames[10],
             comment_lookup_df=lookup,
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )
@@ -387,9 +417,10 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
             checkpoints_df=frames[4],
             sublocations_df=frames[5],
             locations_df=frames[6],
-            priority_types_df=frames[7],
-            task_categories_df=frames[8],
-            categories_df=frames[9],
+            users_df=frames[7],
+            priority_types_df=frames[8],
+            task_categories_df=frames[9],
+            categories_df=frames[10],
             comment_lookup_df=lookup,
             classifier_predictions_df=empty_classifier_predictions_df(self.spark),
         )

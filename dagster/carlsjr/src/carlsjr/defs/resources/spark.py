@@ -942,6 +942,8 @@ class SparkResource:
             "SublocationName",
             "CheckpointName",
             "TaskName",
+            "ExecutorName",
+            "AuditorName",
             "TaskCategory",
             "Priority",
             "ResultCategory",
