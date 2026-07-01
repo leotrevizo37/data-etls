@@ -34,6 +34,8 @@ OUTPUT_COLUMNS = [
     "SublocationName",
     "CheckpointName",
     "TaskName",
+    "ExecutorName",
+    "AuditorName",
     "TaskCategory",
     "Priority",
     "ResultCategory",
@@ -173,6 +175,7 @@ def build_smartaudits_categories_df(
     checkpoints_df: DataFrame,
     sublocations_df: DataFrame,
     locations_df: DataFrame,
+    users_df: DataFrame,
     priority_types_df: DataFrame,
     task_categories_df: DataFrame,
     categories_df: DataFrame,
@@ -199,6 +202,38 @@ def build_smartaudits_categories_df(
         .filter(F.col("rn") == F.lit(1))
         .drop("rn")
     )
+    executor_users_df = (
+        users_df
+        .select(
+            F.upper(F.trim(F.col("Id").cast("string"))).alias("ExecutorUserId"),
+            F.upper(
+                F.trim(
+                    F.concat_ws(
+                        " ",
+                        F.trim(F.col("name").cast("string")),
+                        F.trim(F.col("lastName").cast("string")),
+                    )
+                )
+            ).alias("ExecutorName"),
+        )
+        .dropDuplicates(["ExecutorUserId"])
+    )
+    auditor_users_df = (
+        users_df
+        .select(
+            F.upper(F.trim(F.col("Id").cast("string"))).alias("AuditorUserId"),
+            F.upper(
+                F.trim(
+                    F.concat_ws(
+                        " ",
+                        F.trim(F.col("name").cast("string")),
+                        F.trim(F.col("lastName").cast("string")),
+                    )
+                )
+            ).alias("AuditorName"),
+        )
+        .dropDuplicates(["AuditorUserId"])
+    )
 
     base = (
         plan_results_df.alias("pr")
@@ -224,6 +259,16 @@ def build_smartaudits_categories_df(
             "left",
         )
         .join(
+            executor_users_df.alias("eu"),
+            F.upper(F.trim(F.col("pr.userId").cast("string"))) == F.col("eu.ExecutorUserId"),
+            "left",
+        )
+        .join(
+            auditor_users_df.alias("au"),
+            F.upper(F.trim(F.col("pr.validatorUserId").cast("string"))) == F.col("au.AuditorUserId"),
+            "left",
+        )
+        .join(
             priority_types_df.alias("pt"),
             F.col("t.priorityTypeId") == F.col("pt.id"),
             "left",
@@ -240,6 +285,8 @@ def build_smartaudits_categories_df(
             F.col("sl.description").cast("string").alias("SublocationName"),
             F.col("cp.description").cast("string").alias("CheckpointName"),
             F.col("t.description").cast("string").alias("TaskName"),
+            F.col("eu.ExecutorName").cast("string").alias("ExecutorName"),
+            F.col("au.AuditorName").cast("string").alias("AuditorName"),
             F.coalesce(F.col("tc.TaskCategory"), F.lit("SIN_CATEGORIA")).alias("TaskCategory"),
             F.col("pt.name").cast("string").alias("Priority"),
             ai_result_int_column(F.col("pr.okAI")).cast("byte").alias("AiResult"),
