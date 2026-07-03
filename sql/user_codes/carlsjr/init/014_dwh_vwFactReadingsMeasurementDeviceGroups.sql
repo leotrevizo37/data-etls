@@ -46,11 +46,15 @@ WITH fact_dim AS (
 group_hour AS (
     SELECT
         fact_dim.DeviceGroup,
-        fact_dim.LocalTimeSpan
+        fact_dim.LocalTimeSpan,
+        fact_dim.LocationId,
+        fact_dim.LocationName
     FROM fact_dim
     GROUP BY
         fact_dim.DeviceGroup,
-        fact_dim.LocalTimeSpan
+        fact_dim.LocalTimeSpan,
+        fact_dim.LocationId,
+        fact_dim.LocationName
 ),
 
 device_hour AS (
@@ -78,14 +82,14 @@ device_hour AS (
 )
 
 SELECT
+    group_hour.LocationId,
+    group_hour.LocationName,
     group_hour.DeviceGroup,
     group_hour.LocalTimeSpan,
     (
         SELECT
             device_hour.DeviceId,
-            device_hour.LocationId,
             device_hour.SubLocationName,
-            device_hour.LocationName,
             device_hour.DeviceType,
             device_hour.DeviceName,
             JSON_QUERY((
@@ -111,8 +115,8 @@ SELECT
         WHERE
             device_hour.DeviceGroup = group_hour.DeviceGroup
             AND device_hour.LocalTimeSpan = group_hour.LocalTimeSpan
+            AND device_hour.LocationId = group_hour.LocationId
         ORDER BY
-            device_hour.LocationName,
             device_hour.SubLocationName,
             device_hour.DeviceType,
             device_hour.DeviceName,
