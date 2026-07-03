@@ -304,6 +304,16 @@ class SmartAuditsCategoriesTransformationTests(unittest.TestCase):
 
         self.assertEqual(row.Priority, "Alta")
 
+    def test_task_without_category_defaults_to_sin_categoria(self) -> None:
+        row = (
+            self._result_df()
+            .filter("PlanResultId = 3")
+            .select("TaskCategory")
+            .collect()[0]
+        )
+
+        self.assertEqual(row.TaskCategory, "SIN_CATEGORIA")
+
     def test_executor_and_auditor_names_are_normalized(self) -> None:
         row = (
             self._result_df()
