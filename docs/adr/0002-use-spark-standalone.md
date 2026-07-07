@@ -18,4 +18,6 @@ Usar Spark standalone como motor de transformacion distribuida.
 - El recurso Spark controla perfiles por tipo de job.
 - La disponibilidad de workers y memoria pasa a ser una dependencia operacional.
 - Los DataFrames intermedios se materializan con `spark_df_io_manager`.
+- La VM orquestadora, pasa a ser excusivamente orquestadora, liberando recursos necesarios, 
+mientras que el cómputo deja de depender de la misma VM.
 

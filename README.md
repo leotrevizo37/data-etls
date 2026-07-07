@@ -5,10 +5,11 @@ en DUMA, BIs y herramientas agénticas. El repositorio integra extraccion,
 transformacion, carga, orquestacion y contratos SQL Server para seis `user_codes` 
 Dagster casi gemelos, manteniendo separada la configuracion sensible.
 
-[validate-docker-image.yml](.github/workflows/validate-docker-image.yml)
-[lint-python.yml](.github/workflows/lint-python.yml)
-[validate-compose.yml](.github/workflows/validate-compose.yml)
-[lint-sql.yml](.github/workflows/lint-sql.yml)
+[![docker-image.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-docker-image.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-docker-image.yml)
+[![ci-python.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml)
+[![validate-compose.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml)
+[![lint-sql.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml)
+[![Deploy Production](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml/badge.svg?branch=main&event=release)](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml)
 
 # BI serving layer (DUMA)
 

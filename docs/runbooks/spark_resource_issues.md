@@ -29,5 +29,7 @@ Diagnosticar fallas por falta de recursos Spark, workers no disponibles o proble
 2. Confirmar que el job tenga el tag `job_type` esperado.
 3. Ejecutar `089_maintenance_spark_healthcheck` en el `user_code` afectado.
 4. Validar que `SPARK_DF_IO_BASE_PATH` sea accesible para driver y workers.
+5. Revisar logs de driver y workers.
 5. Reintentar cuando haya recursos libres.
+6. Ó cancelar aplicación en caso de que se haya quedado colgando
 
