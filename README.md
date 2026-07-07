@@ -9,7 +9,7 @@ Dagster casi gemelos, manteniendo separada la configuracion sensible.
 [![ci-python.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-python.yml)
 [![validate-compose.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/validate-compose.yml)
 [![lint-sql.yml](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml/badge.svg)](https://github.com/leotrevizo37/mcdonalds-etl/actions/workflows/lint-sql.yml)
-[![Deploy Production](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml/badge.svg?branch=main&event=release)](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml)
+[![Deploy Production](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml/badge.svg?branch=main)](https://github.com/leotrevizo37/data-etls/actions/workflows/deploy-production.yml)
 
 # BI serving layer (DUMA)
 
