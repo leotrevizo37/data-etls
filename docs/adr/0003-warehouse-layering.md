@@ -1,0 +1,27 @@
+# ADR 0003: Separar `dwh`, `stg` y `ctl`
+
+## Estado
+
+Aceptado.
+
+## Contexto
+
+Los pipelines necesitan contratos estables de consumo, cargas idempotentes y control de watermarks/modelos/revision.
+
+## Decision
+
+Separar las responsabilidades en tres esquemas:
+
+| Esquema | Responsabilidad |
+|---|---|
+| `dwh` | Tablas y vistas de consumo |
+| `stg` | Tablas temporales por corrida |
+| `ctl` | Control de ingestion, colas, modelos y logs |
+
+## Consecuencias
+
+- Los consumidores consultan `dwh`.
+- Los pipelines escriben staging por `RunId` cuando necesitan `MERGE` o reemplazo controlado.
+- Los estados operativos y de revision se mantienen fuera de las tablas finales.
+- Los cambios de contrato deben cuidar DDL, staging y merge de forma sincronizada.
+
