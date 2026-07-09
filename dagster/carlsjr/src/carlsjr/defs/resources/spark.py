@@ -39,6 +39,8 @@ DEFAULT_SPARK_RESOURCE_PROFILES = {
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "sense_doi": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "sense_doi_training": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "smartaudits": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "mantiz": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
@@ -84,6 +86,10 @@ def _local_to_utc_naive(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=_get_operations_timezone())
     return _coerce_utc_naive(dt)
+
+
+def _format_sql_datetime(dt: datetime) -> str:
+    return dt.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
@@ -899,6 +905,54 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def read_fact_readings_measurement_range(
+        self,
+        from_local: datetime,
+        to_local: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        query = (
+            "(SELECT "
+            "OperationId, SensorId, SensorTyId, DeviceId, LocationId, "
+            "DeviceType, SensorType, LocalTimeSpan, MeasurementValue, "
+            "MeasurementStdDev, Anomalies, ReadingsCount "
+            "FROM dwh.factReadingsMeasurement "
+            "WHERE LocalTimeSpan >= '"
+            + _format_sql_datetime(from_local)
+            + "' AND LocalTimeSpan < '"
+            + _format_sql_datetime(to_local)
+            + "') AS factReadingsMeasurementRange"
+        )
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=query,
+            properties=self._build_wh_path()["properties"],
+        )
+
+    def read_fact_sensor_events_range(
+        self,
+        from_local: datetime,
+        to_local: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        query = (
+            "(SELECT "
+            "ReadId, SensorId, DeviceId, LocationId, LocationName, DeviceType, "
+            "SensorType, SensorName, LocalTimeSpan, Value, EventMinutes, "
+            "IsEventCompleted "
+            "FROM dwh.factSensorEvents "
+            "WHERE LocalTimeSpan >= '"
+            + _format_sql_datetime(from_local)
+            + "' AND LocalTimeSpan < '"
+            + _format_sql_datetime(to_local)
+            + "') AS factSensorEventsRange"
+        )
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=query,
+            properties=self._build_wh_path()["properties"],
+        )
+
     def write_fact_sensor_events(self, df: DataFrame) -> int:
         df_dedup = (
             df
@@ -923,6 +977,91 @@ class SparkResource:
             df_dedup,
             table="dwh.factSensorEvents",
             chunk_column="ReadId",
+        )
+
+    def write_device_operational_insight_hourly_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "UserCode",
+            "DeviceId",
+            "LocationId",
+            "SubLocationId",
+            "DeviceType",
+            "DeviceName",
+            "LocalTimeSpan",
+            "HealthScore",
+            "OperationalState",
+            "TrendDirection",
+            "ConfidenceScore",
+            "CoverageScore",
+            "ExpectedValueComplianceScore",
+            "SensorReliabilityScore",
+            "EventStabilityScore",
+            "BehaviorStabilityScore",
+            "PeerAlignmentScore",
+            "FailureRiskScore",
+            "DominantReasonCode",
+            "RecommendedAction",
+            "EvidenceJson",
+            "FeatureSetVersion",
+            "ScoringVersion",
+            "ModelVersion",
+        ]
+        df_stage = df.select(
+            lit(run_id).alias("RunId"),
+            *[col(column) for column in fact_columns],
+        )
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factDeviceOperationalInsightHourly",
+            chunk_column="DeviceId",
+        )
+
+    def write_device_operational_insight_daily_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "UserCode",
+            "DeviceId",
+            "LocationId",
+            "SubLocationId",
+            "DeviceType",
+            "DeviceName",
+            "LocalDate",
+            "HealthScore",
+            "WorstHourlyState",
+            "OperationalState",
+            "CriticalHours",
+            "WatchHours",
+            "DegradedHours",
+            "EventMinutes",
+            "OpenEvents",
+            "SevenDayHealthScore",
+            "ThirtyDayHealthScore",
+            "TrendDirection",
+            "ConfidenceScore",
+            "PeerPercentileRisk",
+            "FailureRiskScore",
+            "DominantReasonCode",
+            "RecommendedAction",
+            "EvidenceJson",
+            "FeatureSetVersion",
+            "ScoringVersion",
+            "ModelVersion",
+        ]
+        df_stage = df.select(
+            lit(run_id).alias("RunId"),
+            *[col(column) for column in fact_columns],
+        )
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factDeviceOperationalInsightDaily",
+            chunk_column="DeviceId",
         )
 
     def write_fact_smartaudits_categories_stage(
@@ -1251,6 +1390,11 @@ class SparkResource:
         row = spark.read.parquet(artifact_path).select("content").collect()[0]
         return bytes(row.content)
 
+    def read_device_operational_model_artifact(self, artifact_path: str) -> bytes:
+        spark = self.get_spark()
+        row = spark.read.parquet(artifact_path).select("content").collect()[0]
+        return bytes(row.content)
+
     def write_mantiz_text_model_artifact(
         self,
         artifact_path: str,
@@ -1272,6 +1416,26 @@ class SparkResource:
         )
 
     def write_smartaudits_model_artifact(
+        self,
+        artifact_path: str,
+        model_version: str,
+        content: bytes,
+    ) -> None:
+        spark = self.get_spark()
+        schema = StructType(
+            [
+                StructField("model_version", StringType(), False),
+                StructField("content", BinaryType(), False),
+            ]
+        )
+        (
+            spark.createDataFrame([(model_version, bytearray(content))], schema)
+            .write
+            .mode("overwrite")
+            .parquet(artifact_path)
+        )
+
+    def write_device_operational_model_artifact(
         self,
         artifact_path: str,
         model_version: str,

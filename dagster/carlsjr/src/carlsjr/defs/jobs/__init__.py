@@ -16,6 +16,11 @@ from .mantiz_text_insight_review_promotion_job import mantiz_text_insight_review
 from .smartaudits_comment_lookup_promotion_job import smartaudits_comment_lookup_promotion_job
 from .smartaudits_classifier_training_job import smartaudits_classifier_training_job
 from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck_job
+from .device_operational_intelligence_job import device_operational_intelligence_job
+from .device_operational_mlops_jobs import (
+    device_operational_review_promotion_job,
+    device_operational_training_job,
+)
 
 __all__ = [
     "fact_lecturas_ingestion_job",
@@ -34,4 +39,7 @@ __all__ = [
     "smartaudits_comment_lookup_promotion_job",
     "smartaudits_classifier_training_job",
     "spark_df_io_manager_healthcheck_job",
+    "device_operational_intelligence_job",
+    "device_operational_training_job",
+    "device_operational_review_promotion_job",
 ]

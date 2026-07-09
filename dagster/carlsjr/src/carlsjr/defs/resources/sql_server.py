@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
+import json
 import os
 import pyodbc
 from dagster import resource
@@ -73,6 +74,262 @@ WHEN NOT MATCHED BY TARGET THEN
         source.MeasurementStdDev,
         source.Anomalies,
         source.ReadingsCount
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_device_operational_insight_hourly_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factDeviceOperationalInsightHourly AS target
+USING (
+    SELECT
+        UserCode,
+        DeviceId,
+        LocationId,
+        SubLocationId,
+        DeviceType,
+        DeviceName,
+        LocalTimeSpan,
+        HealthScore,
+        OperationalState,
+        TrendDirection,
+        ConfidenceScore,
+        CoverageScore,
+        ExpectedValueComplianceScore,
+        SensorReliabilityScore,
+        EventStabilityScore,
+        BehaviorStabilityScore,
+        PeerAlignmentScore,
+        FailureRiskScore,
+        DominantReasonCode,
+        RecommendedAction,
+        EvidenceJson,
+        FeatureSetVersion,
+        ScoringVersion,
+        ModelVersion
+    FROM stg.factDeviceOperationalInsightHourly
+    WHERE RunId = ?
+) AS source
+    ON target.UserCode = source.UserCode
+    AND target.DeviceId = source.DeviceId
+    AND target.LocationId = source.LocationId
+    AND target.SubLocationId = source.SubLocationId
+    AND target.LocalTimeSpan = source.LocalTimeSpan
+WHEN MATCHED THEN
+    UPDATE SET
+        target.DeviceType = source.DeviceType,
+        target.DeviceName = source.DeviceName,
+        target.HealthScore = source.HealthScore,
+        target.OperationalState = source.OperationalState,
+        target.TrendDirection = source.TrendDirection,
+        target.ConfidenceScore = source.ConfidenceScore,
+        target.CoverageScore = source.CoverageScore,
+        target.ExpectedValueComplianceScore = source.ExpectedValueComplianceScore,
+        target.SensorReliabilityScore = source.SensorReliabilityScore,
+        target.EventStabilityScore = source.EventStabilityScore,
+        target.BehaviorStabilityScore = source.BehaviorStabilityScore,
+        target.PeerAlignmentScore = source.PeerAlignmentScore,
+        target.FailureRiskScore = source.FailureRiskScore,
+        target.DominantReasonCode = source.DominantReasonCode,
+        target.RecommendedAction = source.RecommendedAction,
+        target.EvidenceJson = source.EvidenceJson,
+        target.FeatureSetVersion = source.FeatureSetVersion,
+        target.ScoringVersion = source.ScoringVersion,
+        target.ModelVersion = source.ModelVersion,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        UserCode,
+        DeviceId,
+        LocationId,
+        SubLocationId,
+        DeviceType,
+        DeviceName,
+        LocalTimeSpan,
+        HealthScore,
+        OperationalState,
+        TrendDirection,
+        ConfidenceScore,
+        CoverageScore,
+        ExpectedValueComplianceScore,
+        SensorReliabilityScore,
+        EventStabilityScore,
+        BehaviorStabilityScore,
+        PeerAlignmentScore,
+        FailureRiskScore,
+        DominantReasonCode,
+        RecommendedAction,
+        EvidenceJson,
+        FeatureSetVersion,
+        ScoringVersion,
+        ModelVersion
+    )
+    VALUES (
+        source.UserCode,
+        source.DeviceId,
+        source.LocationId,
+        source.SubLocationId,
+        source.DeviceType,
+        source.DeviceName,
+        source.LocalTimeSpan,
+        source.HealthScore,
+        source.OperationalState,
+        source.TrendDirection,
+        source.ConfidenceScore,
+        source.CoverageScore,
+        source.ExpectedValueComplianceScore,
+        source.SensorReliabilityScore,
+        source.EventStabilityScore,
+        source.BehaviorStabilityScore,
+        source.PeerAlignmentScore,
+        source.FailureRiskScore,
+        source.DominantReasonCode,
+        source.RecommendedAction,
+        source.EvidenceJson,
+        source.FeatureSetVersion,
+        source.ScoringVersion,
+        source.ModelVersion
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_device_operational_insight_daily_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factDeviceOperationalInsightDaily AS target
+USING (
+    SELECT
+        UserCode,
+        DeviceId,
+        LocationId,
+        SubLocationId,
+        DeviceType,
+        DeviceName,
+        LocalDate,
+        HealthScore,
+        WorstHourlyState,
+        OperationalState,
+        CriticalHours,
+        WatchHours,
+        DegradedHours,
+        EventMinutes,
+        OpenEvents,
+        SevenDayHealthScore,
+        ThirtyDayHealthScore,
+        TrendDirection,
+        ConfidenceScore,
+        PeerPercentileRisk,
+        FailureRiskScore,
+        DominantReasonCode,
+        RecommendedAction,
+        EvidenceJson,
+        FeatureSetVersion,
+        ScoringVersion,
+        ModelVersion
+    FROM stg.factDeviceOperationalInsightDaily
+    WHERE RunId = ?
+) AS source
+    ON target.UserCode = source.UserCode
+    AND target.DeviceId = source.DeviceId
+    AND target.LocationId = source.LocationId
+    AND target.SubLocationId = source.SubLocationId
+    AND target.LocalDate = source.LocalDate
+WHEN MATCHED THEN
+    UPDATE SET
+        target.DeviceType = source.DeviceType,
+        target.DeviceName = source.DeviceName,
+        target.HealthScore = source.HealthScore,
+        target.WorstHourlyState = source.WorstHourlyState,
+        target.OperationalState = source.OperationalState,
+        target.CriticalHours = source.CriticalHours,
+        target.WatchHours = source.WatchHours,
+        target.DegradedHours = source.DegradedHours,
+        target.EventMinutes = source.EventMinutes,
+        target.OpenEvents = source.OpenEvents,
+        target.SevenDayHealthScore = source.SevenDayHealthScore,
+        target.ThirtyDayHealthScore = source.ThirtyDayHealthScore,
+        target.TrendDirection = source.TrendDirection,
+        target.ConfidenceScore = source.ConfidenceScore,
+        target.PeerPercentileRisk = source.PeerPercentileRisk,
+        target.FailureRiskScore = source.FailureRiskScore,
+        target.DominantReasonCode = source.DominantReasonCode,
+        target.RecommendedAction = source.RecommendedAction,
+        target.EvidenceJson = source.EvidenceJson,
+        target.FeatureSetVersion = source.FeatureSetVersion,
+        target.ScoringVersion = source.ScoringVersion,
+        target.ModelVersion = source.ModelVersion,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        UserCode,
+        DeviceId,
+        LocationId,
+        SubLocationId,
+        DeviceType,
+        DeviceName,
+        LocalDate,
+        HealthScore,
+        WorstHourlyState,
+        OperationalState,
+        CriticalHours,
+        WatchHours,
+        DegradedHours,
+        EventMinutes,
+        OpenEvents,
+        SevenDayHealthScore,
+        ThirtyDayHealthScore,
+        TrendDirection,
+        ConfidenceScore,
+        PeerPercentileRisk,
+        FailureRiskScore,
+        DominantReasonCode,
+        RecommendedAction,
+        EvidenceJson,
+        FeatureSetVersion,
+        ScoringVersion,
+        ModelVersion
+    )
+    VALUES (
+        source.UserCode,
+        source.DeviceId,
+        source.LocationId,
+        source.SubLocationId,
+        source.DeviceType,
+        source.DeviceName,
+        source.LocalDate,
+        source.HealthScore,
+        source.WorstHourlyState,
+        source.OperationalState,
+        source.CriticalHours,
+        source.WatchHours,
+        source.DegradedHours,
+        source.EventMinutes,
+        source.OpenEvents,
+        source.SevenDayHealthScore,
+        source.ThirtyDayHealthScore,
+        source.TrendDirection,
+        source.ConfidenceScore,
+        source.PeerPercentileRisk,
+        source.FailureRiskScore,
+        source.DominantReasonCode,
+        source.RecommendedAction,
+        source.EvidenceJson,
+        source.FeatureSetVersion,
+        source.ScoringVersion,
+        source.ModelVersion
     )
 OUTPUT $action INTO @MergeActions;
 
@@ -971,6 +1228,617 @@ class SqlServerResource:
                 if row is None or row.AffectedRows is None:
                     return 0
                 return int(row.AffectedRows)
+
+    def clear_device_operational_insight_hourly_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factDeviceOperationalInsightHourly WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def clear_device_operational_insight_daily_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factDeviceOperationalInsightDaily WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_device_operational_insight_hourly(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    build_fact_device_operational_insight_hourly_merge_sql(),
+                    run_id,
+                )
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def merge_device_operational_insight_daily(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    build_fact_device_operational_insight_daily_merge_sql(),
+                    run_id,
+                )
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def register_device_operational_feature_set(
+        self,
+        user_code: str,
+        feature_set_version: str,
+        feature_schema_json: str,
+    ) -> None:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+MERGE ctl.SenseDeviceOperationalFeatureSets AS target
+USING (
+    SELECT
+        ? AS UserCode,
+        ? AS FeatureSetVersion,
+        ? AS FeatureSchemaJson
+) AS source
+    ON target.UserCode = source.UserCode
+    AND target.FeatureSetVersion = source.FeatureSetVersion
+WHEN MATCHED THEN
+    UPDATE SET FeatureSchemaJson = source.FeatureSchemaJson
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (UserCode, FeatureSetVersion, FeatureSchemaJson)
+    VALUES (source.UserCode, source.FeatureSetVersion, source.FeatureSchemaJson);
+""",
+                    user_code,
+                    feature_set_version,
+                    feature_schema_json,
+                )
+                conn.commit()
+
+    def get_active_device_operational_model(
+        self,
+        user_code: str,
+        model_scope: str,
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+SELECT TOP (1)
+    ModelVersion,
+    ArtifactPath,
+    FeatureSetVersion,
+    ScoringVersion,
+    MacroF1,
+    WeightedF1,
+    CriticalRecall,
+    CriticalPrecision,
+    CalibrationError,
+    MetricsJson
+FROM ctl.SenseDeviceOperationalModels
+WHERE UserCode = ?
+AND ModelScope = ?
+AND IsActive = 1
+AND Status = N'active'
+ORDER BY PromotedAt DESC, CreatedAt DESC
+""",
+                    user_code,
+                    model_scope,
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "model_version": row.ModelVersion,
+                    "artifact_path": row.ArtifactPath,
+                    "feature_set_version": row.FeatureSetVersion,
+                    "scoring_version": row.ScoringVersion,
+                    "macro_f1": float(row.MacroF1 or 0),
+                    "weighted_f1": float(row.WeightedF1 or 0),
+                    "critical_recall": float(row.CriticalRecall or 0),
+                    "critical_precision": float(row.CriticalPrecision or 0),
+                    "calibration_error": float(row.CalibrationError or 0),
+                    "metrics_json": row.MetricsJson,
+                }
+
+    def register_device_operational_model(
+        self,
+        user_code: str,
+        model_scope: str,
+        model_version: str,
+        model_family: str,
+        artifact_path: str,
+        feature_set_version: str,
+        scoring_version: str,
+        training_window_start: datetime,
+        training_window_end: datetime,
+        training_rows: int,
+        validation_rows: int,
+        test_rows: int,
+        accuracy: float,
+        macro_f1: float,
+        weighted_f1: float,
+        critical_recall: float,
+        critical_precision: float,
+        calibration_error: float,
+        metrics_json: str,
+        feature_schema_json: str,
+        training_distribution_json: str,
+        promote: bool = False,
+    ) -> None:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                if promote:
+                    cursor.execute(
+                        """
+UPDATE ctl.SenseDeviceOperationalModels
+SET
+    IsActive = 0,
+    Status = N'archived'
+WHERE UserCode = ?
+AND ModelScope = ?
+AND IsActive = 1
+""",
+                        user_code,
+                        model_scope,
+                    )
+                cursor.execute(
+                    """
+INSERT INTO ctl.SenseDeviceOperationalModels (
+    UserCode,
+    ModelScope,
+    ModelVersion,
+    ModelFamily,
+    ArtifactPath,
+    FeatureSetVersion,
+    ScoringVersion,
+    TrainingWindowStart,
+    TrainingWindowEnd,
+    TrainingRows,
+    ValidationRows,
+    TestRows,
+    Accuracy,
+    MacroF1,
+    WeightedF1,
+    CriticalRecall,
+    CriticalPrecision,
+    CalibrationError,
+    MetricsJson,
+    FeatureSchemaJson,
+    TrainingDistributionJson,
+    Status,
+    IsActive,
+    PromotedAt,
+    PromotedBy
+)
+VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    CASE WHEN ? = 1 THEN N'active' ELSE N'candidate' END,
+    ?,
+    CASE WHEN ? = 1 THEN SYSUTCDATETIME() ELSE NULL END,
+    CASE WHEN ? = 1 THEN N'dagster' ELSE NULL END
+)
+""",
+                    user_code,
+                    model_scope,
+                    model_version,
+                    model_family,
+                    artifact_path,
+                    feature_set_version,
+                    scoring_version,
+                    training_window_start,
+                    training_window_end,
+                    training_rows,
+                    validation_rows,
+                    test_rows,
+                    accuracy,
+                    macro_f1,
+                    weighted_f1,
+                    critical_recall,
+                    critical_precision,
+                    calibration_error,
+                    metrics_json,
+                    feature_schema_json,
+                    training_distribution_json,
+                    1 if promote else 0,
+                    1 if promote else 0,
+                    1 if promote else 0,
+                    1 if promote else 0,
+                )
+                conn.commit()
+
+    def promote_latest_device_operational_model(
+        self,
+        user_code: str,
+        model_scope: str,
+        min_macro_f1: float,
+        min_critical_recall: float,
+        max_calibration_error: float,
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+SELECT TOP (1)
+    ModelVersion,
+    ArtifactPath,
+    MacroF1,
+    CriticalRecall,
+    CalibrationError
+FROM ctl.SenseDeviceOperationalModels
+WHERE UserCode = ?
+AND ModelScope = ?
+AND Status = N'candidate'
+AND MacroF1 >= ?
+AND CriticalRecall >= ?
+AND CalibrationError <= ?
+ORDER BY CreatedAt DESC
+""",
+                    user_code,
+                    model_scope,
+                    min_macro_f1,
+                    min_critical_recall,
+                    max_calibration_error,
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                model_version = row.ModelVersion
+                cursor.execute(
+                    """
+UPDATE ctl.SenseDeviceOperationalModels
+SET
+    IsActive = 0,
+    Status = N'archived'
+WHERE UserCode = ?
+AND ModelScope = ?
+AND IsActive = 1
+""",
+                    user_code,
+                    model_scope,
+                )
+                cursor.execute(
+                    """
+UPDATE ctl.SenseDeviceOperationalModels
+SET
+    IsActive = 1,
+    Status = N'active',
+    PromotedAt = SYSUTCDATETIME(),
+    PromotedBy = N'dagster'
+WHERE UserCode = ?
+AND ModelScope = ?
+AND ModelVersion = ?
+""",
+                    user_code,
+                    model_scope,
+                    model_version,
+                )
+                conn.commit()
+                return {
+                    "model_version": model_version,
+                    "artifact_path": row.ArtifactPath,
+                    "macro_f1": float(row.MacroF1 or 0),
+                    "critical_recall": float(row.CriticalRecall or 0),
+                    "calibration_error": float(row.CalibrationError or 0),
+                }
+
+    def get_device_operational_training_samples(
+        self,
+        user_code: str,
+        training_window_days: int,
+    ) -> List[Dict[str, Any]]:
+        query = """
+SELECT
+    CAST(h.CoverageScore AS FLOAT) AS CoverageScore,
+    CAST(COALESCE(100.0 - h.ExpectedValueComplianceScore, 0) AS FLOAT) AS ExpectedValueDriftScoreFilled,
+    CAST(h.SensorReliabilityScore AS FLOAT) AS SensorReliabilityScore,
+    CAST(100.0 - h.EventStabilityScore AS FLOAT) AS EventPressureScore,
+    CAST(100.0 - h.BehaviorStabilityScore AS FLOAT) AS BehaviorChangeScore,
+    CAST(100.0 - h.PeerAlignmentScore AS FLOAT) AS PeerDeviationScore,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.TotalReadingsCount')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.ReadingsCount')),
+        0
+    ) AS ReadingsCount,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.SensorsWithValidValueCount')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.ReportingSensors')),
+        0
+    ) AS ReportingSensors,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.ExpectedSensorCount')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.ExpectedSensors')),
+        0
+    ) AS ExpectedSensors,
+    COALESCE(TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.EventMinutes')), 0) AS EventMinutes,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.OpenEventCount')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.OpenEvents')),
+        0
+    ) AS OpenEvents,
+    COALESCE(TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HourlyMeanValue')), 0) AS HourlyMeanValueFilled,
+    COALESCE(TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HourlyStdDevValue')), 0) AS HourlyStdDevValueFilled,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HistoricalMeanValue')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HistoryMeanValue')),
+        0
+    ) AS HistoryMeanValueFilled,
+    COALESCE(
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HistoricalStdDevValue')),
+        TRY_CONVERT(FLOAT, JSON_VALUE(h.EvidenceJson, '$.HistoryStdDevValue')),
+        0
+    ) AS HistoryStdDevValueFilled,
+    COALESCE(NULLIF(r.ReviewedState, N''), h.OperationalState) AS OperationalStateLabel,
+    COALESCE(NULLIF(r.ReviewedReasonCode, N''), h.DominantReasonCode) AS DominantReasonCodeLabel
+FROM dwh.factDeviceOperationalInsightHourly AS h
+LEFT JOIN ctl.SenseDeviceInsightReviewQueue AS r
+    ON r.UserCode = h.UserCode
+    AND r.DeviceId = h.DeviceId
+    AND r.LocationId = h.LocationId
+    AND r.SubLocationId = h.SubLocationId
+    AND r.LocalDate = CAST(h.LocalTimeSpan AS DATE)
+    AND UPPER(r.ReviewStatus) IN (N'ACCEPTED', N'CORRECTED', N'REVIEWED')
+WHERE h.UserCode = ?
+AND h.LocalTimeSpan >= DATEADD(DAY, -?, SYSUTCDATETIME())
+AND (
+    r.ReviewedState IS NOT NULL
+    OR h.ConfidenceScore >= 80
+    OR h.OperationalState IN (
+        N'CRITICAL',
+        N'DEGRADED',
+        N'OUT_OF_RANGE',
+        N'SENSOR_FAULT_SUSPECTED',
+        N'EXPECTED_VALUE_DRIFT',
+        N'DATA_UNRELIABLE'
+    )
+)
+"""
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, user_code, training_window_days)
+                columns = [column[0] for column in cursor.description]
+                return [
+                    {
+                        column: row[index]
+                        for index, column in enumerate(columns)
+                    }
+                    for row in cursor.fetchall()
+                ]
+
+    def enqueue_device_operational_reviews(
+        self,
+        user_code: str,
+        from_date,
+        to_date,
+    ) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+INSERT INTO ctl.SenseDeviceInsightReviewQueue (
+    UserCode,
+    DeviceId,
+    LocationId,
+    SubLocationId,
+    LocalDate,
+    OperationalState,
+    DominantReasonCode,
+    RecommendedAction,
+    ConfidenceScore,
+    FailureRiskScore,
+    EvidenceJson
+)
+SELECT
+    d.UserCode,
+    d.DeviceId,
+    d.LocationId,
+    d.SubLocationId,
+    d.LocalDate,
+    d.OperationalState,
+    d.DominantReasonCode,
+    d.RecommendedAction,
+    d.ConfidenceScore,
+    d.FailureRiskScore,
+    d.EvidenceJson
+FROM dwh.factDeviceOperationalInsightDaily AS d
+WHERE d.UserCode = ?
+AND d.LocalDate >= ?
+AND d.LocalDate <= ?
+AND (
+    d.OperationalState IN (
+        N'CRITICAL',
+        N'DEGRADED',
+        N'OUT_OF_RANGE',
+        N'SENSOR_FAULT_SUSPECTED',
+        N'EXPECTED_VALUE_DRIFT',
+        N'DATA_UNRELIABLE'
+    )
+    OR d.ConfidenceScore < 65
+    OR d.FailureRiskScore >= 0.65
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM ctl.SenseDeviceInsightReviewQueue AS q
+    WHERE q.UserCode = d.UserCode
+    AND q.DeviceId = d.DeviceId
+    AND q.LocationId = d.LocationId
+    AND q.SubLocationId = d.SubLocationId
+    AND q.LocalDate = d.LocalDate
+    AND UPPER(q.ReviewStatus) IN (N'PENDING', N'ACCEPTED', N'CORRECTED', N'REVIEWED')
+)
+""",
+                    user_code,
+                    from_date,
+                    to_date,
+                )
+                inserted = cursor.rowcount
+                conn.commit()
+                if inserted is None or inserted < 0:
+                    return 0
+                return int(inserted)
+
+    def promote_device_operational_reviews(self, user_code: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+UPDATE ctl.SenseDeviceInsightReviewQueue
+SET
+    ReviewStatus = N'REVIEWED',
+    ReviewedAt = COALESCE(ReviewedAt, SYSUTCDATETIME())
+WHERE UserCode = ?
+AND UPPER(ReviewStatus) IN (N'ACCEPTED', N'CORRECTED')
+AND ReviewedState IS NOT NULL
+""",
+                    user_code,
+                )
+                promoted = cursor.rowcount
+                conn.commit()
+                if promoted is None or promoted < 0:
+                    return 0
+                return int(promoted)
+
+    def record_device_operational_scoring_run(
+        self,
+        run_id: str,
+        user_code: str,
+        window_start: datetime,
+        window_end: datetime,
+        feature_set_version: str,
+        scoring_version: str,
+        model_version: Optional[str],
+        processed_rows: int,
+        hourly_rows: int,
+        daily_rows: int,
+        normal_count: int,
+        watch_count: int,
+        degraded_count: int,
+        critical_count: int,
+        data_unreliable_count: int,
+        review_queue_rows: int,
+        metrics: Dict[str, Any],
+        started_at: datetime,
+        completed_at: datetime,
+        succeeded: bool,
+        error_message: Optional[str],
+    ) -> None:
+        metrics_json = json.dumps(metrics, sort_keys=True)
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+MERGE ctl.SenseDeviceOperationalScoringRuns AS target
+USING (
+    SELECT
+        ? AS RunId,
+        ? AS UserCode
+) AS source
+    ON target.RunId = source.RunId
+    AND target.UserCode = source.UserCode
+WHEN MATCHED THEN
+    UPDATE SET
+        WindowStart = ?,
+        WindowEnd = ?,
+        FeatureSetVersion = ?,
+        ScoringVersion = ?,
+        ModelVersion = ?,
+        ProcessedRows = ?,
+        HourlyRows = ?,
+        DailyRows = ?,
+        NormalCount = ?,
+        WatchCount = ?,
+        DegradedCount = ?,
+        CriticalCount = ?,
+        DataUnreliableCount = ?,
+        ReviewQueueRows = ?,
+        MetricsJson = ?,
+        StartedAt = ?,
+        CompletedAt = ?,
+        Succeeded = ?,
+        ErrorMessage = ?
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        RunId,
+        UserCode,
+        WindowStart,
+        WindowEnd,
+        FeatureSetVersion,
+        ScoringVersion,
+        ModelVersion,
+        ProcessedRows,
+        HourlyRows,
+        DailyRows,
+        NormalCount,
+        WatchCount,
+        DegradedCount,
+        CriticalCount,
+        DataUnreliableCount,
+        ReviewQueueRows,
+        MetricsJson,
+        StartedAt,
+        CompletedAt,
+        Succeeded,
+        ErrorMessage
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+""",
+                    run_id,
+                    user_code,
+                    window_start,
+                    window_end,
+                    feature_set_version,
+                    scoring_version,
+                    model_version,
+                    processed_rows,
+                    hourly_rows,
+                    daily_rows,
+                    normal_count,
+                    watch_count,
+                    degraded_count,
+                    critical_count,
+                    data_unreliable_count,
+                    review_queue_rows,
+                    metrics_json,
+                    started_at,
+                    completed_at,
+                    1 if succeeded else 0,
+                    error_message,
+                    run_id,
+                    user_code,
+                    window_start,
+                    window_end,
+                    feature_set_version,
+                    scoring_version,
+                    model_version,
+                    processed_rows,
+                    hourly_rows,
+                    daily_rows,
+                    normal_count,
+                    watch_count,
+                    degraded_count,
+                    critical_count,
+                    data_unreliable_count,
+                    review_queue_rows,
+                    metrics_json,
+                    started_at,
+                    completed_at,
+                    1 if succeeded else 0,
+                    error_message,
+                )
+                conn.commit()
 
     def clear_fact_smartaudits_categories_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
