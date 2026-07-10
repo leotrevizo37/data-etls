@@ -7,7 +7,7 @@ ENV ACCEPT_EULA=Y \
     DAGSTER_HOME=/opt/dagster/dagster_home \
     PYTHONPATH=/opt/dagster/app/src
 
-RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds /opt/dagster/app/smartfit /opt/dagster/app/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/mcdonalds /opt/dagster/app/smartfit /opt/dagster/app/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr /opt/dagster/app/emerson
 
 WORKDIR /opt/dagster/app
 
@@ -50,3 +50,4 @@ COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
 COPY dagster/bafar_poc_gabinete /opt/dagster/app/bafar_poc_gabinete
 COPY dagster/valledelencino /opt/dagster/app/valledelencino
 COPY dagster/carlsjr /opt/dagster/app/carlsjr
+COPY dagster/emerson /opt/dagster/app/emerson
