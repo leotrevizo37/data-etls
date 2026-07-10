@@ -33,7 +33,7 @@ class SparkTransformationsTests(unittest.TestCase):
             "cuartos_frios",
             cuartos_frios,
             "Cuarto Frio",
-            "Cuarto Frio 2",
+            "Cuarto frio 3",
         ),
         (
             "cuarto_congelacion",
@@ -286,6 +286,20 @@ class SparkTransformationsTests(unittest.TestCase):
                 break
 
         self.assertTrue(set(methods).issubset(wrapper_methods))
+
+    def test_device_transformations_use_rlike_patterns(self) -> None:
+        for module_name in ("cuartos_frios", "cuarto_congelacion", "cuarto_residuos"):
+            with self.subTest(module=module_name):
+                source = (
+                    PROJECT_SRC
+                    / "emerson"
+                    / "defs"
+                    / "transformations"
+                    / (module_name + ".py")
+                ).read_text(encoding="utf-8")
+
+                self.assertIn(".rlike(", source)
+                self.assertNotIn(".isin(\"Cuarto Frio 2\"", source)
 
     def test_factreadingsmeasurement_uses_stage_merge_without_window_cleanup(self) -> None:
         operations_path = PROJECT_SRC / "emerson" / "defs" / "assets" / "operations_assets.py"

@@ -11,6 +11,7 @@ __all__ = [
     "cuarto_residuos",
     "cuartos_frios",
     "sensor_events",
+    "temperature_events",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -22,6 +23,7 @@ _MODULE_BY_EXPORT = {
     "cuarto_residuos": ".cuarto_residuos",
     "cuartos_frios": ".cuartos_frios",
     "sensor_events": ".sensor_events",
+    "temperature_events": ".temperature_events",
 }
 
 
