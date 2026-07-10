@@ -1,4 +1,5 @@
 import sys
+import types
 import unittest
 from importlib import import_module
 from pathlib import Path
@@ -7,19 +8,14 @@ from pathlib import Path
 PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
-LOCAL_DAGSTER_ROOT = Path(__file__).resolve().parents[2]
-LOCAL_DAGSTER_PATHS = {LOCAL_DAGSTER_ROOT, LOCAL_DAGSTER_ROOT.parent}
-sys.path[:] = [
-    path
-    for path in sys.path
-    if Path(path or ".").resolve() not in LOCAL_DAGSTER_PATHS
-]
-dagster_module = sys.modules.get("dagster")
-if (
-    dagster_module is not None
-    and Path(dagster_module.__file__).resolve() == LOCAL_DAGSTER_ROOT / "__init__.py"
-):
-    del sys.modules["dagster"]
+
+try:
+    __import__("pyodbc")
+except ImportError:
+    pyodbc_stub = types.ModuleType("pyodbc")
+    pyodbc_stub.Connection = object
+    pyodbc_stub.Error = Exception
+    sys.modules["pyodbc"] = pyodbc_stub
 
 mlops_module = import_module("carlsjr.defs.jobs.device_operational_mlops_jobs")
 decide_model_promotion = mlops_module._decide_model_promotion
