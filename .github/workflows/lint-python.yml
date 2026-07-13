@@ -37,9 +37,9 @@ jobs:
 
       - name: Tests
         run: |
-          pytest -q || code=$?
-          if [ "${code:-0}" -eq 5 ]; then
-            echo "No tests collected (exit code 5). Skipping."
-            exit 0
-          fi
-          exit "${code:-0}"
+          (cd bafar_poc_gabinete && pytest -q)
+          (cd carlsjr && pytest -q)
+          (cd mcdonalds && pytest -q)
+          (cd mcdonalds_cdp && pytest -q)
+          (cd smartfit && pytest -q)
+          (cd valledelencino && pytest -q)

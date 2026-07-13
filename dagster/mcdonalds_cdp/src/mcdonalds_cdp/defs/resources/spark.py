@@ -85,7 +85,7 @@ def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
 
 
 def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> int:
-    raw = (os.environ if env is None else env).get(name)
+    raw = (env or os.environ).get(name)
     if raw is None or raw == "":
         return default
     try:
@@ -95,7 +95,7 @@ def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> i
 
 
 def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    current_env = os.environ if env is None else env
+    current_env = env or os.environ
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
@@ -103,7 +103,7 @@ def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, s
 
 
 def _build_s3a_tuning_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    current_env = os.environ if env is None else env
+    current_env = env or os.environ
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_S3A_TUNING_ENV.items()
@@ -115,7 +115,7 @@ def _build_spark_master_status_url(
     master_url: str,
     env: Optional[Dict[str, str]] = None,
 ) -> str:
-    current_env = os.environ if env is None else env
+    current_env = env or os.environ
     explicit_url = (current_env.get("SPARK_MASTER_STATUS_URL") or "").strip()
     parsed_master_url = urlparse(master_url)
     master_host = parsed_master_url.hostname
@@ -193,7 +193,7 @@ def _build_executor_cores(
     resource_profile: Dict[str, Any],
     env: Optional[Dict[str, str]] = None,
 ) -> int:
-    current_env = os.environ if env is None else env
+    current_env = env or os.environ
     if current_env.get("SPARK_EXECUTOR_CORES"):
         return _env_int("SPARK_EXECUTOR_CORES", 1, current_env)
 
