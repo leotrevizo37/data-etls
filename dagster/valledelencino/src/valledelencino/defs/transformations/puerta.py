@@ -35,6 +35,7 @@ def puerta(
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
+            .withColumn("InRangeReads", lit(0))
             .withColumn("Anomalies", lit(1).cast("integer"))
             .withColumn("MeasurementValue", lit(None))
             .withColumn("MeasurementStdDev", lit(None))
@@ -64,6 +65,7 @@ def puerta(
                 "Anomalies",
                 "sensor_type",
                 "ReadingsCount",
+                "InRangeReads",
                 "device_type",
             )
         )
@@ -88,6 +90,7 @@ def puerta(
                 "Anomalies",
                 "sensor_type",
                 "ReadingsCount",
+                "InRangeReads",
                 "device_type",
             )
         )
@@ -112,6 +115,7 @@ def puerta(
                 "Anomalies",
                 "sensor_type",
                 "ReadingsCount",
+                "InRangeReads",
                 "device_type",
             )
         )
@@ -143,6 +147,7 @@ def puerta(
             "Anomalies",
             "sensor_type",
             "ReadingsCount",
+            "InRangeReads",
             "device_type",
         )
     )
@@ -166,7 +171,7 @@ def puerta(
         )
     )
 
-    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "Anomalies": -1})
+    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "InRangeReads": 0, "Anomalies": -1})
 
     group_with_guid_df = (
         scaffold_enriched
