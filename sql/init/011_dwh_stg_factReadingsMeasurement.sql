@@ -36,6 +36,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             MeasurementStdDev DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
             ReadingsCount INT NULL,
+            InRangeReads INT NULL,
             ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_factReadingsMeasurement_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
@@ -62,8 +63,23 @@ IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
             MeasurementValue DECIMAL(9, 4) NULL,
             MeasurementStdDev DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
-            ReadingsCount INT NULL
+            ReadingsCount INT NULL,
+            InRangeReads INT NULL
         );
+    END;
+GO
+
+IF COL_LENGTH(N'dwh.factReadingsMeasurement', N'InRangeReads') IS NULL
+    BEGIN
+        ALTER TABLE dwh.factReadingsMeasurement
+            ADD InRangeReads INT NULL;
+    END;
+GO
+
+IF COL_LENGTH(N'stg.factReadingsMeasurement', N'InRangeReads') IS NULL
+    BEGIN
+        ALTER TABLE stg.factReadingsMeasurement
+            ADD InRangeReads INT NULL;
     END;
 GO
 
