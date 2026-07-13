@@ -136,7 +136,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(rows[0]["EventMinutes"], 30.0)
         self.assertAlmostEqual(rows[1]["EventMinutes"], 30.0)
 
-    def test_unclosed_event_uses_utc_time_span_for_run_end(self) -> None:
+    def test_event_closes_at_communication_threshold_using_utc_time_span(self) -> None:
         df = self._readings_df(
             [
                 self._row(
@@ -154,7 +154,40 @@ class SensorEventsTransformationTests(unittest.TestCase):
         rows = result.collect()
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
-        self.assertFalse(rows[0]["IsEventCompleted"])
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_same_state_readings_extend_event_until_communication_threshold(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 1.0),
+                self._row("r2", "s1", datetime(2026, 3, 29, 10, 30), 1.0),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 12:00:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 90.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_same_state_at_threshold_starts_new_event(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 1.0),
+                self._row("r2", "s1", datetime(2026, 3, 29, 10, 30), 1.0),
+                self._row("r3", "s1", datetime(2026, 3, 29, 11, 30), 1.0),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 12:00:00")
+
+        rows = result.orderBy("LocalTimeSpan").collect()
+        self.assertEqual([row["ReadId"] for row in rows], ["r1", "r3"])
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 90.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+        self.assertAlmostEqual(rows[1]["EventMinutes"], 30.0)
+        self.assertFalse(rows[1]["IsEventCompleted"])
 
     def test_ignores_temperature_out_of_range_when_under_two_hours(self) -> None:
         df = self._readings_df(
@@ -209,6 +242,30 @@ class SensorEventsTransformationTests(unittest.TestCase):
                 self._row(
                     "t2",
                     "temp1",
+                    datetime(2026, 3, 30, 10, 30),
+                    51.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t3",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 0),
+                    52.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t4",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 30),
+                    53.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t5",
+                    "temp1",
                     datetime(2026, 3, 30, 12, 0),
                     40.0,
                     device_type="Camara fria",
@@ -259,6 +316,30 @@ class SensorEventsTransformationTests(unittest.TestCase):
                     device_type="Camara fria",
                     sensor_type="Temperatura F",
                 ),
+                self._row(
+                    "t3",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 0),
+                    52.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t4",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 30),
+                    53.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t5",
+                    "temp1",
+                    datetime(2026, 3, 30, 12, 0),
+                    54.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
             ]
         )
         expected_df = self._expected_values_df(
@@ -282,6 +363,115 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(rows[0]["ReadId"], "t1")
         self.assertAlmostEqual(rows[0]["EventMinutes"], 150.0)
         self.assertFalse(rows[0]["IsEventCompleted"])
+
+    def test_temperature_event_closes_after_communication_threshold(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "t1",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t2",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 30),
+                    51.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t3",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 0),
+                    52.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "00:00:00",
+                    "EndTime": "23:59:59",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 13:00:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 120.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_temperature_reading_after_gap_does_not_extend_previous_event(self) -> None:
+        df = self._readings_df(
+            [
+                self._row(
+                    "t1",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 0),
+                    50.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t2",
+                    "temp1",
+                    datetime(2026, 3, 30, 10, 30),
+                    51.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t3",
+                    "temp1",
+                    datetime(2026, 3, 30, 11, 0),
+                    52.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+                self._row(
+                    "t4",
+                    "temp1",
+                    datetime(2026, 3, 30, 13, 0),
+                    53.0,
+                    device_type="Camara fria",
+                    sensor_type="Temperatura F",
+                ),
+            ]
+        )
+        expected_df = self._expected_values_df(
+            [
+                {
+                    "SensorId": "temp1",
+                    "DeviceId": "d-temp1",
+                    "min_expected_value": 30.0,
+                    "max_expected_value": 40.0,
+                    "StartTime": "00:00:00",
+                    "EndTime": "23:59:59",
+                    "scheduledDays": "1",
+                },
+            ]
+        )
+
+        result = temperature_events(df, expected_df, "2026-03-30 13:30:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ReadId"], "t1")
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 120.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
 
     def test_ignores_temperature_readings_outside_schedule(self) -> None:
         df = self._readings_df(

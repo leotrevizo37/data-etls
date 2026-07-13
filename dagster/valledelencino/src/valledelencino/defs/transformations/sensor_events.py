@@ -2,12 +2,13 @@ from datetime import datetime
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lag, lead, lit, when, unix_timestamp
+from pyspark.sql.functions import col, lag, lead, lit, max, row_number, sum, when, unix_timestamp
 from pyspark.sql.window import Window
 
 
 OPEN_VALUE = 1
 CLOSE_VALUE = 0
+COMMUNICATION_THRESHOLD_MINUTES = 60
 
 
 def resolve_sensor_events_from(
@@ -31,39 +32,105 @@ def sensor_events(
 
     sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
 
-    with_prev = base.withColumn(
-        "prev_value", lag("Value").over(sensor_window)
+    with_prev = (
+        base
+        .withColumn("prev_value", lag("Value").over(sensor_window))
+        .withColumn("prev_time", lag("TimeSpan").over(sensor_window))
     )
 
-    state_changes = with_prev.filter(
-        col("prev_value").isNull() | (col("Value") != col("prev_value"))
+    with_event_id = (
+        with_prev
+        .withColumn(
+            "is_new_event",
+            when(
+                col("prev_value").isNull()
+                | (col("Value") != col("prev_value"))
+                | (
+                    unix_timestamp(col("TimeSpan"))
+                    - unix_timestamp(col("prev_time"))
+                    >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60)
+                ),
+                lit(1),
+            ).otherwise(lit(0)),
+        )
+        .withColumn(
+            "event_id",
+            sum("is_new_event").over(
+                sensor_window.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+            ),
+        )
+    )
+
+    event_window = Window.partitionBy("SensorId", "event_id")
+
+    state_changes = (
+        with_event_id
+        .withColumn("last_event_time", max("TimeSpan").over(event_window))
+        .withColumn(
+            "event_row_number",
+            row_number().over(event_window.orderBy("LocalTimeSpan", "ReadId")),
+        )
+        .filter(col("event_row_number") == lit(1))
     )
 
     change_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
 
-    with_next_event = state_changes.withColumn(
-        "next_event_time", lead("LocalTimeSpan").over(change_window)
+    with_next_event = (
+        state_changes
+        .withColumn("next_event_time", lead("LocalTimeSpan").over(change_window))
+        .withColumn("next_event_utc_time", lead("TimeSpan").over(change_window))
     )
 
     result = with_next_event.withColumn(
         "EventMinutes",
         when(
             col("next_event_time").isNotNull(),
-            (
-                unix_timestamp(col("next_event_time"))
-                - unix_timestamp(col("LocalTimeSpan"))
-            )
-            / lit(60),
+            when(
+                unix_timestamp(col("next_event_utc_time"))
+                - unix_timestamp(col("last_event_time"))
+                >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
+                (
+                    unix_timestamp(col("last_event_time"))
+                    - unix_timestamp(col("TimeSpan"))
+                )
+                / lit(60)
+                + lit(COMMUNICATION_THRESHOLD_MINUTES),
+            ).otherwise(
+                (
+                    unix_timestamp(col("next_event_time"))
+                    - unix_timestamp(col("LocalTimeSpan"))
+                )
+                / lit(60)
+            ),
         ).otherwise(
-            (
+            when(
                 unix_timestamp(lit(to_utc_str))
-                - unix_timestamp(col("TimeSpan"))
+                - unix_timestamp(col("last_event_time"))
+                >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
+                (
+                    unix_timestamp(col("last_event_time"))
+                    - unix_timestamp(col("TimeSpan"))
+                )
+                / lit(60)
+                + lit(COMMUNICATION_THRESHOLD_MINUTES),
+            ).otherwise(
+                (
+                    unix_timestamp(lit(to_utc_str))
+                    - unix_timestamp(col("TimeSpan"))
+                )
+                / lit(60)
             )
-            / lit(60)
         ),
     ).withColumn(
         "IsEventCompleted",
-        when(col("next_event_time").isNotNull(), lit(True)).otherwise(lit(False)),
+        when(col("next_event_time").isNotNull(), lit(True))
+        .when(
+            unix_timestamp(lit(to_utc_str))
+            - unix_timestamp(col("last_event_time"))
+            >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
+            lit(True),
+        )
+        .otherwise(lit(False)),
     )
 
     return result.select(

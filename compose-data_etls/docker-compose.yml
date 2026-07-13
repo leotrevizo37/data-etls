@@ -12,6 +12,7 @@ x-dagster-common: &dagster_common
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../dagster/carlsjr:/opt/dagster/app/carlsjr
+    - ../dagster/emerson:/opt/dagster/app/emerson
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -52,7 +53,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr emerson=emerson}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -488,6 +489,57 @@ services:
       retries: 10
       start_period: 40s
 
+  dagster-user-code-emerson:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: emerson-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/emerson
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/emerson/src
+      APP_DB: ${EMERSON_DB:-emerson}
+      DIM_DB: ${EMERSON_DIM_DB:-emerson}
+      ADLS_CONTAINER_NAME: ${EMERSON_ADLS_CONTAINER_NAME:-emerson}
+      FACTREADINGS_OVERLAP_HOURS: ${EMERSON_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      SPARK_DF_IO_BASE_PATH: ${EMERSON_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/emerson}
+      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
+      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${EMERSON_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${EMERSON_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${EMERSON_USER_CODE_PORT:-4007}:4007"
+      - "${EMERSON_SPARK_DRIVER_PORT}:${EMERSON_SPARK_DRIVER_PORT}"
+      - "${EMERSON_SPARK_BLOCK_MANAGER_PORT}:${EMERSON_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4007",
+      "-m", "emerson.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4007 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
   dagster-web:
     build:
       context: ..
@@ -629,6 +681,7 @@ services:
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}:${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}"
       - "${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}:${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}"
+      - "${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}:${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}"
     command:
       [
         "/opt/spark/bin/spark-class",
