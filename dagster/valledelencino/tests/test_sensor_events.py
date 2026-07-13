@@ -114,8 +114,8 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual([row["Value"] for row in rows], [0.0, 1.0, 0.0])
         self.assertAlmostEqual(rows[0]["EventMinutes"], 10.0)
         self.assertAlmostEqual(rows[1]["EventMinutes"], 10.0)
-        self.assertAlmostEqual(rows[2]["EventMinutes"], 100.0)
-        self.assertFalse(rows[2]["IsEventCompleted"])
+        self.assertAlmostEqual(rows[2]["EventMinutes"], 60.0)
+        self.assertTrue(rows[2]["IsEventCompleted"])
 
     def test_reprocess_start_uses_open_event_when_older_than_control(self) -> None:
         control_from = datetime(2026, 3, 29, 11, 0)
@@ -147,10 +147,10 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 30.0)
         self.assertTrue(rows[0]["IsEventCompleted"])
-        self.assertAlmostEqual(rows[1]["EventMinutes"], 90.0)
-        self.assertFalse(rows[1]["IsEventCompleted"])
+        self.assertAlmostEqual(rows[1]["EventMinutes"], 60.0)
+        self.assertTrue(rows[1]["IsEventCompleted"])
 
-    def test_unclosed_open_event_uses_run_end(self) -> None:
+    def test_event_closes_at_communication_threshold(self) -> None:
         df = self._readings_df(
             [
                 self._row(
@@ -169,9 +169,9 @@ class SensorEventsTransformationTests(unittest.TestCase):
         rows = result.collect()
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
-        self.assertFalse(rows[0]["IsEventCompleted"])
+        self.assertTrue(rows[0]["IsEventCompleted"])
 
-    def test_unclosed_event_uses_utc_time_span_for_run_end(self) -> None:
+    def test_event_closes_at_communication_threshold_using_utc_time_span(self) -> None:
         df = self._readings_df(
             [
                 self._row(
@@ -189,7 +189,40 @@ class SensorEventsTransformationTests(unittest.TestCase):
         rows = result.collect()
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 60.0)
-        self.assertFalse(rows[0]["IsEventCompleted"])
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_same_state_readings_extend_event_until_communication_threshold(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 1.0),
+                self._row("r2", "s1", datetime(2026, 3, 29, 10, 30), 1.0),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 12:00:00")
+
+        rows = result.collect()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 90.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+
+    def test_same_state_at_threshold_starts_new_event(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 1.0),
+                self._row("r2", "s1", datetime(2026, 3, 29, 10, 30), 1.0),
+                self._row("r3", "s1", datetime(2026, 3, 29, 11, 30), 1.0),
+            ]
+        )
+
+        result = sensor_events(df, "2026-03-29 12:00:00")
+
+        rows = result.orderBy("LocalTimeSpan").collect()
+        self.assertEqual([row["ReadId"] for row in rows], ["r1", "r3"])
+        self.assertAlmostEqual(rows[0]["EventMinutes"], 90.0)
+        self.assertTrue(rows[0]["IsEventCompleted"])
+        self.assertAlmostEqual(rows[1]["EventMinutes"], 30.0)
+        self.assertFalse(rows[1]["IsEventCompleted"])
 
     def test_multiple_sensors_compute_independently(self) -> None:
         df = self._readings_df(
@@ -209,10 +242,10 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(len(s1_rows), 2)
         self.assertEqual(len(s2_rows), 1)
         self.assertAlmostEqual(s1_rows[0]["EventMinutes"], 10.0)
-        self.assertAlmostEqual(s1_rows[1]["EventMinutes"], 110.0)
-        self.assertFalse(s1_rows[1]["IsEventCompleted"])
-        self.assertAlmostEqual(s2_rows[0]["EventMinutes"], 115.0)
-        self.assertFalse(s2_rows[0]["IsEventCompleted"])
+        self.assertAlmostEqual(s1_rows[1]["EventMinutes"], 60.0)
+        self.assertTrue(s1_rows[1]["IsEventCompleted"])
+        self.assertAlmostEqual(s2_rows[0]["EventMinutes"], 60.0)
+        self.assertTrue(s2_rows[0]["IsEventCompleted"])
 
     def test_long_sequence_fills_minutes_for_every_state_change(self) -> None:
         df = self._readings_df(
