@@ -29,6 +29,7 @@ from carlsjr.defs.transformations.cuartos_refrigeracion import (  # noqa: E402
 from carlsjr.defs.transformations.presencia import presencia  # noqa: E402
 from carlsjr.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
+    with_in_range_read_flag,
 )
 from carlsjr.operations_filters import (  # noqa: E402
     limit_operations_rows_to_closed_hours,
@@ -169,6 +170,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(row["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
+        self.assertEqual(row["InRangeReads"], 3)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 55 / 3)
 
@@ -212,6 +214,141 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(row["ReadingsCount"], 2)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 67.5)
+
+    def test_in_range_read_flag_respects_schedules_and_overlapping_ranges(self) -> None:
+        base = self._readings_df(
+            [
+                {
+                    "ReadId": "in-low",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 6, 10, 0),
+                    "Value": 5.0,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "ReadId": "in-overlap",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 6, 10, 10),
+                    "Value": 25.0,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "ReadId": "out-overlap",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 6, 10, 20),
+                    "Value": 15.0,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "ReadId": "no-hour-schedule",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 6, 12, 0),
+                    "Value": 100.0,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "ReadId": "no-day-schedule",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 7, 10, 0),
+                    "Value": 15.0,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+                {
+                    "ReadId": "null-value",
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Presion",
+                    "LocalTimeSpan": datetime(2026, 7, 6, 10, 30),
+                    "Value": None,
+                    "device_type": "A/C Rooftop",
+                    "device_name": "A/C Rooftop 1",
+                },
+            ]
+        )
+        expected_values = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": 10,
+                    "DeviceId": 1,
+                    "min_expected_value": 0.0,
+                    "max_expected_value": 10.0,
+                    "StartTime": "09:00:00",
+                    "EndTime": "11:00:00",
+                    "scheduledDays": "1-1",
+                },
+                {
+                    "SensorId": 10,
+                    "DeviceId": 1,
+                    "min_expected_value": 20.0,
+                    "max_expected_value": 30.0,
+                    "StartTime": "09:00:00",
+                    "EndTime": "11:00:00",
+                    "scheduledDays": "1-1",
+                },
+            ],
+            schema=StructType(
+                [
+                    StructField("SensorId", IntegerType(), True),
+                    StructField("DeviceId", IntegerType(), True),
+                    StructField("min_expected_value", DoubleType(), True),
+                    StructField("max_expected_value", DoubleType(), True),
+                    StructField("StartTime", StringType(), True),
+                    StructField("EndTime", StringType(), True),
+                    StructField("scheduledDays", StringType(), True),
+                ]
+            ),
+        )
+
+        flagged = with_in_range_read_flag(base, expected_values)
+        flags = {
+            row["ReadId"]: row["InRangeReadFlag"]
+            for row in flagged.select("ReadId", "InRangeReadFlag").collect()
+        }
+        stats_rows = {
+            row["LocalTimeSpan"]: row
+            for row in stats_calculator(flagged, sensor_type="Presion").collect()
+        }
+
+        self.assertEqual(
+            flags,
+            {
+                "in-low": 1,
+                "in-overlap": 1,
+                "out-overlap": 0,
+                "no-hour-schedule": 1,
+                "no-day-schedule": 1,
+                "null-value": 0,
+            },
+        )
+        self.assertEqual(stats_rows[datetime(2026, 7, 6, 10, 0)]["ReadingsCount"], 4)
+        self.assertEqual(stats_rows[datetime(2026, 7, 6, 10, 0)]["InRangeReads"], 2)
 
     def test_stats_calculator_returns_none_when_sensor_type_is_absent(self) -> None:
         base = self._readings_df(
@@ -338,6 +475,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "device_type": "Nivel de cisterna ",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 55.0,
+                    "InRangeReadFlag": 1,
                     "device_name": "Cisterna 1",
                 },
                 {
@@ -349,6 +487,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "device_type": "Nivel de cisterna ",
                     "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 65.0,
+                    "InRangeReadFlag": 0,
                     "device_name": "Cisterna 1",
                 },
             ]
@@ -378,6 +517,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["ReadingsCount"], 2)
+        self.assertEqual(rows[0]["InRangeReads"], 1)
         self.assertAlmostEqual(rows[0]["MeasurementValue"], 60.0)
 
     def test_cuartos_refrigeracion_uses_carlsjr_temperature_f_sensor(self) -> None:
@@ -540,6 +680,7 @@ class SparkTransformationsTests(unittest.TestCase):
         graph_section = source.split("def operations_assets", 1)[1]
 
         self.assertIn("write_fact_operations_stage(", write_section)
+        self.assertIn('"InRangeReads"', write_section)
         self.assertIn("merge_fact_readings_measurement(", write_section)
         self.assertNotIn("delete_range(", write_section)
         self.assertNotIn("window_cleanup(fetch_from_ts)", graph_section)
