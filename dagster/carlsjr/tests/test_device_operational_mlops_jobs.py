@@ -17,10 +17,9 @@ except ImportError:
     pyodbc_stub.Error = Exception
     sys.modules["pyodbc"] = pyodbc_stub
 
-mlops_module = import_module("carlsjr.defs.jobs.device_operational_mlops_jobs")
-decide_model_promotion = mlops_module._decide_model_promotion
 model_module = import_module("carlsjr.defs.transformations.device_operational_model")
 doi_module = import_module("carlsjr.defs.transformations.device_operational_intelligence")
+decide_model_promotion = model_module._decide_model_promotion
 train_device_operational_model = model_module.train_device_operational_model
 FEATURE_COLUMNS = doi_module.FEATURE_COLUMNS
 

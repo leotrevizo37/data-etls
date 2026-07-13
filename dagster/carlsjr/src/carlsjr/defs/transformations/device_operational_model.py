@@ -9,12 +9,87 @@ from sklearn.model_selection import train_test_split
 
 from .device_operational_intelligence import (
     FEATURE_COLUMNS,
+    FEATURE_SET_VERSION,
     STATE_CRITICAL,
     STATE_DEGRADED,
     STATE_EXPECTED_VALUE_DRIFT,
     STATE_OUT_OF_RANGE,
     STATE_SENSOR_FAULT,
 )
+
+
+def _model_promotion_score(metrics: dict) -> float:
+    return round(
+        (float(metrics.get("macro_f1") or 0.0) * 0.40)
+        + (float(metrics.get("weighted_f1") or 0.0) * 0.20)
+        + (float(metrics.get("critical_recall") or 0.0) * 0.30)
+        + (float(metrics.get("critical_precision") or 0.0) * 0.10)
+        - (float(metrics.get("calibration_error") or 0.0) * 0.10),
+        6,
+    )
+
+
+def _decide_model_promotion(
+    candidate_metrics: dict,
+    active_model: dict | None,
+    min_macro_f1: float,
+    min_critical_recall: float,
+    max_calibration_error: float,
+    min_score_delta: float,
+) -> dict:
+    candidate_score = _model_promotion_score(candidate_metrics)
+    if float(candidate_metrics["macro_f1"]) < min_macro_f1:
+        return {
+            "promoted": False,
+            "promotion_reason": "candidate_failed_macro_f1_gate",
+            "candidate_score": candidate_score,
+            "active_score": None,
+        }
+    if float(candidate_metrics["critical_recall"]) < min_critical_recall:
+        return {
+            "promoted": False,
+            "promotion_reason": "candidate_failed_critical_recall_gate",
+            "candidate_score": candidate_score,
+            "active_score": None,
+        }
+    if float(candidate_metrics["calibration_error"]) > max_calibration_error:
+        return {
+            "promoted": False,
+            "promotion_reason": "candidate_failed_calibration_gate",
+            "candidate_score": candidate_score,
+            "active_score": None,
+        }
+    if active_model is None:
+        return {
+            "promoted": True,
+            "promotion_reason": "no_active_model",
+            "candidate_score": candidate_score,
+            "active_score": None,
+        }
+
+    active_feature_set = active_model.get("feature_set_version")
+    if active_feature_set and active_feature_set != FEATURE_SET_VERSION:
+        return {
+            "promoted": True,
+            "promotion_reason": "active_model_feature_set_incompatible",
+            "candidate_score": candidate_score,
+            "active_score": None,
+            "active_model_version": active_model.get("model_version"),
+        }
+
+    active_score = _model_promotion_score(active_model)
+    promoted = candidate_score >= active_score + min_score_delta
+    return {
+        "promoted": promoted,
+        "promotion_reason": (
+            "candidate_score_met_or_exceeded_active"
+            if promoted
+            else "active_model_score_not_exceeded"
+        ),
+        "candidate_score": candidate_score,
+        "active_score": active_score,
+        "active_model_version": active_model.get("model_version"),
+    }
 
 
 @dataclass(frozen=True)
