@@ -171,6 +171,7 @@ def _spark_resource(
         app_name: str = "spark-ozone-config-test",
         job_type: str = "default",
         **resource_kwargs) -> SparkResource:
+    resource_kwargs.setdefault("resource_profile", build_spark_resource_profile(job_type, {}))
     return SparkResource(
         master_url=master_url,
         worker_mem="1G",
