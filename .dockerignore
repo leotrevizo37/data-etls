@@ -1,9 +1,6 @@
 .git/
 .idea/
 .vscode/
-.codex/
-.codex*
-.agents/
 
 .env
 .env.*
@@ -24,3 +21,5 @@ dagster/dagster_home/storage/
 *.tmp
 *.bak
 evidencia_*.txt
+dagster/configurable_poc
+docs/

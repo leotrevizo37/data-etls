@@ -230,3 +230,9 @@ dagster/dagster_home/history/
 
 # (Opcional) cualquier .log dentro de dagster_home
 dagster/dagster_home/**/*.log
+
+# Evals
+generate-ai-report*.js
+evidencia_*.txt
+tmp/
+dagster/configurable_poc
