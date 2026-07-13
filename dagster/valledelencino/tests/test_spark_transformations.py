@@ -423,6 +423,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(row["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
+        self.assertEqual(row["InRangeReads"], 3)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 55 / 3)
 
@@ -871,6 +872,7 @@ class SparkTransformationsTests(unittest.TestCase):
         graph_section = source.split("def operations_assets", 1)[1]
 
         self.assertIn("write_fact_operations_stage(", write_section)
+        self.assertIn('"InRangeReads"', write_section)
         self.assertIn("merge_fact_readings_measurement(", write_section)
         self.assertNotIn("delete_range(", write_section)
         self.assertNotIn("window_cleanup(fetch_from_ts)", graph_section)

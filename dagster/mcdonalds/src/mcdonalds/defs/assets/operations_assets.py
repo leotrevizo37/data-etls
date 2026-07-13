@@ -22,6 +22,7 @@ from dagster import (
 
 from ..resources import SparkResource, SqlServerResource, TransformationOps
 from ..transformations import datalake_readings_extended
+from ..transformations.stats_calculator import with_in_range_read_flag
 from ...operations_filters import limit_operations_rows_to_closed_hours
 from ...operations_window import build_operations_window, resolve_operations_watermark
 
@@ -200,6 +201,7 @@ def load_datalake_readings_extended_op(
 
 @op(
     required_resource_keys={
+        "spark",
         "transformation_ops"
     },
     ins={
@@ -215,6 +217,7 @@ def build_devices_df_op(
         window: Dict[str, Any],
         dims: Optional[DataFrame] = None,
         readings_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
+    spark_res: SparkResource = context.resources.spark
     transformation_ops: TransformationOps = context.resources.transformation_ops
 
     union_df: Optional[DataFrame] = None
@@ -222,6 +225,8 @@ def build_devices_df_op(
         context.log.warning("Readings_extended_df is empty.")
         return readings_extended_df
 
+    expected_values_df = spark_res.read_dim_sensor_expected_values()
+    readings_extended_df = with_in_range_read_flag(readings_extended_df, expected_values_df)
     readings_extended_df = readings_extended_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     try:
@@ -242,7 +247,13 @@ def build_devices_df_op(
                 dims,
                 window["fetch_from"],
                 window["max_local_hour"],
-            ).select(
+            )
+            if "InRangeReads" not in df.columns:
+                df = df.withColumn(
+                    "InRangeReads",
+                    lit(0),
+                )
+            df = df.select(
                 col("OperationId"),
                 col("DeviceId"),
                 col("LocationId"),
@@ -253,6 +264,7 @@ def build_devices_df_op(
                 col("Anomalies"),
                 col("LocalTimeSpan"),
                 col("ReadingsCount"),
+                col("InRangeReads"),
                 col("sensor_type").alias("SensorType"),
                 col("device_type").alias("DeviceType"),
             )
@@ -373,6 +385,7 @@ def write_factreadingsmeasurement_op(
                     "MeasurementValue",
                     "MeasurementStdDev",
                     "ReadingsCount",
+                    "InRangeReads",
                     "Anomalies"
                 ),
                 run_id,

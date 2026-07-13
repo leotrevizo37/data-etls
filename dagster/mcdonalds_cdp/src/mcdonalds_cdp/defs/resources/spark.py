@@ -878,6 +878,15 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def read_dim_sensor_expected_values(self) -> DataFrame:
+        spark = self.get_spark()
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSensorExpectedVal",
+            properties=self._build_wh_path()["properties"]
+        )
+
     def create_emptiness_dataframe(self) -> DataFrame:
         spark = self.get_spark()
         return spark.createDataFrame([(True,)], ["is_empty"])

@@ -25,7 +25,8 @@ USING (
         MeasurementValue,
         MeasurementStdDev,
         Anomalies,
-        ReadingsCount
+        ReadingsCount,
+        InRangeReads
     FROM stg.factReadingsMeasurement
     WHERE RunId = ?
 ) AS source
@@ -43,6 +44,7 @@ WHEN MATCHED THEN
         target.MeasurementStdDev = source.MeasurementStdDev,
         target.Anomalies = source.Anomalies,
         target.ReadingsCount = source.ReadingsCount,
+        target.InRangeReads = source.InRangeReads,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
@@ -57,7 +59,8 @@ WHEN NOT MATCHED BY TARGET THEN
         MeasurementValue,
         MeasurementStdDev,
         Anomalies,
-        ReadingsCount
+        ReadingsCount,
+        InRangeReads
     )
     VALUES (
         source.OperationId,
@@ -71,7 +74,8 @@ WHEN NOT MATCHED BY TARGET THEN
         source.MeasurementValue,
         source.MeasurementStdDev,
         source.Anomalies,
-        source.ReadingsCount
+        source.ReadingsCount,
+        source.InRangeReads
     )
 OUTPUT $action INTO @MergeActions;
 
