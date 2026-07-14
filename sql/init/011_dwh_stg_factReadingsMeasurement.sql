@@ -72,14 +72,14 @@ GO
 IF COL_LENGTH(N'dwh.factReadingsMeasurement', N'InRangeReads') IS NULL
     BEGIN
         ALTER TABLE dwh.factReadingsMeasurement
-            ADD InRangeReads INT NULL;
+        ADD InRangeReads INT NULL;
     END;
 GO
 
 IF COL_LENGTH(N'stg.factReadingsMeasurement', N'InRangeReads') IS NULL
     BEGIN
         ALTER TABLE stg.factReadingsMeasurement
-            ADD InRangeReads INT NULL;
+        ADD InRangeReads INT NULL;
     END;
 GO
 
