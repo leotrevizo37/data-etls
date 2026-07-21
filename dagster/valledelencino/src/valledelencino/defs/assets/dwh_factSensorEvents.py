@@ -78,23 +78,25 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     from_utc: datetime = window["from_utc"]
     to_utc: datetime = window["to_utc"]
     original_last_loaded_at: datetime = window["original_last_loaded_at"]
-
-    sql.delete_range(
-        schema_name="dwh",
-        table_name="factSensorEvents",
-        time_column="LocalTimeSpan",
-        from_utc=from_utc,
-        to_utc=to_utc,
-    )
+    run_id = context.run_id
 
     succeeded = False
     error_message: Optional[str] = None
     max_time_span: Optional[datetime] = None
+    staged_rows = 0
     row_count = 0
     retry_number = getattr(context, "retry_number", 0)
 
     events_df: Optional[DataFrame] = None
     try:
+        if retry_number > 0:
+            cleared_rows = sql.clear_fact_sensor_events_stage(run_id)
+            context.log.info(
+                "Cleared "
+                + str(cleared_rows)
+                + " factSensorEvents stage rows before retry."
+            )
+
         dimensions_df = spark_res.read_dim_prod_dimensions()
         extended_df = datalake_readings_extended(
             spark_res=spark_res,
@@ -109,15 +111,18 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
         else:
             events_df = sensor_events(extended_df, to_utc.strftime("%Y-%m-%d %H:%M:%S"))
             events_df = events_df.persist(StorageLevel.MEMORY_AND_DISK)
-            row_count = spark_res.write_fact_sensor_events(events_df)
+            staged_rows = spark_res.write_fact_sensor_events(events_df, run_id)
+            row_count = sql.merge_fact_sensor_events(run_id)
             if row_count > 0:
                 max_time_span = spark_res.get_max_time_span(
                     events_df,
                     "LocalTimeSpan",
                 )
             context.log.info(
-                str(row_count)
-                + " sensor event rows written to dwh.factSensorEvents. "
+                str(staged_rows)
+                + " sensor event rows staged and "
+                + str(row_count)
+                + " rows merged into dwh.factSensorEvents. "
                 + "Max LocalTimeSpan "
                 + str(max_time_span)
             )
@@ -126,16 +131,14 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
         error_message = str(ex)
         context.log.error("Error loading FactSensorEvents window: " + error_message)
         try:
-            sql.delete_range(
-                schema_name="dwh",
-                table_name="factSensorEvents",
-                time_column="LocalTimeSpan",
-                from_utc=from_utc,
-                to_utc=to_utc,
+            cleared_rows = sql.clear_fact_sensor_events_stage(run_id)
+            context.log.warning(
+                "Cleared %s factSensorEvents stage rows after failed write.",
+                cleared_rows,
             )
         except Exception as cleanup_ex:
             context.log.warning(
-                "Could not clean partial factSensorEvents rows after failure: %s",
+                "Could not clean factSensorEvents staging rows before retry: %s",
                 cleanup_ex,
             )
         if retry_number < SENSOR_EVENTS_MAX_RETRIES:
@@ -152,6 +155,10 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     finally:
         if events_df is not None:
             events_df.unpersist()
+        try:
+            sql.clear_fact_sensor_events_stage(run_id)
+        except Exception:
+            pass
 
     return {
         "from_utc": from_utc,
