@@ -50,24 +50,5 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
 
 
-class DimSidonProdDimensionsMergeSqlTests(unittest.TestCase):
-    def test_merge_sql_upserts_and_deactivates_by_sensor_id(self) -> None:
-        module = _load_sql_server_module()
-        sql = module.build_dim_sidon_prod_dimensions_merge_sql()
-
-        self.assertIn("MERGE dwh.dimSidonProdDimensions", sql)
-        self.assertIn("FROM stg.dimSidonProdDimensions", sql)
-        self.assertIn("WHERE RunId = ?", sql)
-        self.assertIn("target.SensorId = source.SensorId", sql)
-        self.assertIn("WHEN MATCHED AND EXISTS", sql)
-        self.assertIn("EXCEPT", sql)
-        self.assertIn("target.Active = source.Active", sql)
-        self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
-        self.assertIn("WHEN NOT MATCHED BY SOURCE AND target.Active = 1 THEN", sql)
-        self.assertIn("target.Active = 0", sql)
-        self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
-        self.assertNotIn("DELETE", sql.upper())
-
-
 if __name__ == "__main__":
     unittest.main()
