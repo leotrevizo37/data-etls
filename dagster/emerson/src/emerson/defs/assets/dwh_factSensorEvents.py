@@ -106,30 +106,26 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
     temperature_from_utc: datetime = window["temperature_from_utc"]
     to_utc: datetime = window["to_utc"]
     original_last_loaded_at: datetime = window["original_last_loaded_at"]
-
-    sql.delete_range(
-        schema_name="dwh",
-        table_name="factSensorEvents",
-        time_column="LocalTimeSpan",
-        from_utc=from_utc,
-        to_utc=to_utc,
-    )
-    if temperature_from_utc < from_utc:
-        sql.delete_sensor_events_range(
-            sensor_type=TEMPERATURE_SENSOR_TYPE,
-            from_utc=temperature_from_utc,
-            to_utc=from_utc,
-        )
+    run_id = context.run_id
 
     succeeded = False
     error_message: Optional[str] = None
     max_time_span: Optional[datetime] = None
+    staged_rows = 0
     row_count = 0
     retry_number = getattr(context, "retry_number", 0)
 
     events_df: Optional[DataFrame] = None
     readings_extended_df: Optional[DataFrame] = None
     try:
+        if retry_number > 0:
+            cleared_rows = sql.clear_fact_sensor_events_stage(run_id)
+            context.log.info(
+                "Cleared "
+                + str(cleared_rows)
+                + " factSensorEvents stage rows before retry."
+            )
+
         dimensions_df = spark_res.read_dim_prod_dimensions()
         readings_from = min(from_utc, temperature_from_utc)
         readings_extended_df = datalake_readings_extended(
@@ -187,7 +183,8 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                 max_time_span = None
             else:
                 events_df = events_df.persist(StorageLevel.MEMORY_AND_DISK)
-                row_count = spark_res.write_fact_sensor_events(events_df)
+                staged_rows = spark_res.write_fact_sensor_events(events_df, run_id)
+                row_count = sql.merge_fact_sensor_events(run_id)
                 readings_extended_df.unpersist(blocking=True)
                 readings_extended_df = None
                 if row_count > 0:
@@ -196,8 +193,10 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                         "LocalTimeSpan",
                     )
                 context.log.info(
-                    str(row_count)
-                    + " sensor event rows written to dwh.factSensorEvents. "
+                    str(staged_rows)
+                    + " sensor event rows staged and "
+                    + str(row_count)
+                    + " rows merged into dwh.factSensorEvents. "
                     + "Max LocalTimeSpan "
                     + str(max_time_span)
                 )
@@ -206,22 +205,14 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
         error_message = str(ex)
         context.log.error("Error loading FactSensorEvents window: " + error_message)
         try:
-            sql.delete_range(
-                schema_name="dwh",
-                table_name="factSensorEvents",
-                time_column="LocalTimeSpan",
-                from_utc=from_utc,
-                to_utc=to_utc,
+            cleared_rows = sql.clear_fact_sensor_events_stage(run_id)
+            context.log.warning(
+                "Cleared %s factSensorEvents stage rows after failed write.",
+                cleared_rows,
             )
-            if temperature_from_utc < from_utc:
-                sql.delete_sensor_events_range(
-                    sensor_type=TEMPERATURE_SENSOR_TYPE,
-                    from_utc=temperature_from_utc,
-                    to_utc=from_utc,
-                )
         except Exception as cleanup_ex:
             context.log.warning(
-                "Could not clean partial factSensorEvents rows after failure: %s",
+                "Could not clean factSensorEvents staging rows before retry: %s",
                 cleanup_ex,
             )
         if retry_number < SENSOR_EVENTS_MAX_RETRIES:
@@ -240,6 +231,10 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             events_df.unpersist()
         if readings_extended_df is not None:
             readings_extended_df.unpersist()
+        try:
+            sql.clear_fact_sensor_events_stage(run_id)
+        except Exception:
+            pass
 
     return {
         "from_utc": from_utc,

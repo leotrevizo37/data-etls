@@ -214,6 +214,80 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+def build_fact_sensor_events_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factSensorEvents AS target
+USING (
+    SELECT
+        ReadId,
+        SensorId,
+        DeviceId,
+        LocationId,
+        LocationName,
+        DeviceType,
+        SensorType,
+        SensorName,
+        LocalTimeSpan,
+        Value,
+        EventMinutes,
+        IsEventCompleted
+    FROM stg.factSensorEvents
+    WHERE RunId = ?
+) AS source
+    ON target.ReadId = source.ReadId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.SensorId = source.SensorId,
+        target.DeviceId = source.DeviceId,
+        target.LocationId = source.LocationId,
+        target.LocationName = source.LocationName,
+        target.DeviceType = source.DeviceType,
+        target.SensorType = source.SensorType,
+        target.SensorName = source.SensorName,
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.Value = source.Value,
+        target.EventMinutes = source.EventMinutes,
+        target.IsEventCompleted = source.IsEventCompleted,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        ReadId,
+        SensorId,
+        DeviceId,
+        LocationId,
+        LocationName,
+        DeviceType,
+        SensorType,
+        SensorName,
+        LocalTimeSpan,
+        Value,
+        EventMinutes,
+        IsEventCompleted
+    )
+    VALUES (
+        source.ReadId,
+        source.SensorId,
+        source.DeviceId,
+        source.LocationId,
+        source.LocationName,
+        source.DeviceType,
+        source.SensorType,
+        source.SensorName,
+        source.LocalTimeSpan,
+        source.Value,
+        source.EventMinutes,
+        source.IsEventCompleted
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 class SqlServerResource:
     def __init__(
         self,
@@ -386,6 +460,27 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_dim_sidon_prod_dimensions_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_sensor_events_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factSensorEvents WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_sensor_events(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_sensor_events_merge_sql(), run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
