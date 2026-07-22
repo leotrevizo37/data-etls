@@ -28,25 +28,29 @@ GO
 MERGE dwh.dimOutOfHoursTypes AS target
 USING (
     VALUES
-        (1, N'Antes de apertura', N'Venta realizada antes de la hora de apertura.'),
-        (2, N'Horario de comida', N'Venta realizada durante el intervalo de comida; solo aplica cuando ambas horas de comida existen.'),
-        (3, N'Después del cierre', N'Venta realizada después de la hora de cierre.'),
-        (4, N'Sin horario aplicable', N'Venta cuya tienda, fecha o día de la semana no tiene un horario aplicable.')
-) AS source (
-    OutOfHoursType,
-    OutOfHoursTypeName,
-    OutOfHoursTypeDescription
+    (1, N'Antes de apertura', N'Venta realizada antes de la hora de apertura.'),
+    (2, N'Horario de comida', N'Venta realizada durante el intervalo de comida; solo aplica cuando ambas horas de comida existen.'),
+    (3, N'Después del cierre', N'Venta realizada después de la hora de cierre.'),
+    (4, N'Sin horario aplicable', N'Venta cuya tienda, fecha o día de la semana no tiene un horario aplicable.')
 )
+    AS source (
+        OutOfHoursType,
+        OutOfHoursTypeName,
+        OutOfHoursTypeDescription
+    )
     ON target.OutOfHoursType = source.OutOfHoursType
 WHEN MATCHED AND (
     target.OutOfHoursTypeName <> source.OutOfHoursTypeName
     OR target.OutOfHoursTypeDescription <> source.OutOfHoursTypeDescription
-) THEN
-    UPDATE SET
-        OutOfHoursTypeName = source.OutOfHoursTypeName,
-        OutOfHoursTypeDescription = source.OutOfHoursTypeDescription,
-        ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
+)
+    THEN
+    UPDATE
+    SET
+            OutOfHoursTypeName = source.OutOfHoursTypeName,
+            OutOfHoursTypeDescription = source.OutOfHoursTypeDescription,
+            ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED
+    THEN
     INSERT (
         OutOfHoursType,
         OutOfHoursTypeName,
