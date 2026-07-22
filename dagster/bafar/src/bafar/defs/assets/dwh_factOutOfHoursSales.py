@@ -12,6 +12,7 @@ from ..transformations.fact_out_of_hours_sales import transform_fact_out_of_hour
 FACT_OUT_OF_HOURS_SALES_OVERLAP_MINUTES = 15
 FACT_OUT_OF_HOURS_SALES_MAX_RETRIES = 3
 FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS = 60
+FACT_OUT_OF_HOUR_SALES_BOOTSTRAP_DATE = datetime(2026, 5, 1)
 FACT_OUT_OF_HOURS_SALES_RETRY_POLICY = RetryPolicy(
     max_retries=FACT_OUT_OF_HOURS_SALES_MAX_RETRIES,
     delay=FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS,
@@ -44,7 +45,10 @@ def _read_store_schedules(
 )
 def get_fact_out_of_hours_sales_window_op(context) -> Dict[str, Any]:
     sqlserver: SqlServerResource = context.resources.sqlserver
-    last_loaded_at = sqlserver.get_watermark("FactOutOfHoursSales") or datetime(2026, 5, 1)
+    last_loaded_at = (
+        sqlserver.get_watermark("FactOutOfHoursSales")
+        or FACT_OUT_OF_HOUR_SALES_BOOTSTRAP_DATE
+    )
 
     return {
         "last_loaded_at": last_loaded_at,
