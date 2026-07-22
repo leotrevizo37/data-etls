@@ -45,7 +45,7 @@ WHEN MATCHED AND (
 )
     THEN
     UPDATE
-    SET
+        SET
             OutOfHoursTypeName = source.OutOfHoursTypeName,
             OutOfHoursTypeDescription = source.OutOfHoursTypeDescription,
             ModifiedAt = SYSUTCDATETIME()
