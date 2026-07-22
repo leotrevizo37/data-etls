@@ -18,6 +18,7 @@ sys.path[:] = [
         if Path(path or ".").resolve() != REPOSITORY_ROOT
     ],
 ]
+original_dagster_module = sys.modules.pop("dagster", None)
 try:
     asset_module = importlib.import_module(
         "bafar.defs.assets.dwh_factOutOfHoursSales",
@@ -26,6 +27,8 @@ try:
         "bafar.defs.assets.dwh_factStoreSalesDaily",
     )
 finally:
+    if original_dagster_module is not None:
+        sys.modules["dagster"] = original_dagster_module
     sys.path[:] = original_sys_path
 
 
