@@ -189,6 +189,24 @@ class SparkResourceTests(unittest.TestCase):
             "com.microsoft.sqlserver.jdbc.SQLServerDriver",
         )
 
+    def test_ozone_s3_configuration_is_applied_to_spark(self) -> None:
+        self.resource.ozone_s3_endpoint = "http://ozone:9878"
+        self.resource.ozone_s3_access_key = "access"
+        self.resource.ozone_s3_secret_key = "secret"
+
+        options = self.resource._build_ozone_s3_options()
+        conf = self.resource._build_spark_conf()
+
+        self.assertEqual(options["fs.s3a.endpoint"], "http://ozone:9878")
+        self.assertEqual(options["fs.s3a.connection.ssl.enabled"], "false")
+        self.assertEqual(options["fs.s3a.path.style.access"], "true")
+        self.assertEqual(options["fs.s3a.access.key"], "access")
+        self.assertEqual(options["fs.s3a.secret.key"], "secret")
+        self.assertEqual(
+            conf.settings["spark.hadoop.fs.s3a.endpoint"],
+            "http://ozone:9878",
+        )
+
     def test_module_stubs_are_restored_after_loading(self) -> None:
         module_names = (
             "dagster",

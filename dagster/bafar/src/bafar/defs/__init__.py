@@ -11,11 +11,17 @@ __all__ = ["defs"]
 def _build_defs() -> Any:
     from dagster import Definitions
 
-    from .resources import dim_sqlserver_resource, spark_resource, sqlserver_resource
+    from .resources import (
+        dim_sqlserver_resource,
+        spark_df_io_manager,
+        spark_resource,
+        sqlserver_resource,
+    )
 
     return Definitions(
         resources={
             "spark": spark_resource,
+            "spark_df_io_manager": spark_df_io_manager,
             "sqlserver": sqlserver_resource,
             "dim_sqlserver": dim_sqlserver_resource,
         },
