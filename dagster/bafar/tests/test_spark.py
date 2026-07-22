@@ -241,11 +241,11 @@ class SparkResourceTests(unittest.TestCase):
             {"SPARK_MASTER_UI_PORT": "8081"},
         )
         profile = self.module._build_spark_resource_profile(
-            "dimensiones",
+            "ventas",
             {
-                "SPARK_DIMENSIONES_MIN_CORES": "2",
-                "SPARK_DIMENSIONES_MIN_MEMORY_MB": "3072",
-                "SPARK_DIMENSIONES_CORES_MAX": "3",
+                "SPARK_VENTAS_MIN_CORES": "2",
+                "SPARK_VENTAS_MIN_MEMORY_MB": "3072",
+                "SPARK_VENTAS_CORES_MAX": "3",
             },
         )
         executor_cores = self.module._build_executor_cores(
@@ -264,7 +264,7 @@ class SparkResourceTests(unittest.TestCase):
 
         self.assertEqual(status_url, "http://172.168.10.80:8081/json/")
         self.assertEqual(internal_status_url, "http://spark-master:8080/json/")
-        self.assertEqual(profile["name"], "dimensiones")
+        self.assertEqual(profile["name"], "ventas")
         self.assertEqual(profile["min_cores"], 2)
         self.assertEqual(profile["min_memory_mb"], 3072)
         self.assertEqual(executor_cores, 3)
