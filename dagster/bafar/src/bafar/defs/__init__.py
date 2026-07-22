@@ -1,12 +1,31 @@
-from dagster import Definitions
+from __future__ import annotations
 
-from .resources import spark_resource, sqlserver_resource
+from functools import lru_cache
+from typing import Any
 
-defs = Definitions(
-    resources={
-        "spark": spark_resource,
-        "sqlserver": sqlserver_resource,
-    },
-)
 
 __all__ = ["defs"]
+
+
+@lru_cache(maxsize=1)
+def _build_defs() -> Any:
+    from dagster import Definitions
+
+    from .resources import spark_resource, sqlserver_resource
+
+    return Definitions(
+        resources={
+            "spark": spark_resource,
+            "sqlserver": sqlserver_resource,
+        },
+    )
+
+
+def __getattr__(name: str) -> Any:
+    if name == "defs":
+        return _build_defs()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | {"defs"})

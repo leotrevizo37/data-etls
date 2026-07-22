@@ -3,6 +3,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +12,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def _load_spark_module():
     dagster = types.ModuleType("dagster")
     dagster.resource = lambda fn=None, **_kwargs: fn
-    sys.modules["dagster"] = dagster
 
     pyspark = types.ModuleType("pyspark")
 
@@ -44,15 +44,20 @@ def _load_spark_module():
     pyspark_functions = types.ModuleType("pyspark.sql.functions")
     pyspark_functions.lit = lambda value: value
 
-    sys.modules["pyspark"] = pyspark
-    sys.modules["pyspark.sql"] = pyspark_sql
-    sys.modules["pyspark.sql.functions"] = pyspark_functions
-
     path = PROJECT_ROOT / "src" / "bafar" / "defs" / "resources" / "spark.py"
     spec = importlib.util.spec_from_file_location("bafar_spark_resource", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    spec.loader.exec_module(module)
+    with patch.dict(
+        sys.modules,
+        {
+            "dagster": dagster,
+            "pyspark": pyspark,
+            "pyspark.sql": pyspark_sql,
+            "pyspark.sql.functions": pyspark_functions,
+        },
+    ):
+        spec.loader.exec_module(module)
     return module
 
 
@@ -183,6 +188,27 @@ class SparkResourceTests(unittest.TestCase):
             wh["properties"]["driver"],
             "com.microsoft.sqlserver.jdbc.SQLServerDriver",
         )
+
+    def test_module_stubs_are_restored_after_loading(self) -> None:
+        module_names = (
+            "dagster",
+            "pyspark",
+            "pyspark.sql",
+            "pyspark.sql.functions",
+        )
+        original_modules = {
+            module_name: sys.modules.get(module_name)
+            for module_name in module_names
+        }
+
+        _load_spark_module()
+
+        for module_name, original_module in original_modules.items():
+            with self.subTest(module_name=module_name):
+                if original_module is None:
+                    self.assertNotIn(module_name, sys.modules)
+                else:
+                    self.assertIs(sys.modules[module_name], original_module)
 
     def test_spark_master_and_profile_helpers_follow_the_shared_pattern(self) -> None:
         status_url = self.module._build_spark_master_status_url(
