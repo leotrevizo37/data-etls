@@ -19,14 +19,12 @@ sys.path[:] = [
     ],
 ]
 try:
-    with patch.dict(sys.modules):
-        sys.modules.pop("dagster", None)
-        asset_module = importlib.import_module(
-            "bafar.defs.assets.dwh_factOutOfHoursSales",
-        )
-        daily_asset_module = importlib.import_module(
-            "bafar.defs.assets.dwh_factStoreSalesDaily",
-        )
+    asset_module = importlib.import_module(
+        "bafar.defs.assets.dwh_factOutOfHoursSales",
+    )
+    daily_asset_module = importlib.import_module(
+        "bafar.defs.assets.dwh_factStoreSalesDaily",
+    )
 finally:
     sys.path[:] = original_sys_path
 
