@@ -593,6 +593,67 @@ class SparkResource:
             },
         }
 
+    def read_fact_out_of_hours_sales_window(
+        self,
+        source_sqlserver: Any,
+        from_value: str,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**source_sqlserver.get_basic_options())
+            .option(
+                "query",
+                f"""
+SELECT
+    Id,
+    Importe,
+    Fecha,
+    NombreUsuario,
+    NumeroVenta,
+    Clave_Tienda
+FROM dwh.Ventas
+WHERE Fecha > CONVERT(DATETIME2(7), '{from_value}', 126)
+""",
+            )
+            .load()
+        )
+
+    def read_store_schedules(self, sqlserver: Any) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**sqlserver.get_basic_options())
+            .option(
+                "query",
+                """
+SELECT
+    schedules.StoreId,
+    schedules.OpeningDate,
+    schedules.ClosingDate,
+    schedule.DayOfWeek,
+    CONVERT(VARCHAR(8), schedule.OpeningTime, 108) AS OpeningTime,
+    CONVERT(VARCHAR(8), schedule.LunchStartTime, 108) AS LunchStartTime,
+    CONVERT(VARCHAR(8), schedule.LunchEndTime, 108) AS LunchEndTime,
+    CONVERT(VARCHAR(8), schedule.ClosingTime, 108) AS ClosingTime
+FROM dwh.dimStoreSchedules AS schedules
+CROSS APPLY (
+    VALUES
+        (1, SundayOpeningTime, SundayLunchStartTime, SundayLunchEndTime, SundayClosingTime),
+        (2, MondayOpeningTime, MondayLunchStartTime, MondayLunchEndTime, MondayClosingTime),
+        (3, TuesdayOpeningTime, TuesdayLunchStartTime, TuesdayLunchEndTime, TuesdayClosingTime),
+        (4, WednesdayOpeningTime, WednesdayLunchStartTime, WednesdayLunchEndTime, WednesdayClosingTime),
+        (5, ThursdayOpeningTime, ThursdayLunchStartTime, ThursdayLunchEndTime, ThursdayClosingTime),
+        (6, FridayOpeningTime, FridayLunchStartTime, FridayLunchEndTime, FridayClosingTime),
+        (7, SaturdayOpeningTime, SaturdayLunchStartTime, SaturdayLunchEndTime, SaturdayClosingTime)
+) AS schedule (DayOfWeek, OpeningTime, LunchStartTime, LunchEndTime, ClosingTime)
+""",
+            )
+            .load()
+        )
+
     def _write_jdbc_in_chunks(
         self,
         df: DataFrame,
@@ -690,29 +751,13 @@ class SparkResource:
             .dropDuplicates(["SaleId"])
             .withColumn("RunId", lit(run_id))
             .select("RunId", *FACT_OUT_OF_HOURS_SALES_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
         )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.factOutOfHoursSales")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factOutOfHoursSales",
+            chunk_column="SaleId",
+        )
 
     def write_fact_store_sales_daily_stage(
         self,

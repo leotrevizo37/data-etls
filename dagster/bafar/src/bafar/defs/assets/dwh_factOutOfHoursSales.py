@@ -1,0 +1,179 @@
+from datetime import datetime
+from typing import Any, Dict
+
+from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import max as spark_max
+
+from ..resources import SparkResource, SqlDimServerResource, SqlServerResource
+from ..transformations.fact_out_of_hours_sales import transform_fact_out_of_hours_sales
+
+
+FACT_OUT_OF_HOURS_SALES_MAX_RETRIES = 3
+FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS = 60
+FACT_OUT_OF_HOURS_SALES_RETRY_POLICY = RetryPolicy(
+    max_retries=FACT_OUT_OF_HOURS_SALES_MAX_RETRIES,
+    delay=FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS,
+)
+
+
+def _read_sales_window(
+    spark_resource: SparkResource,
+    source_sqlserver: SqlDimServerResource,
+    from_value: str,
+) -> DataFrame:
+    return spark_resource.read_fact_out_of_hours_sales_window(
+        source_sqlserver,
+        from_value,
+    )
+
+
+def _read_store_schedules(
+    spark_resource: SparkResource,
+    sqlserver: SqlServerResource,
+) -> DataFrame:
+    return spark_resource.read_store_schedules(sqlserver)
+
+
+@op(
+    required_resource_keys={"sqlserver"},
+    ins={},
+    out=Out(Dict[str, Any]),
+    retry_policy=FACT_OUT_OF_HOURS_SALES_RETRY_POLICY,
+)
+def get_fact_out_of_hours_sales_window_op(context) -> Dict[str, Any]:
+    sqlserver: SqlServerResource = context.resources.sqlserver
+    last_loaded_at = sqlserver.get_watermark("FactOutOfHoursSales") or datetime(2026, 5, 1)
+
+    return {
+        "last_loaded_at": last_loaded_at,
+        "from_value": last_loaded_at.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+    }
+
+
+@op(
+    required_resource_keys={"spark", "dim_sqlserver"},
+    ins={"window": In(Dict[str, Any])},
+    out=Out(DataFrame, io_manager_key="spark_df_io_manager"),
+    retry_policy=FACT_OUT_OF_HOURS_SALES_RETRY_POLICY,
+)
+def load_fact_out_of_hours_sales_window_op(
+    context,
+    window: Dict[str, Any],
+) -> DataFrame:
+    spark_resource: SparkResource = context.resources.spark
+    source_sqlserver: SqlDimServerResource = context.resources.dim_sqlserver
+    return _read_sales_window(
+        spark_resource,
+        source_sqlserver,
+        window["from_value"],
+    )
+
+
+@op(
+    required_resource_keys={"spark", "sqlserver"},
+    ins={
+        "window": In(Dict[str, Any]),
+        "sales_df": In(DataFrame),
+    },
+    out=Out(Dict[str, Any]),
+    retry_policy=FACT_OUT_OF_HOURS_SALES_RETRY_POLICY,
+)
+def process_fact_out_of_hours_sales_op(
+    context,
+    window: Dict[str, Any],
+    sales_df: DataFrame,
+) -> Dict[str, Any]:
+    spark_resource: SparkResource = context.resources.spark
+    sqlserver: SqlServerResource = context.resources.sqlserver
+    last_loaded_at: datetime = window["last_loaded_at"]
+    run_id = context.run_id
+    retry_number = getattr(context, "retry_number", 0)
+
+    try:
+        sqlserver.mark_run_started("FactOutOfHoursSales")
+        max_sale_date = sales_df.agg(
+            spark_max("Fecha").alias("MaxFecha")
+        ).first().MaxFecha
+        new_last_loaded_at = max_sale_date or last_loaded_at
+        schedules_df = _read_store_schedules(spark_resource, sqlserver)
+        result_df = transform_fact_out_of_hours_sales(sales_df, schedules_df)
+
+        sqlserver.clear_fact_out_of_hours_sales_stage(run_id)
+        evaluated_rows = spark_resource.write_fact_out_of_hours_sales_stage(
+            result_df,
+            run_id,
+        )
+        affected_rows = sqlserver.merge_fact_out_of_hours_sales(run_id)
+        sqlserver.clear_fact_out_of_hours_sales_stage(run_id)
+    except Exception as exc:
+        try:
+            sqlserver.clear_fact_out_of_hours_sales_stage(run_id)
+        except Exception as cleanup_exc:
+            context.log.warning(
+                "Could not clean factOutOfHoursSales staging rows before retry: %s",
+                cleanup_exc,
+            )
+        if retry_number < FACT_OUT_OF_HOURS_SALES_MAX_RETRIES:
+            raise RetryRequested(
+                max_retries=FACT_OUT_OF_HOURS_SALES_MAX_RETRIES,
+                seconds_to_wait=FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS,
+            ) from exc
+        sqlserver.mark_run_completed(
+            ingestion_name="FactOutOfHoursSales",
+            new_last_loaded_at=last_loaded_at,
+            succeeded=False,
+            error_message=str(exc)[:4000],
+        )
+        raise
+
+    return {
+        "new_last_loaded_at": new_last_loaded_at,
+        "evaluated_rows": evaluated_rows,
+        "affected_rows": affected_rows,
+        "from_value": window["from_value"],
+    }
+
+
+@op(
+    required_resource_keys={"sqlserver"},
+    ins={"result": In(Dict[str, Any])},
+    out=Out(),
+    retry_policy=FACT_OUT_OF_HOURS_SALES_RETRY_POLICY,
+)
+def finalize_fact_out_of_hours_sales_run_op(
+    context,
+    result: Dict[str, Any],
+):
+    sqlserver: SqlServerResource = context.resources.sqlserver
+    new_last_loaded_at: datetime = result["new_last_loaded_at"]
+
+    sqlserver.mark_run_completed(
+        ingestion_name="FactOutOfHoursSales",
+        new_last_loaded_at=new_last_loaded_at,
+        succeeded=True,
+        error_message=None,
+    )
+
+    return MaterializeResult(
+        metadata={
+            "evaluated_rows": result["evaluated_rows"],
+            "affected_rows": result["affected_rows"],
+            "from_sale_date": result["from_value"],
+            "to_sale_date": new_last_loaded_at.strftime(
+                "%Y-%m-%dT%H:%M:%S.%f"
+            ),
+        }
+    )
+
+
+@graph_asset(
+    name="dwh_factoutofhourssales",
+    key_prefix=["bafar"],
+    group_name="bafar",
+)
+def dwh_factoutofhourssales():
+    window = get_fact_out_of_hours_sales_window_op()
+    sales_df = load_fact_out_of_hours_sales_window_op(window)
+    result = process_fact_out_of_hours_sales_op(window, sales_df)
+    return finalize_fact_out_of_hours_sales_run_op(result)

@@ -377,22 +377,25 @@ class SparkResourceTests(unittest.TestCase):
                 ["StoreId"],
                 "stg.dimStoreSchedules",
                 self.module.DIM_STORE_SCHEDULE_COLUMNS,
+                1,
             ),
             (
                 "write_fact_out_of_hours_sales_stage",
                 ["SaleId"],
                 "stg.factOutOfHoursSales",
                 self.module.FACT_OUT_OF_HOURS_SALES_COLUMNS,
+                2,
             ),
             (
                 "write_fact_store_sales_daily_stage",
                 ["StoreId", "SalesDate"],
                 "stg.factStoreSalesDaily",
                 self.module.FACT_STORE_SALES_DAILY_COLUMNS,
+                1,
             ),
         ]
 
-        for method_name, key_columns, target_table, expected_columns in cases:
+        for method_name, key_columns, target_table, expected_columns, save_count in cases:
             with self.subTest(method_name=method_name):
                 df = FakeDataFrame()
 
@@ -400,11 +403,12 @@ class SparkResourceTests(unittest.TestCase):
 
                 self.assertEqual(written, 2)
                 self.assertEqual(df.selections[0], expected_columns)
-                self.assertEqual(df.selections[-1], ("RunId", *expected_columns))
+                self.assertIn(("RunId", *expected_columns), df.selections)
                 self.assertEqual(df.deduplicated_by, key_columns)
                 self.assertEqual(df.columns_added["RunId"], "run-3")
                 self.assertEqual(df.write.values["dbtable"], target_table)
                 self.assertTrue(df.write.values["saved"])
+                self.assertEqual(df.write.save_count, save_count)
                 self.assertTrue(df.unpersisted)
 
 
