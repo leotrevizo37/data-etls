@@ -59,7 +59,6 @@ IF OBJECT_ID(N'stg.factOutOfHoursSales', N'U') IS NULL
     END;
 GO
 
-
 IF
     NOT EXISTS (
         SELECT 1
