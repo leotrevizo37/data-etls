@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
@@ -9,6 +9,7 @@ from ..resources import SparkResource, SqlDimServerResource, SqlServerResource
 from ..transformations.fact_out_of_hours_sales import transform_fact_out_of_hours_sales
 
 
+FACT_OUT_OF_HOURS_SALES_OVERLAP_MINUTES = 15
 FACT_OUT_OF_HOURS_SALES_MAX_RETRIES = 3
 FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS = 60
 FACT_OUT_OF_HOURS_SALES_RETRY_POLICY = RetryPolicy(
@@ -47,7 +48,10 @@ def get_fact_out_of_hours_sales_window_op(context) -> Dict[str, Any]:
 
     return {
         "last_loaded_at": last_loaded_at,
-        "from_value": last_loaded_at.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+        "from_value": (
+            last_loaded_at
+            - timedelta(minutes=FACT_OUT_OF_HOURS_SALES_OVERLAP_MINUTES)
+        ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
     }
 
 
@@ -95,7 +99,11 @@ def process_fact_out_of_hours_sales_op(
         max_sale_date = sales_df.agg(
             spark_max("Fecha").alias("MaxFecha")
         ).first().MaxFecha
-        new_last_loaded_at = max_sale_date or last_loaded_at
+        new_last_loaded_at = (
+            max(last_loaded_at, max_sale_date)
+            if max_sale_date is not None
+            else last_loaded_at
+        )
         schedules_df = _read_store_schedules(spark_resource, sqlserver)
         result_df = transform_fact_out_of_hours_sales(sales_df, schedules_df)
 
