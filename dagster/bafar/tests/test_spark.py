@@ -391,7 +391,7 @@ class SparkResourceTests(unittest.TestCase):
                 ["StoreId", "SalesDate"],
                 "stg.factStoreSalesDaily",
                 self.module.FACT_STORE_SALES_DAILY_COLUMNS,
-                1,
+                2,
             ),
         ]
 

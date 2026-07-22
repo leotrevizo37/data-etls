@@ -654,6 +654,33 @@ CROSS APPLY (
             .load()
         )
 
+    def read_fact_store_sales_daily_window(
+        self,
+        source_sqlserver: Any,
+        from_value: str,
+        to_value: str,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**source_sqlserver.get_basic_options())
+            .option(
+                "query",
+                f"""
+SELECT
+    Id,
+    Importe,
+    Fecha,
+    Clave_Tienda
+FROM dwh.Ventas
+WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126)
+    AND Fecha < CONVERT(DATETIME2(7), '{to_value}', 126)
+""",
+            )
+            .load()
+        )
+
     def _write_jdbc_in_chunks(
         self,
         df: DataFrame,
@@ -770,29 +797,13 @@ CROSS APPLY (
             .dropDuplicates(["StoreId", "SalesDate"])
             .withColumn("RunId", lit(run_id))
             .select("RunId", *FACT_STORE_SALES_DAILY_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
         )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.factStoreSalesDaily")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factStoreSalesDaily",
+            chunk_column="StoreId",
+        )
 
 
 @resource
