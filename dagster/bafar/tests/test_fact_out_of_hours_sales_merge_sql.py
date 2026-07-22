@@ -3,7 +3,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,12 +25,15 @@ def _install_stubs() -> None:
 
 
 def _load_sql_server_module():
-    _install_stubs()
-    path = PROJECT_ROOT / "src" / "bafar" / "defs" / "resources" / "sql_server.py"
-    spec = importlib.util.spec_from_file_location("bafar_sql_server_resource", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
+    with patch.dict(sys.modules):
+        sys.modules.pop("dagster", None)
+        sys.modules.pop("pyodbc", None)
+        _install_stubs()
+        path = PROJECT_ROOT / "src" / "bafar" / "defs" / "resources" / "sql_server.py"
+        spec = importlib.util.spec_from_file_location("bafar_sql_server_resource", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
     return module
 
 
