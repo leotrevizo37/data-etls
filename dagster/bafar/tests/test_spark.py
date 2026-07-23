@@ -3,7 +3,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -301,6 +301,44 @@ class SparkResourceTests(unittest.TestCase):
             "bafar/010_bafar_store_schedules/abcdef12",
         )
         self.assertEqual(maintenance_context["job_type"], "maintenance")
+
+    def test_out_of_hours_reader_preserves_live_and_backfill_boundaries(self) -> None:
+        spark = MagicMock()
+        source_sqlserver = MagicMock()
+        source_sqlserver.get_basic_options.return_value = {"url": "jdbc:test"}
+        self.resource.get_spark = MagicMock(return_value=spark)
+        query_option = spark.read.format.return_value.options.return_value.option
+
+        self.resource.read_fact_out_of_hours_sales_window(
+            source_sqlserver,
+            "2026-05-01T00:00:00.000000",
+        )
+
+        live_query = query_option.call_args.args[1]
+        self.assertIn("FROM Replica.Ventas", live_query)
+        self.assertIn(
+            "WHERE Fecha > CONVERT(DATETIME2(7), '2026-05-01T00:00:00.000000', 126)",
+            live_query,
+        )
+        self.assertNotIn("AND Fecha <", live_query)
+
+        query_option.reset_mock()
+        self.resource.read_fact_out_of_hours_sales_window(
+            source_sqlserver,
+            "2026-05-01T00:00:00.000000",
+            "2026-05-02T00:00:00.000000",
+        )
+
+        backfill_query = query_option.call_args.args[1]
+        self.assertIn("FROM Replica.Ventas", backfill_query)
+        self.assertIn(
+            "WHERE Fecha >= CONVERT(DATETIME2(7), '2026-05-01T00:00:00.000000', 126)",
+            backfill_query,
+        )
+        self.assertIn(
+            "AND Fecha < CONVERT(DATETIME2(7), '2026-05-02T00:00:00.000000', 126)",
+            backfill_query,
+        )
 
     def test_spark_capacity_network_and_port_guards(self) -> None:
         self.resource.master_url = "spark://spark-master:7077"

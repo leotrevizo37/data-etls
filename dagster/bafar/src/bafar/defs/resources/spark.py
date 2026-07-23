@@ -11,7 +11,8 @@ from pyspark import SparkConf, StorageLevel
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import lit
 
-
+BAFAR_SALES_SCHEMA = "Replica"
+BAFAR_SALES_TABLE = "Ventas"
 MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
 DEFAULT_SPARK_MASTER_STATUS_URL = "http://spark-master:8080/json/"
 DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
@@ -597,8 +598,15 @@ class SparkResource:
         self,
         source_sqlserver: Any,
         from_value: str,
+        to_value: Optional[str] = None,
     ) -> DataFrame:
         spark = self.get_spark()
+        from_operator = ">=" if to_value is not None else ">"
+        to_filter = (
+            f"\n    AND Fecha < CONVERT(DATETIME2(7), '{to_value}', 126)"
+            if to_value is not None
+            else ""
+        )
         return (
             spark.read
             .format("jdbc")
@@ -613,8 +621,8 @@ SELECT
     NombreUsuario,
     NumeroVenta,
     Clave_Tienda
-FROM dwh.Ventas
-WHERE Fecha > CONVERT(DATETIME2(7), '{from_value}', 126)
+FROM {BAFAR_SALES_SCHEMA}.{BAFAR_SALES_TABLE}
+WHERE Fecha {from_operator} CONVERT(DATETIME2(7), '{from_value}', 126){to_filter}
 """,
             )
             .load()
@@ -673,7 +681,7 @@ SELECT
     Importe,
     Fecha,
     Clave_Tienda
-FROM dwh.Ventas
+FROM {BAFAR_SALES_SCHEMA}.{BAFAR_SALES_TABLE}
 WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126)
     AND Fecha < CONVERT(DATETIME2(7), '{to_value}', 126)
 """,
