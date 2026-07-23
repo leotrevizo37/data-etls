@@ -4,7 +4,7 @@ Este directorio concentra la documentacion operativa y funcional del proyecto: a
 
 ## Alcance
 
-El repositorio contiene seis `user_codes` Dagster. Todos comparte el módulo sense, pero su implementación es completamente distinta, y sus puertos y alcances se definen así:
+El repositorio contiene varios `user_codes` Dagster. Todos comparte el módulo sense, pero su implementación es completamente distinta, y sus puertos y alcances se definen así:
 
 | User code | Puerto gRPC | Alcance principal |
 |---|---:|---|
@@ -14,6 +14,7 @@ El repositorio contiene seis `user_codes` Dagster. Todos comparte el módulo sen
 | `bafar_poc_gabinete` | 4004 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
 | `valledelencino` | 4005 | Sense, dimensiones, lecturas, operaciones, eventos de sensores y mantenimiento |
 | `carlsjr` | 4006 | Sense, eventos de sensores, SmartAudits, Mantiz y mantenimiento |
+| `bafar` | Configuración externa | Ventas diarias y ventas fuera de horario |
 
 ## Indice
 
@@ -24,8 +25,11 @@ El repositorio contiene seis `user_codes` Dagster. Todos comparte el módulo sen
 - [Vista Sense agrupada CARLS](data_model/sense/vw_fact_readings_measurement_device_groups.md)
 - [Modelo SmartAudits](data_model/smartaudits/fact_smartaudits_categories.md)
 - [Modelo Mantiz](data_model/mantiz/ticket_lifecycle.md)
+- [Modelo de ventas fuera de horario](data_model/out_of_hours_sales/fact_out_of_hours_sales.md)
 - [Pipelines](pipelines/fact_lecturas.md)
+- [Pipeline de ventas fuera de horario](pipelines/fact_out_of_hours_sales.md)
 - [Features](features/operational_score.md)
+- [Feature de ventas fuera de horario](features/out_of_hours_sales.md)
 - [Runbooks](runbooks/failed_jobs.md)
 - [OKR SmartAudits AI](okr/2026-07-duma-smartaudits-ai-evidence.md)
 - [OKR disponibilidad y frescura DUMA](okr/2026-07-duma-data-freshness-evidence.md)
