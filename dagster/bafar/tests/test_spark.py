@@ -189,6 +189,24 @@ class SparkResourceTests(unittest.TestCase):
             "com.microsoft.sqlserver.jdbc.SQLServerDriver",
         )
 
+    def test_ozone_s3_configuration_is_applied_to_spark(self) -> None:
+        self.resource.ozone_s3_endpoint = "http://ozone:9878"
+        self.resource.ozone_s3_access_key = "access"
+        self.resource.ozone_s3_secret_key = "secret"
+
+        options = self.resource._build_ozone_s3_options()
+        conf = self.resource._build_spark_conf()
+
+        self.assertEqual(options["fs.s3a.endpoint"], "http://ozone:9878")
+        self.assertEqual(options["fs.s3a.connection.ssl.enabled"], "false")
+        self.assertEqual(options["fs.s3a.path.style.access"], "true")
+        self.assertEqual(options["fs.s3a.access.key"], "access")
+        self.assertEqual(options["fs.s3a.secret.key"], "secret")
+        self.assertEqual(
+            conf.settings["spark.hadoop.fs.s3a.endpoint"],
+            "http://ozone:9878",
+        )
+
     def test_module_stubs_are_restored_after_loading(self) -> None:
         module_names = (
             "dagster",
@@ -223,11 +241,11 @@ class SparkResourceTests(unittest.TestCase):
             {"SPARK_MASTER_UI_PORT": "8081"},
         )
         profile = self.module._build_spark_resource_profile(
-            "dimensiones",
+            "ventas",
             {
-                "SPARK_DIMENSIONES_MIN_CORES": "2",
-                "SPARK_DIMENSIONES_MIN_MEMORY_MB": "3072",
-                "SPARK_DIMENSIONES_CORES_MAX": "3",
+                "SPARK_VENTAS_MIN_CORES": "2",
+                "SPARK_VENTAS_MIN_MEMORY_MB": "3072",
+                "SPARK_VENTAS_CORES_MAX": "3",
             },
         )
         executor_cores = self.module._build_executor_cores(
@@ -246,7 +264,7 @@ class SparkResourceTests(unittest.TestCase):
 
         self.assertEqual(status_url, "http://172.168.10.80:8081/json/")
         self.assertEqual(internal_status_url, "http://spark-master:8080/json/")
-        self.assertEqual(profile["name"], "dimensiones")
+        self.assertEqual(profile["name"], "ventas")
         self.assertEqual(profile["min_cores"], 2)
         self.assertEqual(profile["min_memory_mb"], 3072)
         self.assertEqual(executor_cores, 3)
@@ -359,22 +377,25 @@ class SparkResourceTests(unittest.TestCase):
                 ["StoreId"],
                 "stg.dimStoreSchedules",
                 self.module.DIM_STORE_SCHEDULE_COLUMNS,
+                1,
             ),
             (
                 "write_fact_out_of_hours_sales_stage",
                 ["SaleId"],
                 "stg.factOutOfHoursSales",
                 self.module.FACT_OUT_OF_HOURS_SALES_COLUMNS,
+                2,
             ),
             (
                 "write_fact_store_sales_daily_stage",
                 ["StoreId", "SalesDate"],
                 "stg.factStoreSalesDaily",
                 self.module.FACT_STORE_SALES_DAILY_COLUMNS,
+                2,
             ),
         ]
 
-        for method_name, key_columns, target_table, expected_columns in cases:
+        for method_name, key_columns, target_table, expected_columns, save_count in cases:
             with self.subTest(method_name=method_name):
                 df = FakeDataFrame()
 
@@ -382,11 +403,12 @@ class SparkResourceTests(unittest.TestCase):
 
                 self.assertEqual(written, 2)
                 self.assertEqual(df.selections[0], expected_columns)
-                self.assertEqual(df.selections[-1], ("RunId", *expected_columns))
+                self.assertIn(("RunId", *expected_columns), df.selections)
                 self.assertEqual(df.deduplicated_by, key_columns)
                 self.assertEqual(df.columns_added["RunId"], "run-3")
                 self.assertEqual(df.write.values["dbtable"], target_table)
                 self.assertTrue(df.write.values["saved"])
+                self.assertEqual(df.write.save_count, save_count)
                 self.assertTrue(df.unpersisted)
 
 

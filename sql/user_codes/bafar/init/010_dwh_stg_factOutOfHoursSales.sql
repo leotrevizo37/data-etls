@@ -29,7 +29,7 @@ IF OBJECT_ID(N'dwh.factOutOfHoursSales', N'U') IS NULL
             Amount DECIMAL(19, 4) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             UserName NVARCHAR(150) NULL,
-            StoreId VARCHAR(4) NOT NULL,
+            StoreId VARCHAR(50) NOT NULL,
             OutOfHoursType TINYINT NULL,
             DeviationMinutes INT NULL,
             ModifiedAt DATETIME2(0) NOT NULL
@@ -52,7 +52,7 @@ IF OBJECT_ID(N'stg.factOutOfHoursSales', N'U') IS NULL
             Amount DECIMAL(19, 4) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             UserName NVARCHAR(150) NULL,
-            StoreId VARCHAR(4) NOT NULL,
+            StoreId VARCHAR(50) NOT NULL,
             OutOfHoursType TINYINT NULL,
             DeviationMinutes INT NULL
         );

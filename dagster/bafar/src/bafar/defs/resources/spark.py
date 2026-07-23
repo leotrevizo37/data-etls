@@ -24,6 +24,7 @@ DEFAULT_SPARK_RESOURCE_PROFILES = {
     "default": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "maintenance": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
+    "ventas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
 }
 SPARK_RETRY_POLICY_ENV = {
@@ -33,6 +34,20 @@ SPARK_RETRY_POLICY_ENV = {
     "spark.shuffle.io.retryWait": ("SPARK_SHUFFLE_IO_RETRY_WAIT", "10s"),
     "spark.network.timeout": ("SPARK_NETWORK_TIMEOUT", "800s"),
     "spark.executor.heartbeatInterval": ("SPARK_EXECUTOR_HEARTBEAT_INTERVAL", "60s"),
+}
+SPARK_S3A_TUNING_ENV = {
+    "fs.s3a.connection.maximum": ("SPARK_S3A_CONNECTION_MAXIMUM", "64"),
+    "fs.s3a.threads.max": ("SPARK_S3A_THREADS_MAX", "32"),
+    "fs.s3a.max.total.tasks": ("SPARK_S3A_MAX_TOTAL_TASKS", "64"),
+    "fs.s3a.multipart.size": ("SPARK_S3A_MULTIPART_SIZE", "128M"),
+    "fs.s3a.multipart.threshold": ("SPARK_S3A_MULTIPART_THRESHOLD", "128M"),
+    "fs.s3a.fast.upload": ("SPARK_S3A_FAST_UPLOAD", "true"),
+    "fs.s3a.fast.upload.buffer": ("SPARK_S3A_FAST_UPLOAD_BUFFER", "disk"),
+    "fs.s3a.fast.upload.active.blocks": ("SPARK_S3A_FAST_UPLOAD_ACTIVE_BLOCKS", "4"),
+    "fs.s3a.attempts.maximum": ("SPARK_S3A_ATTEMPTS_MAXIMUM", "10"),
+    "fs.s3a.connection.request.timeout": ("SPARK_S3A_CONNECTION_REQUEST_TIMEOUT", "30m"),
+    "fs.s3a.connection.timeout": ("SPARK_S3A_CONNECTION_TIMEOUT", "30s"),
+    "fs.s3a.socket.timeout": ("SPARK_S3A_SOCKET_TIMEOUT", "30m"),
 }
 
 
@@ -51,6 +66,15 @@ def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, s
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
+    }
+
+
+def _build_s3a_tuning_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    current_env = env or os.environ
+    return {
+        spark_key: current_env.get(env_key) or default
+        for spark_key, (env_key, default) in SPARK_S3A_TUNING_ENV.items()
+        if (current_env.get(env_key) or default)
     }
 
 
@@ -305,6 +329,13 @@ class SparkResource:
             DEFAULT_SPARK_WORKER_NETWORK_TIMEOUT_SECONDS
         ),
         resource_profile: Optional[Dict[str, Any]] = None,
+        ozone_s3_endpoint: str = "",
+        ozone_s3_region: str = "us-east-1",
+        ozone_s3_access_key: Optional[str] = None,
+        ozone_s3_secret_key: Optional[str] = None,
+        ozone_s3_path_style_access: str = "true",
+        ozone_s3_bucket_probe: str = "0",
+        ozone_s3_change_detection_mode: str = "none",
     ) -> None:
         self.master_url = master_url
         self.app_name = app_name
@@ -325,6 +356,13 @@ class SparkResource:
         self.block_manager_port = block_manager_port
         self.worker_network_timeout_seconds = worker_network_timeout_seconds
         self.resource_profile = resource_profile or _build_spark_resource_profile(job_type)
+        self.ozone_s3_endpoint = ozone_s3_endpoint
+        self.ozone_s3_region = ozone_s3_region
+        self.ozone_s3_access_key = ozone_s3_access_key
+        self.ozone_s3_secret_key = ozone_s3_secret_key
+        self.ozone_s3_path_style_access = ozone_s3_path_style_access
+        self.ozone_s3_bucket_probe = ozone_s3_bucket_probe
+        self.ozone_s3_change_detection_mode = ozone_s3_change_detection_mode
         self.jdbc_host = jdbc_host
         self.jdbc_port = jdbc_port
         self.jdbc_database = jdbc_database
@@ -338,6 +376,33 @@ class SparkResource:
 
     def _spark_packages(self) -> List[str]:
         return [MSSQL_JDBC_PACKAGE]
+
+    def _build_ozone_s3_options(self) -> Dict[str, str]:
+        if not self.ozone_s3_endpoint:
+            return {}
+
+        options = {
+            "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            "fs.s3a.endpoint": self.ozone_s3_endpoint,
+            "fs.s3a.path.style.access": self.ozone_s3_path_style_access,
+            "fs.s3a.bucket.probe": self.ozone_s3_bucket_probe,
+            "fs.s3a.change.detection.mode": self.ozone_s3_change_detection_mode,
+            "fs.s3a.connection.ssl.enabled": (
+                "false"
+                if self.ozone_s3_endpoint.lower().startswith("http://")
+                else "true"
+            ),
+        }
+        if self.ozone_s3_region:
+            options["fs.s3a.endpoint.region"] = self.ozone_s3_region
+        options.update(_build_s3a_tuning_conf())
+        if self.ozone_s3_access_key and self.ozone_s3_secret_key:
+            options["fs.s3a.access.key"] = self.ozone_s3_access_key
+            options["fs.s3a.secret.key"] = self.ozone_s3_secret_key
+            options["fs.s3a.aws.credentials.provider"] = (
+                "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+            )
+        return options
 
     def _build_spark_conf(self) -> SparkConf:
         conf = (
@@ -380,6 +445,9 @@ class SparkResource:
 
         for key, value in _build_spark_retry_conf().items():
             conf.set(key, value)
+
+        for key, value in self._build_ozone_s3_options().items():
+            conf.set("spark.hadoop." + key, value)
 
         conf.set("spark.jars.packages", ",".join(self._spark_packages()))
         return conf
@@ -495,6 +563,8 @@ class SparkResource:
             .config(conf=conf)
             .getOrCreate()
         )
+        for key, value in self._build_ozone_s3_options().items():
+            self._spark._jsc.hadoopConfiguration().set(key, value)
         return self._spark
 
     def stop(self) -> None:
@@ -522,6 +592,94 @@ class SparkResource:
                 "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
             },
         }
+
+    def read_fact_out_of_hours_sales_window(
+        self,
+        source_sqlserver: Any,
+        from_value: str,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**source_sqlserver.get_basic_options())
+            .option(
+                "query",
+                f"""
+SELECT
+    Id,
+    Importe,
+    Fecha,
+    NombreUsuario,
+    NumeroVenta,
+    Clave_Tienda
+FROM dwh.Ventas
+WHERE Fecha > CONVERT(DATETIME2(7), '{from_value}', 126)
+""",
+            )
+            .load()
+        )
+
+    def read_store_schedules(self, sqlserver: Any) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**sqlserver.get_basic_options())
+            .option(
+                "query",
+                """
+SELECT
+    schedules.StoreId,
+    schedules.OpeningDate,
+    schedules.ClosingDate,
+    schedule.DayOfWeek,
+    CONVERT(VARCHAR(8), schedule.OpeningTime, 108) AS OpeningTime,
+    CONVERT(VARCHAR(8), schedule.LunchStartTime, 108) AS LunchStartTime,
+    CONVERT(VARCHAR(8), schedule.LunchEndTime, 108) AS LunchEndTime,
+    CONVERT(VARCHAR(8), schedule.ClosingTime, 108) AS ClosingTime
+FROM dwh.dimStoreSchedules AS schedules
+CROSS APPLY (
+    VALUES
+        (1, SundayOpeningTime, SundayLunchStartTime, SundayLunchEndTime, SundayClosingTime),
+        (2, MondayOpeningTime, MondayLunchStartTime, MondayLunchEndTime, MondayClosingTime),
+        (3, TuesdayOpeningTime, TuesdayLunchStartTime, TuesdayLunchEndTime, TuesdayClosingTime),
+        (4, WednesdayOpeningTime, WednesdayLunchStartTime, WednesdayLunchEndTime, WednesdayClosingTime),
+        (5, ThursdayOpeningTime, ThursdayLunchStartTime, ThursdayLunchEndTime, ThursdayClosingTime),
+        (6, FridayOpeningTime, FridayLunchStartTime, FridayLunchEndTime, FridayClosingTime),
+        (7, SaturdayOpeningTime, SaturdayLunchStartTime, SaturdayLunchEndTime, SaturdayClosingTime)
+) AS schedule (DayOfWeek, OpeningTime, LunchStartTime, LunchEndTime, ClosingTime)
+""",
+            )
+            .load()
+        )
+
+    def read_fact_store_sales_daily_window(
+        self,
+        source_sqlserver: Any,
+        from_value: str,
+        to_value: str,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        return (
+            spark.read
+            .format("jdbc")
+            .options(**source_sqlserver.get_basic_options())
+            .option(
+                "query",
+                f"""
+SELECT
+    Id,
+    Importe,
+    Fecha,
+    Clave_Tienda
+FROM dwh.Ventas
+WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126)
+    AND Fecha < CONVERT(DATETIME2(7), '{to_value}', 126)
+""",
+            )
+            .load()
+        )
 
     def _write_jdbc_in_chunks(
         self,
@@ -620,29 +778,13 @@ class SparkResource:
             .dropDuplicates(["SaleId"])
             .withColumn("RunId", lit(run_id))
             .select("RunId", *FACT_OUT_OF_HOURS_SALES_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
         )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.factOutOfHoursSales")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factOutOfHoursSales",
+            chunk_column="SaleId",
+        )
 
     def write_fact_store_sales_daily_stage(
         self,
@@ -655,29 +797,13 @@ class SparkResource:
             .dropDuplicates(["StoreId", "SalesDate"])
             .withColumn("RunId", lit(run_id))
             .select("RunId", *FACT_STORE_SALES_DAILY_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
         )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.factStoreSalesDaily")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factStoreSalesDaily",
+            chunk_column="StoreId",
+        )
 
 
 @resource
@@ -721,6 +847,16 @@ def spark_resource(init_context):
     jdbc_write_num_chunks = int(os.getenv("JDBC_WRITE_NUM_CHUNKS", "5"))
     jdbc_write_target_partitions = int(os.getenv("JDBC_WRITE_TARGET_PARTITIONS", "2"))
     jdbc_write_batch_size = int(os.getenv("JDBC_WRITE_BATCH_SIZE", "100"))
+    ozone_s3_endpoint = os.getenv("OZONE_S3_ENDPOINT", "")
+    ozone_s3_region = os.getenv("OZONE_S3_REGION", "us-east-1")
+    ozone_s3_access_key = os.getenv("OZONE_S3_ACCESS_KEY")
+    ozone_s3_secret_key = os.getenv("OZONE_S3_SECRET_KEY")
+    ozone_s3_path_style_access = os.getenv("OZONE_S3_PATH_STYLE_ACCESS", "true")
+    ozone_s3_bucket_probe = os.getenv("OZONE_S3_BUCKET_PROBE", "0")
+    ozone_s3_change_detection_mode = os.getenv(
+        "OZONE_S3_CHANGE_DETECTION_MODE",
+        "none",
+    )
     spark_res = SparkResource(
         master_url=master_url,
         app_name=app_context["app_name"],
@@ -750,6 +886,13 @@ def spark_resource(init_context):
         jdbc_write_num_chunks=jdbc_write_num_chunks,
         jdbc_write_target_partitions=jdbc_write_target_partitions,
         jdbc_write_batch_size=jdbc_write_batch_size,
+        ozone_s3_endpoint=ozone_s3_endpoint,
+        ozone_s3_region=ozone_s3_region,
+        ozone_s3_access_key=ozone_s3_access_key,
+        ozone_s3_secret_key=ozone_s3_secret_key,
+        ozone_s3_path_style_access=ozone_s3_path_style_access,
+        ozone_s3_bucket_probe=ozone_s3_bucket_probe,
+        ozone_s3_change_detection_mode=ozone_s3_change_detection_mode,
     )
     try:
         yield spark_res

@@ -24,7 +24,7 @@ IF OBJECT_ID(N'dwh.factStoreSalesDaily', N'U') IS NULL
     BEGIN
         CREATE TABLE dwh.factStoreSalesDaily
         (
-            StoreId VARCHAR(4) NOT NULL,
+            StoreId VARCHAR(5) NOT NULL,
             SalesDate DATE NOT NULL,
             SalesCount INT NOT NULL,
             SalesAmount DECIMAL(19, 4) NOT NULL,
@@ -43,7 +43,7 @@ IF OBJECT_ID(N'stg.factStoreSalesDaily', N'U') IS NULL
         CREATE TABLE stg.factStoreSalesDaily
         (
             RunId NVARCHAR(100) NOT NULL,
-            StoreId VARCHAR(4) NOT NULL,
+            StoreId VARCHAR(5) NOT NULL,
             SalesDate DATE NOT NULL,
             SalesCount INT NOT NULL,
             SalesAmount DECIMAL(19, 4) NOT NULL

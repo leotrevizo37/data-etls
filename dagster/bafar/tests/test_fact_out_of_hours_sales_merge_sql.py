@@ -3,7 +3,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,12 +25,15 @@ def _install_stubs() -> None:
 
 
 def _load_sql_server_module():
-    _install_stubs()
-    path = PROJECT_ROOT / "src" / "bafar" / "defs" / "resources" / "sql_server.py"
-    spec = importlib.util.spec_from_file_location("bafar_sql_server_resource", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
+    with patch.dict(sys.modules):
+        sys.modules.pop("dagster", None)
+        sys.modules.pop("pyodbc", None)
+        _install_stubs()
+        path = PROJECT_ROOT / "src" / "bafar" / "defs" / "resources" / "sql_server.py"
+        spec = importlib.util.spec_from_file_location("bafar_sql_server_resource", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
     return module
 
 
@@ -71,8 +74,13 @@ class FactOutOfHoursSalesMergeSqlTests(unittest.TestCase):
         self.assertIn("source.OutOfHoursType", sql)
         self.assertIn("source.DeviationMinutes", sql)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
+        self.assertIn("WHEN MATCHED AND source.OutOfHoursType IS NULL THEN", sql)
+        self.assertIn("DELETE", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
-        self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
+        self.assertIn(
+            "WHEN NOT MATCHED BY TARGET AND source.OutOfHoursType IS NOT NULL THEN",
+            sql,
+        )
 
     def test_clear_stage_deletes_only_the_requested_run(self) -> None:
         self.cursor.rowcount = 4
@@ -97,6 +105,12 @@ class FactOutOfHoursSalesMergeSqlTests(unittest.TestCase):
             "run-2",
         )
         self.connection.commit.assert_called_once_with()
+
+    def test_watermark_query_errors_are_not_treated_as_an_initial_load(self) -> None:
+        self.cursor.execute.side_effect = self.module.pyodbc.Error("query failed")
+
+        with self.assertRaises(self.module.pyodbc.Error):
+            self.resource.get_watermark("FactOutOfHoursSales")
 
 
 if __name__ == "__main__":

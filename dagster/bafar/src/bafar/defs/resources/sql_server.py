@@ -193,6 +193,8 @@ USING (
     WHERE RunId = ?
 ) AS source
     ON target.SaleId = source.SaleId
+WHEN MATCHED AND source.OutOfHoursType IS NULL THEN
+    DELETE
 WHEN MATCHED THEN
     UPDATE SET
         target.SaleNumber = source.SaleNumber,
@@ -203,7 +205,7 @@ WHEN MATCHED THEN
         target.OutOfHoursType = source.OutOfHoursType,
         target.DeviationMinutes = source.DeviationMinutes,
         target.ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED BY TARGET THEN
+WHEN NOT MATCHED BY TARGET AND source.OutOfHoursType IS NOT NULL THEN
     INSERT (
         SaleId,
         SaleNumber,
@@ -324,14 +326,11 @@ class SqlServerResource:
     def get_watermark(self, ingestion_name: str) -> Optional[datetime]:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
-                try:
-                    cursor.execute(
-                        "EXEC ctl.usp_IngestionControl_GetWatermark @IngestionName = ?",
-                        ingestion_name,
-                    )
-                    row = cursor.fetchone()
-                except pyodbc.Error:
-                    return None
+                cursor.execute(
+                    "EXEC ctl.usp_IngestionControl_GetWatermark @IngestionName = ?",
+                    ingestion_name,
+                )
+                row = cursor.fetchone()
                 if row is None:
                     return None
                 return row.LastLoadedAt
