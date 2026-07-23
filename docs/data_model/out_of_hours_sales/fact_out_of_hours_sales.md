@@ -47,6 +47,12 @@ Un registro representa una venta fuera de horario identificada por `SaleId`.
 - Cuando no existe un horario aplicable se clasifica con tipo `4`.
 - Las ventas dentro del horario no se conservan en esta tabla; si una venta previamente materializada deja de estar fuera de horario, el `MERGE` la elimina.
 
+## Backfill
+
+- El job `022_bafar_out_of_hours_sales_backfill_daily` reprocesa particiones diarias completas desde `2026-05-01` en la zona `America/Ciudad_Juarez`.
+- Cada partición usa una ventana acotada por fecha, reutiliza `stg.factOutOfHoursSales` y consolida por `SaleId` con el mismo `MERGE`.
+- El backfill no lee ni actualiza el watermark `FactOutOfHoursSales`.
+
 ## Uso esperado
 
 - Seguimiento de ventas realizadas fuera de los horarios configurados.
