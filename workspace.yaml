@@ -27,3 +27,7 @@ load_from:
       host: emerson-dagster-user-code
       port: 4007
       location_name: emerson
+  - grpc_server:
+      host: bafar-dagster-user-code
+      port: 4008
+      location_name: bafar

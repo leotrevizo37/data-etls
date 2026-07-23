@@ -14,6 +14,7 @@ El proyecto implementa una capa de servicio para analitica y consumo por DUMA, P
 | ADLS / Ozone S3A | Lectura de parquets y almacenamiento intermedio/modelos |
 | MySQL SmartAudits | Fuente transaccional para resultados y evidencias revisadas por IA |
 | MySQL Mantiz | Fuente transaccional para tickets, comentarios, equipos y refacciones |
+| SQL Server Bafar | Fuente transaccional de ventas y horarios de sucursales |
 
 ## Capas de datos
 
@@ -35,8 +36,9 @@ El proyecto implementa una capa de servicio para analitica y consumo por DUMA, P
 
 ## Limites importantes
 
-- Los seis `user_codes` comparten patrones, pero no todos tienen las mismas features.
+- Los `user_codes` comparten patrones, pero no todos tienen las mismas features.
 - SmartAudits y Mantiz estan implementados en `carlsjr`.
 - `FactSensorEvents` existe en los `user_codes` que implementan eventos de sensores.
+- Bafar materializa `dwh.factOutOfHoursSales` para identificar ventas fuera de los horarios configurados por sucursal.
 - Los contratos de tabla se deben cambiar en DDL, writer Spark, merge SQL y tests cuando aplique.
 
