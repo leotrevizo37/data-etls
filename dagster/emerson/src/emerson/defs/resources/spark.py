@@ -841,14 +841,24 @@ class SparkResource:
             return None
         return max_ts
 
-    def write_dim_prod_dimensions(self, df: DataFrame) -> Optional[int]:
-        df_dedup = df.dropDuplicates(["SensorId"])
-        if len(df_dedup.head(1)) == 0:
+    def write_dim_prod_dimensions(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> Optional[int]:
+        dimension_columns = df.columns
+        df_stage = (
+            df
+            .dropDuplicates(["SensorId"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *dimension_columns)
+        )
+        if len(df_stage.head(1)) == 0:
             return 0
 
         return self._write_jdbc_in_chunks(
-            df_dedup,
-            table="dwh.dimSidonProdDimensions",
+            df_stage,
+            table="stg.dimSidonProdDimensions",
             chunk_column="SensorId",
         )
 
@@ -890,7 +900,7 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
-    def write_fact_sensor_events(self, df: DataFrame) -> int:
+    def write_fact_sensor_events(self, df: DataFrame, run_id: str) -> int:
         df_dedup = (
             df
             .select(
@@ -909,10 +919,15 @@ class SparkResource:
             )
             .dropDuplicates(["ReadId"])
         )
+        df_stage = (
+            df_dedup
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *df_dedup.columns)
+        )
 
         return self._write_jdbc_in_chunks(
-            df_dedup,
-            table="dwh.factSensorEvents",
+            df_stage,
+            table="stg.factSensorEvents",
             chunk_column="ReadId",
         )
 
