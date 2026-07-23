@@ -363,6 +363,16 @@ class SqlServerResource:
                 )
                 conn.commit()
 
+    def execute_query(self, query: str, *args) -> Optional[int]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(query, *args)
+                    conn.commit()
+                    return cursor.rowcount
+                except pyodbc.Error as e:
+                    return e
+
     def clear_dim_store_schedules_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
