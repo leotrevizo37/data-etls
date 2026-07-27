@@ -82,12 +82,6 @@ IF OBJECT_ID(N'ctl.SmartauditsAiCommentLookup', N'U') IS NOT NULL
     END;
 GO
 
-IF OBJECT_ID(N'ctl.IndexMaintenanceLog', N'U') IS NOT NULL
-    BEGIN
-        DROP TABLE ctl.IndexMaintenanceLog;
-    END;
-GO
-
 IF OBJECT_ID(N'dwh.factMantizTicketTextInsights', N'U') IS NOT NULL
     BEGIN
         DROP TABLE dwh.factMantizTicketTextInsights;
