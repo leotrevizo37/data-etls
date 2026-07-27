@@ -33,6 +33,10 @@ IMAGE_NOT_LEGIBLE_KEYWORDS = (
     "borroso",
     "borrosa",
     "desenfoc",
+    "ilegible",
+    "no se observa registro manuscrito legible",
+    "no es posible identificar registros manuscritos",
+    "no presenta registros o datos manuscritos legibles",
 )
 
 IMAGE_NOT_PROCESSABLE_KEYWORDS = (
@@ -43,6 +47,21 @@ IMAGE_NOT_PROCESSABLE_KEYWORDS = (
     "error al",
     "imagen no procesable",
     "no muestra un valor",
+    "objeto faltante",
+    "chart faltante",
+    "chart: faltante",
+    "; no visible",
+    ": no visible",
+    "temperatura no visible",
+    "producto: no visible",
+    "no se observa termometro",
+    "no se visualiza ningun fregadero",
+    "no se observan productos quimicos",
+    "ninguno observado",
+    "no se observa",
+    "no se puede determinar",
+    "ninguna accion",
+    "no hay manos visibles",
 )
 
 OUT_OF_RANGE_KEYWORDS = (
@@ -52,6 +71,19 @@ OUT_OF_RANGE_KEYWORDS = (
     "por debajo del rango",
     "por encima del rango",
     "no esta dentro del rango",
+    "no se encuentra dentro del rango",
+    "lectura fuera del rango",
+    "temperatura fuera del rango",
+    "no cumple con el rango",
+    "no muestra unidad",
+    "°c; no cumple",
+    "°f; no cumple",
+)
+
+OUT_OF_RANGE_PATTERNS = (
+    r"-?\d+(?:[.,]\d+)?\s*°?\s*[cf]\s*;\s*no cumple\b",
+    r"\b(?:temperatura|lectura|termometro|pollo|carne|salchichas?|producto)"
+    r"[^;\n]*-?\d+(?:[.,]\d+)?\s*;\s*no cumple\b",
 )
 
 CLEANING_KEYWORDS = (
@@ -64,6 +96,21 @@ CLEANING_KEYWORDS = (
     "derram",
     "limpieza",
     "desacomodo",
+    "presenta restos de suciedad",
+    "suciedad acumulada",
+    "tabla de cortar con residuos visibles",
+    "residuos adheridos",
+    "presencia de residuos y manchas",
+    "presencia de residuos y suciedad",
+    "presencia de mancha",
+    "presencia de manchas",
+    "mancha amarilla visible",
+    "mancha oscura visible",
+    "manchas amarillentas visibles",
+    "manchas oscuras visibles",
+    "manchas de oxido",
+    "evidente oxidacion",
+    "oxidacion y desgaste",
 )
 
 GENERAL_NON_COMPLIANCE_KEYWORDS = (
@@ -74,6 +121,27 @@ GENERAL_NON_COMPLIANCE_KEYWORDS = (
     "incorrecta",
     "evidencia incorrecta",
     "no cumple con la tarea",
+    "dispensador aparece vacio",
+    "dispensador se observa vacio",
+    "dispensador de jabon aparece vacio",
+    "dispensador de jabon se observa vacio",
+    "dispensador de jabon se observa claramente vacio",
+    "muestra interior vacio",
+    "vacio sin suministro visible",
+    "vacio sin contenido visible",
+    "vacio de producto",
+    "visiblemente sin suministro",
+    "mano desnuda manipulando",
+    "muesca o dano",
+    "dano visible en la punta",
+    "deformacion/desportillado",
+    "presencia de quimicos almacenados",
+    "almacenado junto a suministros de papel",
+    "envases junto a mopas",
+    "balde con material dentro",
+    "liquido no identificado",
+    "no es carne ni pollo crudo identificado",
+    "fecha+proteccion: contenedor",
 )
 
 
