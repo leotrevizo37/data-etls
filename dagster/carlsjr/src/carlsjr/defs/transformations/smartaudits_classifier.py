@@ -104,6 +104,15 @@ def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+def _matches_any_pattern(
+    text: str,
+    patterns: Sequence[str],
+) -> bool:
+    return any(
+        re.search(pattern, text, flags=re.IGNORECASE) is not None
+        for pattern in patterns
+    )
+
 def deterministic_result_category(
     comment: Optional[str],
     result_ai: Optional[int],
@@ -116,7 +125,10 @@ def deterministic_result_category(
         return CATEGORY_IMAGE_NOT_LEGIBLE
     if _contains_any(normalized, IMAGE_NOT_PROCESSABLE_KEYWORDS):
         return CATEGORY_IMAGE_NOT_PROCESSABLE
-    if _contains_any(normalized, OUT_OF_RANGE_KEYWORDS):
+    if (
+        _contains_any(normalized, OUT_OF_RANGE_KEYWORDS)
+        or _matches_any_pattern(normalized, OUT_OF_RANGE_PATTERNS)
+    ):
         return CATEGORY_OUT_OF_RANGE
     if _contains_any(normalized, CLEANING_KEYWORDS):
         return CATEGORY_CLEANING_NON_COMPLIANCE
