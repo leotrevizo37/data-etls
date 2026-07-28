@@ -12,6 +12,8 @@ x-dagster-common: &dagster_common
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../dagster/carlsjr:/opt/dagster/app/carlsjr
+    - ../dagster/emerson:/opt/dagster/app/emerson
+    - ../dagster/bafar:/opt/dagster/app/bafar
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
   networks:
@@ -52,7 +54,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr emerson=emerson bafar=bafar}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -498,6 +500,115 @@ services:
       retries: 10
       start_period: 40s
 
+  dagster-user-code-emerson:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: emerson-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/emerson
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/emerson/src
+      APP_DB: ${EMERSON_DB:-emerson}
+      DIM_DB: ${EMERSON_DIM_DB:-emerson}
+      ADLS_CONTAINER_NAME: ${EMERSON_ADLS_CONTAINER_NAME:-emerson}
+      FACTREADINGS_OVERLAP_HOURS: ${EMERSON_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
+      SPARK_DF_IO_BASE_PATH: ${EMERSON_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/emerson}
+      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
+      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${EMERSON_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${EMERSON_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${EMERSON_USER_CODE_PORT:-4007}:4007"
+      - "${EMERSON_SPARK_DRIVER_PORT}:${EMERSON_SPARK_DRIVER_PORT}"
+      - "${EMERSON_SPARK_BLOCK_MANAGER_PORT}:${EMERSON_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4007",
+      "-m", "emerson.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4007 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
+  dagster-user-code-bafar:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: bafar-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/bafar
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/bafar/src
+      APP_DB: ${BAFAR_DB:-bafar}
+      DIM_DB: ${BAFAR_DIM_DB}
+      SPARK_DF_IO_BASE_PATH: ${BAFAR_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/bafar}
+      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
+      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      DIMSQL_HOST: ${BAFAR_DIMSQL_HOST}
+      DIMSQL_PORT: ${BAFAR_DIMSQL_PORT:-1433}
+      DIMSQL_USER: ${BAFAR_DIMSQL_USER}
+      DIMSQL_PASSWORD: ${BAFAR_DIMSQL_PASSWORD}
+      DIMSQL_CONNECT_TIMEOUT: ${BAFAR_DIMSQL_CONNECT_TIMEOUT:-15}
+      DIMSQL_COMMAND_TIMEOUT: ${BAFAR_DIMSQL_COMMAND_TIMEOUT:-5000}
+      DIMSQL_DRIVER: ${BAFAR_DIMSQL_DRIVER:-ODBC Driver 18 for SQL Server}
+      DIMSQL_CONNECT_RETRY_COUNT: ${BAFAR_DIMSQL_CONNECT_RETRY_COUNT:-3}
+      DIMSQL_CONNECT_RETRY_INTERVAL: ${BAFAR_DIMSQL_CONNECT_RETRY_INTERVAL:-60}
+      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
+      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
+      SPARK_DRIVER_PORT: ${BAFAR_SPARK_DRIVER_PORT}
+      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${BAFAR_SPARK_BLOCK_MANAGER_PORT}
+      SPARK_BLOCK_MANAGER_PORT: ${BAFAR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37149}
+      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
+    ports:
+      - "${BAFAR_USER_CODE_PORT:-4008}:4008"
+      - "${BAFAR_SPARK_DRIVER_PORT}:${BAFAR_SPARK_DRIVER_PORT}"
+      - "${BAFAR_SPARK_BLOCK_MANAGER_PORT}:${BAFAR_SPARK_BLOCK_MANAGER_PORT}"
+    command: [
+      "dagster", "api", "grpc",
+      "-h", "0.0.0.0",
+      "-p", "4008",
+      "-m", "bafar.definitions"
+    ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "dagster api grpc-health-check -p 4008 -h 127.0.0.1"
+        ]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 40s
+
   dagster-web:
     build:
       context: ..
@@ -639,6 +750,8 @@ services:
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}:${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}"
       - "${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}:${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}"
+      - "${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}:${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}"
+      - "${BAFAR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37149}:${BAFAR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37149}"
     command:
       [
         "/opt/spark/bin/spark-class",

@@ -24,16 +24,18 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
-          pip install ruff pytest
+          pip install ruff==0.16.0 pytest
           pip install -e mcdonalds
           pip install -e smartfit
           pip install -e mcdonalds_cdp
+          pip install -e bafar
           pip install -e bafar_poc_gabinete
           pip install -e carlsjr
+          pip install -e emerson
           pip install -e valledelencino
 
       - name: Ruff
-        run: ruff check .
+        run: ruff check --select E4,E7,E9,F .
 
       - name: Tests
         run: |

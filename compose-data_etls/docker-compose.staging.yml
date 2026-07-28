@@ -23,6 +23,12 @@ services:
   dagster-user-code-carlsjr:
     restart: "no"
 
+  dagster-user-code-emerson:
+    restart: "no"
+
+  dagster-user-code-bafar:
+    restart: "no"
+
   dagster-web:
     restart: "no"
 

@@ -2,7 +2,7 @@
 
 ## Runtime
 
-El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.yaml` registra seis code locations por gRPC, una por cada `user_code`.
+El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.yaml` registra las code locations por gRPC de cada `user_code`, incluida la de Bafar.
 
 | Servicio logico | Referencia |
 |---|---|
@@ -28,11 +28,12 @@ El recurso Spark selecciona perfil desde tags Dagster o variables de entorno. Lo
 | `operaciones` | `factReadingsMeasurement` y tablas derivadas |
 | `smartaudits` | Pipelines SmartAudits |
 | `mantiz` | Pipelines Mantiz |
+| `ventas` | Pipelines de ventas Bafar |
 | `backfill` | Backfills |
 
 ## Almacenamiento intermedio
 
-Los DataFrames entre ops se materializan con `spark_df_io_manager`. El path base se controla con `SPARK_DF_IO_BASE_PATH` y en Compose se define por `user_code`, por ejemplo un prefijo separado para `mcdonalds`, `smartfit`, `mcdonalds_cdp`, `bafar_poc_gabinete`, `valledelencino` y `carlsjr`.
+Los DataFrames entre ops se materializan con `spark_df_io_manager`. El path base se controla con `SPARK_DF_IO_BASE_PATH` y en Compose se define por `user_code`, por ejemplo un prefijo separado para `mcdonalds`, `smartfit`, `mcdonalds_cdp`, `bafar_poc_gabinete`, `bafar`, `valledelencino` y `carlsjr`.
 
 ## Regla de configuracion
 

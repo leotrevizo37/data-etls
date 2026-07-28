@@ -24,12 +24,16 @@ flowchart LR
   mantizMySql --> mantizInsights["dwh.factMantizTicketTextInsights"]
   mantizInsights --> mantizReview["ctl.MantizTextInsightReviewQueue"]
 
+  bafarSales["SQL Server Bafar: ventas"] --> outOfHoursSales["dwh.factOutOfHoursSales"]
+  bafarSchedules["dwh.dimStoreSchedules"] --> outOfHoursSales
+
   control["ctl.IngestionControl"] --> factLecturas
   control --> measurements
   control --> sensorEvents
   control --> smartauditsFact
   control --> mantizLifecycle
   control --> mantizInsights
+  control --> outOfHoursSales
 ```
 
 ## Sense
@@ -47,3 +51,7 @@ SmartAudits lee cambios en `plan_results` y `evidence_photos`, cruza contexto de
 ## Mantiz
 
 Mantiz tiene dos salidas principales. `dwh.factMantizTicketLifecycle` modela el estado y tiempos del ciclo de vida del ticket. `dwh.factMantizTicketTextInsights` extrae fallas, soluciones y refacciones desde textos de tickets y comentarios; los conceptos nuevos o ambiguos se envian a `ctl.MantizTextInsightReviewQueue`.
+
+## Ventas fuera de horario Bafar
+
+El flujo Bafar lee ventas incrementales, las compara contra `dwh.dimStoreSchedules` y conserva en `dwh.factOutOfHoursSales` las ventas antes de apertura, durante comida, despues de cierre o sin horario aplicable. El watermark `FactOutOfHoursSales` solo se actualiza al completar la corrida.

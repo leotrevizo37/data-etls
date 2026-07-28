@@ -5,6 +5,140 @@ import os
 import pyodbc
 from dagster import resource
 
+def build_dim_sidon_prod_dimensions_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.dimSidonProdDimensions AS target
+USING (
+    SELECT
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        sensor_name,
+        sensor_type,
+        DeviceTyId,
+        SubLocationId,
+        Active,
+        device_name,
+        device_type,
+        SubLocationTyId,
+        sublocation_name,
+        location_name,
+        city_name,
+        CityId,
+        LocationId,
+        sublocation_type
+    FROM stg.dimSidonProdDimensions
+    WHERE RunId = ?
+) AS source
+    ON target.SensorId = source.SensorId
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.SensorTyId,
+        source.DeviceId,
+        source.sensor_name,
+        source.sensor_type,
+        source.DeviceTyId,
+        source.SubLocationId,
+        source.Active,
+        source.device_name,
+        source.device_type,
+        source.SubLocationTyId,
+        source.sublocation_name,
+        source.location_name,
+        source.city_name,
+        source.CityId,
+        source.LocationId,
+        source.sublocation_type
+    EXCEPT
+    SELECT
+        target.SensorTyId,
+        target.DeviceId,
+        target.sensor_name,
+        target.sensor_type,
+        target.DeviceTyId,
+        target.SubLocationId,
+        target.Active,
+        target.device_name,
+        target.device_type,
+        target.SubLocationTyId,
+        target.sublocation_name,
+        target.location_name,
+        target.city_name,
+        target.CityId,
+        target.LocationId,
+        target.sublocation_type
+) THEN
+    UPDATE SET
+        target.SensorTyId = source.SensorTyId,
+        target.DeviceId = source.DeviceId,
+        target.sensor_name = source.sensor_name,
+        target.sensor_type = source.sensor_type,
+        target.DeviceTyId = source.DeviceTyId,
+        target.SubLocationId = source.SubLocationId,
+        target.Active = source.Active,
+        target.device_name = source.device_name,
+        target.device_type = source.device_type,
+        target.SubLocationTyId = source.SubLocationTyId,
+        target.sublocation_name = source.sublocation_name,
+        target.location_name = source.location_name,
+        target.city_name = source.city_name,
+        target.CityId = source.CityId,
+        target.LocationId = source.LocationId,
+        target.sublocation_type = source.sublocation_type,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        SensorId,
+        SensorTyId,
+        DeviceId,
+        sensor_name,
+        sensor_type,
+        DeviceTyId,
+        SubLocationId,
+        Active,
+        device_name,
+        device_type,
+        SubLocationTyId,
+        sublocation_name,
+        location_name,
+        city_name,
+        CityId,
+        LocationId,
+        sublocation_type
+    )
+    VALUES (
+        source.SensorId,
+        source.SensorTyId,
+        source.DeviceId,
+        source.sensor_name,
+        source.sensor_type,
+        source.DeviceTyId,
+        source.SubLocationId,
+        source.Active,
+        source.device_name,
+        source.device_type,
+        source.SubLocationTyId,
+        source.sublocation_name,
+        source.location_name,
+        source.city_name,
+        source.CityId,
+        source.LocationId,
+        source.sublocation_type
+    )
+WHEN NOT MATCHED BY SOURCE AND target.Active = 1 THEN
+    UPDATE SET
+        target.Active = 0,
+        target.ModifiedAt = SYSUTCDATETIME()
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_readings_measurement_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
@@ -222,6 +356,27 @@ class SqlServerResource:
                     error_message,
                 )
                 conn.commit()
+
+    def clear_dim_sidon_prod_dimensions_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.dimSidonProdDimensions WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_dim_sidon_prod_dimensions(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_dim_sidon_prod_dimensions_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
 
     def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
