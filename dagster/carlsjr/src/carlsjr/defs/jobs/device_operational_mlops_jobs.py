@@ -1,0 +1,165 @@
+from datetime import datetime, timedelta
+import json
+import os
+
+from dagster import Out, RetryPolicy, job, op
+
+from ..resources import SparkResource, SqlServerResource
+from ..transformations.device_operational_intelligence import (
+    FEATURE_SET_VERSION,
+    MODEL_FAMILY,
+    MODEL_SCOPE,
+    SCORING_VERSION,
+    feature_schema_json,
+)
+from ..transformations.device_operational_model import (
+    _decide_model_promotion,
+    dump_device_operational_model_bytes,
+    train_device_operational_model,
+)
+
+
+USER_CODE = "carlsjr"
+MLOPS_RETRY_POLICY = RetryPolicy(max_retries=1, delay=60)
+
+
+@op(
+    required_resource_keys={"spark", "sqlserver"},
+    out=Out(dict),
+    retry_policy=MLOPS_RETRY_POLICY,
+)
+def train_device_operational_model_op(context) -> dict:
+    spark_res: SparkResource = context.resources.spark
+    sql: SqlServerResource = context.resources.sqlserver
+    min_training_rows = int(os.getenv("SENSE_DOI_MIN_TRAINING_ROWS", "1000"))
+    min_rows_per_class = int(os.getenv("SENSE_DOI_MIN_ROWS_PER_CLASS", "50"))
+    training_window_days = int(os.getenv("SENSE_DOI_TRAINING_WINDOW_DAYS", "180"))
+    min_macro_f1 = float(os.getenv("SENSE_DOI_MIN_MACRO_F1", "0.70"))
+    min_critical_recall = float(os.getenv("SENSE_DOI_MIN_CRITICAL_RECALL", "0.80"))
+    max_calibration_error = float(os.getenv("SENSE_DOI_MAX_CALIBRATION_ERROR", "0.10"))
+    min_score_delta = float(os.getenv("SENSE_DOI_MIN_PROMOTION_SCORE_DELTA", "0.0"))
+    model_base_path = os.getenv(
+        "SENSE_DOI_MODEL_BASE_PATH",
+        "s3a://data-etls/models/carlsjr/sense/device_operational_intelligence",
+    ).rstrip("/")
+    active_model = sql.get_active_device_operational_model(USER_CODE, MODEL_SCOPE)
+    samples = sql.get_device_operational_training_samples(
+        USER_CODE,
+        training_window_days,
+    )
+    training_result = train_device_operational_model(
+        samples,
+        min_training_rows=min_training_rows,
+        min_rows_per_class=min_rows_per_class,
+    )
+    if training_result is None:
+        metadata = {
+            "training_rows_available": len(samples),
+            "candidate_created": False,
+            "reason": "insufficient_training_data_or_class_balance",
+        }
+        context.add_output_metadata(metadata)
+        return metadata
+
+    model_version = datetime.utcnow().strftime("carlsjr-sense-doi-%Y%m%d%H%M%S")
+    artifact_path = model_base_path + "/" + model_version
+    model_bytes = dump_device_operational_model_bytes(training_result.model_artifact)
+    spark_res.write_device_operational_model_artifact(
+        artifact_path,
+        model_version,
+        model_bytes,
+    )
+    feature_schema = json.dumps(feature_schema_json(), sort_keys=True)
+    metrics_json = json.dumps(training_result.metrics, sort_keys=True)
+    distribution_json = json.dumps(
+        training_result.model_artifact.get("class_counts", {}),
+        sort_keys=True,
+    )
+    sql.register_device_operational_feature_set(
+        user_code=USER_CODE,
+        feature_set_version=FEATURE_SET_VERSION,
+        feature_schema_json=feature_schema,
+    )
+    candidate_metrics = {
+        "macro_f1": training_result.macro_f1,
+        "weighted_f1": training_result.weighted_f1,
+        "critical_recall": training_result.critical_recall,
+        "critical_precision": training_result.critical_precision,
+        "calibration_error": training_result.calibration_error,
+    }
+    promotion = _decide_model_promotion(
+        candidate_metrics=candidate_metrics,
+        active_model=active_model,
+        min_macro_f1=min_macro_f1,
+        min_critical_recall=min_critical_recall,
+        max_calibration_error=max_calibration_error,
+        min_score_delta=min_score_delta,
+    )
+    sql.register_device_operational_model(
+        user_code=USER_CODE,
+        model_scope=MODEL_SCOPE,
+        model_version=model_version,
+        model_family=MODEL_FAMILY,
+        artifact_path=artifact_path,
+        feature_set_version=FEATURE_SET_VERSION,
+        scoring_version=SCORING_VERSION,
+        training_window_start=datetime.utcnow() - timedelta(days=training_window_days),
+        training_window_end=datetime.utcnow(),
+        training_rows=training_result.training_rows,
+        validation_rows=training_result.validation_rows,
+        test_rows=training_result.test_rows,
+        accuracy=training_result.accuracy,
+        macro_f1=training_result.macro_f1,
+        weighted_f1=training_result.weighted_f1,
+        critical_recall=training_result.critical_recall,
+        critical_precision=training_result.critical_precision,
+        calibration_error=training_result.calibration_error,
+        metrics_json=metrics_json,
+        feature_schema_json=feature_schema,
+        training_distribution_json=distribution_json,
+        promote=promotion["promoted"],
+    )
+    metadata = {
+        "model_version": model_version,
+        "artifact_path": artifact_path,
+        "candidate_created": True,
+        "accuracy": training_result.accuracy,
+        "macro_f1": training_result.macro_f1,
+        "weighted_f1": training_result.weighted_f1,
+        "critical_recall": training_result.critical_recall,
+        "critical_precision": training_result.critical_precision,
+        "calibration_error": training_result.calibration_error,
+        "training_rows": training_result.training_rows,
+        "validation_rows": training_result.validation_rows,
+        "test_rows": training_result.test_rows,
+        "min_macro_f1": min_macro_f1,
+        "min_critical_recall": min_critical_recall,
+        "max_calibration_error": max_calibration_error,
+        "min_score_delta": min_score_delta,
+        **promotion,
+    }
+    context.add_output_metadata(metadata)
+    return metadata
+
+
+@op(
+    required_resource_keys={"sqlserver"},
+    out=Out(dict),
+    retry_policy=MLOPS_RETRY_POLICY,
+)
+def promote_device_operational_reviews_op(context) -> dict:
+    sql: SqlServerResource = context.resources.sqlserver
+    promoted_rows = sql.promote_device_operational_reviews(USER_CODE)
+    metadata = {"promoted_review_rows": promoted_rows}
+    context.add_output_metadata(metadata)
+    return metadata
+
+
+@job(name="120_sense_device_operational_training", tags={"job_type": "sense_doi_training", "user_code": "carlsjr"})
+def device_operational_training_job():
+    train_device_operational_model_op()
+
+
+@job(name="122_sense_device_insight_review_promotion", tags={"job_type": "sense_doi_training", "user_code": "carlsjr"})
+def device_operational_review_promotion_job():
+    promote_device_operational_reviews_op()
