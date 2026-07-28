@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Optional
 
-from pyspark.sql import DataFrame, SparkSession, Window
+from pyspark.sql import DataFrame, SparkSession, Window, Column
 from pyspark.sql import functions as F
 
 from .smartaudits_classifier import (
@@ -12,6 +13,7 @@ from .smartaudits_classifier import (
     CATEGORY_IMAGE_NOT_LEGIBLE,
     CATEGORY_IMAGE_NOT_PROCESSABLE,
     CATEGORY_OUT_OF_RANGE,
+    OUT_OF_RANGE_PATTERNS,
     CATEGORY_UNCLASSIFIED,
     CLEANING_KEYWORDS,
     GENERAL_NON_COMPLIANCE_KEYWORDS,
@@ -98,6 +100,16 @@ def _keyword_match(column, keywords: tuple[str, ...]):
         expr = current if expr is None else expr | current
     return expr if expr is not None else F.lit(False)
 
+def _pattern_match(
+    column: Column,
+    patterns: Sequence[str],
+) -> Column:
+    current = F.lit(False)
+
+    for pattern in patterns:
+        current = current | column.rlike(pattern)
+
+    return current
 
 def deterministic_category_column(normalized_comment, result_ai):
     result_ai_int = ai_result_int_column(result_ai)
@@ -112,7 +124,14 @@ def deterministic_category_column(normalized_comment, result_ai):
             F.lit(CATEGORY_IMAGE_NOT_PROCESSABLE),
         )
         .when(
-            _keyword_match(normalized_comment, OUT_OF_RANGE_KEYWORDS),
+            _keyword_match(
+                normalized_comment,
+                OUT_OF_RANGE_KEYWORDS,
+            )
+            | _pattern_match(
+                normalized_comment,
+                OUT_OF_RANGE_PATTERNS,
+            ),
             F.lit(CATEGORY_OUT_OF_RANGE),
         )
         .when(
