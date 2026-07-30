@@ -275,23 +275,46 @@ def build_devices_df_op(
             union_df,
             window["max_local_hour"],
         )
-        latest_real_local_hour = _get_latest_real_local_hour(limited_df)
+        return limited_df
+    finally:
+        readings_extended_df.unpersist()
 
+@op(
+    required_resource_keys={
+        "spark"
+    },
+    ins={
+        "readings_extended_df": In(Optional[DataFrame])
+    },
+    out=Out(Optional[DataFrame], io_manager_key="spark_df_io_manager"),
+    retry_policy=OPERATIONS_RETRY_POLICY,
+)
+def filtered_devices_df_op(
+        context: OpExecutionContext,
+        readings_extended_df: Optional[DataFrame] = None) -> Optional[DataFrame]:
+    context.log.info("Filtering out scaffold-only rows...")
+    if readings_extended_df is None or len(readings_extended_df.columns) <= 1:
+        return readings_extended_df
+    else:
+        readings_extended_df.persist(StorageLevel.MEMORY_AND_DISK)
+    try:
+        latest_real_local_hour = _get_latest_real_local_hour(readings_extended_df)
         if latest_real_local_hour is None:
             context.log.info(
                 "No real readings found in the current operations window. "
                 "Skipping scaffold-only rows and keeping the watermark in place."
             )
-            return limited_df.limit(0)
+            return readings_extended_df.limit(0)
 
         context.log.info(
             "Latest real operations hour found at %s. "
             "Rows scaffolded beyond that hour will not be materialized.",
             latest_real_local_hour,
         )
-        return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+        return readings_extended_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
     finally:
         readings_extended_df.unpersist()
+
 
 @op(
     required_resource_keys={
@@ -541,8 +564,11 @@ def operations_assets(data_transformations):
         window= fetch_from_ts,
         dims=raw_dims_df,
         readings_extended_df=readings_extended_df)
+    filtered_devices_df = filtered_devices_df_op(
+        readings_extended_df=devices_df
+    )
     hourly_readings_out = write_factreadingsmeasurement_op(
-        devices_df=devices_df,
+        devices_df=filtered_devices_df,
         window=fetch_from_ts
     )
     finalize = finalize_operations_run_op(
