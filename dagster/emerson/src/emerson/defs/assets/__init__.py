@@ -6,6 +6,7 @@ from .source_assets import (dbo_sensors,
                             dbo_sublocations,
                             dbo_sublocation_tys)
 from .dwh_factLecturas import dwh_factlecturas
+from .observability_factRedingsAudits import observability_factredingsaudits
 from .dwh_factSensorEvents import dwh_factsensorevents
 from .data_transformations import data_transformations
 from .dwh_dimSidonProdDimensions import dwh_dimsidonproddimensions
@@ -20,6 +21,7 @@ __all__ = [
     "dbo_sublocations",
     "dbo_sublocation_tys",
     "dwh_factlecturas",
+    "observability_factredingsaudits",
     "dwh_factsensorevents",
     "operations_assets",
     "data_transformations",
