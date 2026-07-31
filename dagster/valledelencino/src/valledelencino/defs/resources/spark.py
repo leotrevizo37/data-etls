@@ -891,6 +891,43 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def read_fact_redings_audits_state(
+        self,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        from_text = from_utc.strftime("%Y-%m-%d %H:%M:%S")
+        to_text = to_utc.strftime("%Y-%m-%d %H:%M:%S")
+        table = (
+            "(SELECT SensorId, TimeSpan, LastReadingAt "
+            "FROM observability.factRedingsAudits "
+            "WHERE TimeSpan >= '"
+            + from_text
+            + "' AND TimeSpan <= '"
+            + to_text
+            + "' "
+            "UNION ALL "
+            "SELECT SensorId, TimeSpan, LastReadingAt "
+            "FROM ("
+            "SELECT SensorId, TimeSpan, LastReadingAt, "
+            "ROW_NUMBER() OVER ("
+            "PARTITION BY SensorId ORDER BY TimeSpan DESC"
+            ") AS PreviousRow "
+            "FROM observability.factRedingsAudits "
+            "WHERE TimeSpan < '"
+            + from_text
+            + "'"
+            ") AS previous "
+            "WHERE PreviousRow = 1) AS fact_redings_audits_state"
+        )
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=table,
+            properties=self._build_wh_path()["properties"],
+        )
+
     def write_fact_sensor_events(self, df: DataFrame, run_id: str) -> int:
         df_dedup = (
             df
@@ -920,6 +957,36 @@ class SparkResource:
             df_stage,
             table="stg.factSensorEvents",
             chunk_column="ReadId",
+        )
+
+    def write_fact_redings_audits_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "SensorId",
+            "TimeSpan",
+            "LocalTimeSpan",
+            "ReadingsCount",
+            "HasLateReadings",
+            "IsConnectionLost",
+            "LastReadingAt",
+            "ConnectionLostAt",
+            "MinutesWithoutReadings",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["SensorId", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factRedingsAudits",
+            chunk_column="SensorId",
         )
 
     def create_emptiness_dataframe(self) -> DataFrame:
