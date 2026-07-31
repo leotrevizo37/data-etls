@@ -12,6 +12,7 @@ from .source_assets import (dbo_sensors,
                             dbo_GroupHasSchedules,
                             dbo_GroupHasSensors)
 from .dwh_factLecturas import dwh_factlecturas
+from .observability_factRedingsAudits import observability_factredingsaudits
 from .data_transformations import data_transformations
 from .dwh_dimSidonProdDimensions import dwh_dimsidonproddimensions
 from .dwh_dimSensorExpectedVal import dwh_dimsensorexpectedval
@@ -25,6 +26,7 @@ __all__ = [
     "dbo_sublocations",
     "dbo_sublocation_tys",
     "dwh_factlecturas",
+    "observability_factredingsaudits",
     "dbo_ProgramProfileTys",
     "dbo_ProgramProfiles",
     "dbo_ProgramSchedules",
