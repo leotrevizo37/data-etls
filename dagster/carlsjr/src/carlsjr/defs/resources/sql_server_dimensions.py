@@ -80,7 +80,7 @@ class SqlDimServerResource:
         }
 
     def get_watermark(self) -> Optional[datetime]:
-        return self._get_max_modified_at(["Sensors"])
+        return self._get_max_modified_at(["Sensors", "Locations", "Devices"])
 
     def _get_max_modified_at(self, tables: list[str]) -> Optional[datetime]:
         conn_str = (

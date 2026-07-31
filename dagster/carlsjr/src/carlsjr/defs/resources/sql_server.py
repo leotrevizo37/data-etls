@@ -30,6 +30,7 @@ USING (
         location_name,
         city_name,
         CityId,
+        TimeZone,
         LocationId,
         sublocation_type
     FROM stg.dimSidonProdDimensions
@@ -52,6 +53,7 @@ WHEN MATCHED AND EXISTS (
         source.location_name,
         source.city_name,
         source.CityId,
+        source.TimeZone,
         source.LocationId,
         source.sublocation_type
     EXCEPT
@@ -70,6 +72,7 @@ WHEN MATCHED AND EXISTS (
         target.location_name,
         target.city_name,
         target.CityId,
+        target.TimeZone,
         target.LocationId,
         target.sublocation_type
 ) THEN
@@ -88,6 +91,7 @@ WHEN MATCHED AND EXISTS (
         target.location_name = source.location_name,
         target.city_name = source.city_name,
         target.CityId = source.CityId,
+        target.TimeZone = source.TimeZone,
         target.LocationId = source.LocationId,
         target.sublocation_type = source.sublocation_type,
         target.ModifiedAt = SYSUTCDATETIME()
@@ -108,6 +112,7 @@ WHEN NOT MATCHED BY TARGET THEN
         location_name,
         city_name,
         CityId,
+        TimeZone,
         LocationId,
         sublocation_type
     )
@@ -127,6 +132,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.location_name,
         source.city_name,
         source.CityId,
+        source.TimeZone,       
         source.LocationId,
         source.sublocation_type
     )
