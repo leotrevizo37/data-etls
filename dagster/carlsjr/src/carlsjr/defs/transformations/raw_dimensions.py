@@ -139,7 +139,8 @@ def raw_dimensions(
             col("st_dvt_sl.sublocation_name"),
             col("st_dvt_sl.LocationId"),
             col("loca.Name").alias("location_name"),
-            col("loca.CityId")
+            col("loca.CityId"),
+            col("loca.TimeZone")
         )
         .alias("st_dvt_sl_l")
         .join(dbo_sublocation_tys_df.alias("slty"), on="SubLocationTyId", how="left")
@@ -159,6 +160,7 @@ def raw_dimensions(
             col("st_dvt_sl_l.Active"),
             col("st_dvt_sl_l.location_name"),
             col("st_dvt_sl_l.CityId"),
+            col("st_dvt_sl_l.TimeZone"),
             col("slty.Name").alias("sublocation_type")
         )
         .alias("st_dvt_sl_slt")
@@ -179,6 +181,7 @@ def raw_dimensions(
             col("st_dvt_sl_slt.Active"),
             col("st_dvt_sl_slt.location_name"),
             col("st_dvt_sl_slt.CityId"),
+            col("st_dvt_sl_slt.TimeZone"),
             col("st_dvt_sl_slt.sublocation_type"),
             col("city.Name").alias("city_name"),
         )
