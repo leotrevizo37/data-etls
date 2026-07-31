@@ -22,6 +22,7 @@ def _build_defs() -> Any:
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
         dwh_factsensorevents,
+        observability_factredingsaudits,
         operations_assets,
     )
     from .jobs import (
@@ -31,6 +32,7 @@ def _build_defs() -> Any:
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         fact_sensor_events_job,
+        fact_redings_audits_job,
         index_maintenance_job,
         refresh_dimensions_job,
         spark_df_io_manager_healthcheck_job,
@@ -52,6 +54,7 @@ def _build_defs() -> Any:
         operations_sched_every_6h,
         operations_sched_every_w,
         operations_sched_every_1h_w,
+        redings_audits_sched_every_10m,
         sensor_events_sched_every_6h,
         sensor_events_sched_every_1h_w,
     )
@@ -66,6 +69,7 @@ def _build_defs() -> Any:
             fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             fact_sensor_events_job,
+            fact_redings_audits_job,
             refresh_dimensions_job,
             spark_df_io_manager_healthcheck_job,
             index_maintenance_job,
@@ -86,6 +90,7 @@ def _build_defs() -> Any:
             operations_sched_every_1h_w,
             operations_sched_every_w,
             operations_sched_every_6h,
+            redings_audits_sched_every_10m,
             sensor_events_sched_every_6h,
             sensor_events_sched_every_1h_w,
             cleanup_schedule,
@@ -103,6 +108,7 @@ def _build_defs() -> Any:
             dbo_sublocation_tys,
             dwh_factlecturas,
             dwh_factsensorevents,
+            observability_factredingsaudits,
             operations_assets,
             dwh_dimsidonproddimensions,
             cleanup_old_runs,
