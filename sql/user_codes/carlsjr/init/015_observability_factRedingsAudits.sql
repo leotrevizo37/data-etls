@@ -88,6 +88,25 @@ IF
         INNER JOIN sys.schemas AS s
             ON o.schema_id = s.schema_id
         WHERE
+            s.name = N'observability'
+            AND o.name = N'factRedingsAudits'
+            AND i.name = N'ix_factRedingsAudits_localtimeSpan'
+    )
+    BEGIN
+        CREATE INDEX ix_factRedingsAudits_localtimeSpan
+            ON observability.factRedingsAudits (LocalTimeSpan DESC, SensorId);
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes AS i
+        INNER JOIN sys.objects AS o
+            ON i.object_id = o.object_id
+        INNER JOIN sys.schemas AS s
+            ON o.schema_id = s.schema_id
+        WHERE
             s.name = N'stg'
             AND o.name = N'factRedingsAudits'
             AND i.name = N'ix_stg_factRedingsAudits_run'
