@@ -861,6 +861,62 @@ class SparkResource:
             chunk_column="SensorId",
         )
 
+    def write_dim_aspnet_users(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> Optional[int]:
+        dimension_columns = [
+            "Id",
+            "UserName",
+            "Name",
+            "LastName",
+            "Position",
+        ]
+        df_stage = (
+            df
+            .select(*dimension_columns)
+            .dropDuplicates(["Id"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *dimension_columns)
+        )
+        if len(df_stage.head(1)) == 0:
+            return 0
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.dimAspNetUsers",
+            chunk_column="Id",
+        )
+
+    def write_fact_sidon_user_usage_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "UserId",
+            "Date",
+            "HasConnected",
+            "MadeCompleteInteraction",
+            "TimeConnected",
+            "AvgLatency",
+            "Latency95thPercentile",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["Date", "UserId"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factSidonUserUsage",
+            chunk_column="UserId",
+        )
+
     def write_dim_sensor_expected_values(self, df: DataFrame) -> int:
         df_write = df.dropDuplicates(
             [

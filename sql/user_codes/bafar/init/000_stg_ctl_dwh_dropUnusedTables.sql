@@ -129,3 +129,39 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
         DROP TABLE dwh.dimSidonProdDimensions;
     END;
 GO
+
+IF OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factRedingsAudits;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.dimAspNetUsers', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.dimAspNetUsers;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factSidonUserUsage', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factSidonUserUsage;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factRedingsAudits;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.dimAspNetUsers', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.dimAspNetUsers;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factSidonUserUsage', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factSidonUserUsage;
+    END;
+GO

@@ -25,3 +25,11 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["bafar_poc_gabinete", "dbo_sublocation_tys"]),
     group_name="bafar_poc_gabinete",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["bafar_poc_gabinete", "dbo_aspnetusers"]),
+    group_name="bafar_poc_gabinete",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["bafar_poc_gabinete", "dbo_systemlogs"]),
+    group_name="bafar_poc_gabinete",
+)

@@ -11,10 +11,8 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
         sql = (
             REPOSITORY_ROOT
             / "sql"
-            / "user_codes"
-            / "mcdonalds"
             / "init"
-            / "015_observability_factRedingsAudits.sql"
+            / "014_observability_factRedingsAudits.sql"
         ).read_text()
 
         self.assertIn("observability.factRedingsAudits", sql)
