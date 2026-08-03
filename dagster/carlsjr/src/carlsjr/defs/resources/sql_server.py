@@ -294,6 +294,70 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+FACT_REDINGS_AUDITS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factRedingsAudits AS target
+USING (
+    SELECT
+        SensorId,
+        TimeSpan,
+        LocalTimeSpan,
+        ReadingsCount,
+        HasLateReadings,
+        IsConnectionLost,
+        LastReadingAt,
+        ConnectionLostAt,
+        MinutesWithoutReadings
+    FROM stg.factRedingsAudits
+    WHERE RunId = ?
+) AS source
+    ON target.SensorId = source.SensorId
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED THEN
+    UPDATE SET
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.ReadingsCount = source.ReadingsCount,
+        target.HasLateReadings = CASE
+            WHEN target.HasLateReadings = 1 OR source.HasLateReadings = 1 THEN 1
+            ELSE 0
+        END,
+        target.IsConnectionLost = source.IsConnectionLost,
+        target.LastReadingAt = source.LastReadingAt,
+        target.ConnectionLostAt = source.ConnectionLostAt,
+        target.MinutesWithoutReadings = source.MinutesWithoutReadings,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        SensorId,
+        TimeSpan,
+        LocalTimeSpan,
+        ReadingsCount,
+        HasLateReadings,
+        IsConnectionLost,
+        LastReadingAt,
+        ConnectionLostAt,
+        MinutesWithoutReadings
+    )
+    VALUES (
+        source.SensorId,
+        source.TimeSpan,
+        source.LocalTimeSpan,
+        source.ReadingsCount,
+        source.HasLateReadings,
+        source.IsConnectionLost,
+        source.LastReadingAt,
+        source.ConnectionLostAt,
+        source.MinutesWithoutReadings
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_smartaudits_categories_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
@@ -1201,6 +1265,27 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_fact_sensor_events_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_redings_audits_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factRedingsAudits WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_redings_audits(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(FACT_REDINGS_AUDITS_MERGE_SQL, run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
