@@ -6,5 +6,5 @@ fact_redings_audits_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["emerson", "observability_factredingsaudits"]),
     ),
-    tags={"job_type": "lecturas", "user_code": "emerson"},
+    tags={"job_type": "observability", "run_lane": "observability", "user_code": "emerson"},
 )

@@ -3,5 +3,5 @@ from dagster import AssetKey, AssetSelection, define_asset_job
 fact_lecturas_ingestion_job = define_asset_job(
     name="010_sense_lecturas_ingestion",
     selection=AssetSelection.keys(AssetKey(["smartfit", "dwh_factlecturas"])),
-    tags={"job_type": "lecturas", "user_code": "smartfit"},
+    tags={"job_type": "lecturas", "run_lane": "operational", "user_code": "smartfit"},
 )

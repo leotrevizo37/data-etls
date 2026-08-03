@@ -6,5 +6,5 @@ fact_sensor_events_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["carlsjr", "dwh_factsensorevents"]),
     ),
-    tags={"job_type": "lecturas", "user_code": "carlsjr"},
+    tags={"job_type": "lecturas", "run_lane": "operational", "user_code": "carlsjr"},
 )
