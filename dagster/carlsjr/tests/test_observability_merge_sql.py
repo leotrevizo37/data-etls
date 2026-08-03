@@ -78,16 +78,12 @@ class ObservabilityMergeSqlTests(unittest.TestCase):
         dim_path = (
             REPO_ROOT
             / "sql"
-            / "user_codes"
-            / "carlsjr"
             / "init"
             / "015_observability_dimAspNetUsers.sql"
         )
         fact_path = (
             REPO_ROOT
             / "sql"
-            / "user_codes"
-            / "carlsjr"
             / "init"
             / "016_observability_factSidonUserUsage.sql"
         )
