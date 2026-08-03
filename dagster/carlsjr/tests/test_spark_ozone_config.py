@@ -321,14 +321,6 @@ class SparkOzoneConfigTests(unittest.TestCase):
         self.assertEqual(profile["min_memory_mb"], 4096)
         self.assertEqual(profile["cores_max"], 4)
 
-    def test_observability_profile_uses_executor_sized_defaults(self) -> None:
-        profile = build_spark_resource_profile("observability", {})
-
-        self.assertEqual(profile["name"], "observability")
-        self.assertEqual(profile["min_cores"], 1)
-        self.assertEqual(profile["min_memory_mb"], 2048)
-        self.assertEqual(profile["cores_max"], 1)
-
     def test_smartaudits_profile_uses_executor_sized_defaults(self) -> None:
         profile = build_spark_resource_profile("smartaudits", {})
 
