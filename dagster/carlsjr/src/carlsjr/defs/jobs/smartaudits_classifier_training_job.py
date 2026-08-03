@@ -389,6 +389,6 @@ def train_smartaudits_classifier_op(context) -> dict:
     return metadata
 
 
-@job(name="111_smartaudits_classifier_training", tags={"job_type": "smartaudits", "user_code": "carlsjr"})
+@job(name="111_smartaudits_classifier_training", tags={"job_type": "smartaudits", "run_lane": "operational", "user_code": "carlsjr"})
 def smartaudits_classifier_training_job():
     train_smartaudits_classifier_op()

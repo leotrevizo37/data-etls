@@ -6,5 +6,5 @@ fact_redings_audits_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["bafar_poc_gabinete", "observability_factredingsaudits"]),
     ),
-    tags={"job_type": "lecturas", "user_code": "bafar_poc_gabinete"},
+    tags={"job_type": "observability", "run_lane": "observability", "user_code": "bafar_poc_gabinete"},
 )

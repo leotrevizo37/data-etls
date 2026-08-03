@@ -30,6 +30,7 @@ DEFAULT_SPARK_RESOURCE_PROFILES = {
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "sensor_expected_values": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "observability": {"min_cores": 1, "min_memory_mb": 2048, "cores_max": 1},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
 }
@@ -196,7 +197,7 @@ def _build_executor_cores(
 ) -> int:
     current_env = env or os.environ
     if current_env.get("SPARK_EXECUTOR_CORES"):
-        return _env_int("SPARK_EXECUTOR_CORES", 1, current_env)
+        return max(1, min(_env_int("SPARK_EXECUTOR_CORES", 1, current_env), int(resource_profile["cores_max"])))
 
     legacy_worker_cores = _env_int("SPARK_WORKER_CORES", 1, current_env)
     return max(1, min(legacy_worker_cores, int(resource_profile["cores_max"])))
@@ -419,6 +420,7 @@ class SparkResource:
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
             .set("spark.cores.max", str(self.resource_profile["cores_max"]))
+            .set("spark.jars.ivy", os.path.join(os.path.expanduser("~"), ".ivy2.5.2", self.resource_profile["name"]))
         )
         if self.driver_host:
             conf.set("spark.driver.host", self.driver_host)
@@ -986,6 +988,10 @@ def spark_resource(init_context):
     driver_port = os.getenv("SPARK_DRIVER_PORT", "")
     driver_block_manager_port = os.getenv("SPARK_DRIVER_BLOCK_MANAGER_PORT", "")
     block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
+    if resource_profile["name"] == "observability":
+        driver_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_PORT", driver_port)
+        driver_block_manager_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT", driver_block_manager_port)
+        block_manager_port = os.getenv("SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT", block_manager_port)
     worker_network_timeout_seconds = int(
         os.getenv(
             "SPARK_WORKER_NETWORK_TIMEOUT_SECONDS",

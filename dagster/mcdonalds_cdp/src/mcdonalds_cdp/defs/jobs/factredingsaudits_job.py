@@ -6,5 +6,5 @@ fact_redings_audits_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["mcdonalds_cdp", "observability_factredingsaudits"]),
     ),
-    tags={"job_type": "lecturas", "user_code": "mcdonalds_cdp"},
+    tags={"job_type": "observability", "run_lane": "observability", "user_code": "mcdonalds_cdp"},
 )

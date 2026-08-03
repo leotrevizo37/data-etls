@@ -160,6 +160,7 @@ def backfill_fact_store_sales_daily_op(context) -> Dict[str, Any]:
     config=fact_out_of_hours_sales_backfill_daily_config,
     tags={
         "job_type": "ventas",
+        "run_lane": "operational",
         "user_code": USER_CODE,
         "backfill": "fact_out_of_hours_sales_daily",
     },
@@ -173,6 +174,7 @@ def fact_out_of_hours_sales_backfill_daily_job():
     config=fact_store_sales_daily_backfill_daily_config,
     tags={
         "job_type": "ventas",
+        "run_lane": "operational",
         "user_code": USER_CODE,
         "backfill": "fact_store_sales_daily",
     },

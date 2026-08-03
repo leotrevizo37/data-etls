@@ -65,8 +65,14 @@ retention:
 
 concurrency:
   runs:
-    max_concurrent_runs: 1
+    max_concurrent_runs: 2
     tag_concurrency_limits:
+      - key: "run_lane"
+        value: "operational"
+        limit: 1
+      - key: "run_lane"
+        value: "observability"
+        limit: 1
       - key: "job_type"
         limit: 1
         value:
