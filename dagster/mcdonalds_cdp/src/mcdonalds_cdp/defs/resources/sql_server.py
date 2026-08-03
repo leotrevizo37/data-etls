@@ -145,6 +145,132 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+def build_dim_aspnet_users_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.dimAspNetUsers AS target
+USING (
+    SELECT
+        Id,
+        UserName,
+        Name,
+        LastName,
+        Position
+    FROM stg.dimAspNetUsers
+    WHERE RunId = ?
+) AS source
+    ON target.Id = source.Id
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.UserName,
+        source.Name,
+        source.LastName,
+        source.Position
+    EXCEPT
+    SELECT
+        target.UserName,
+        target.Name,
+        target.LastName,
+        target.Position
+) THEN
+    UPDATE SET
+        target.UserName = source.UserName,
+        target.Name = source.Name,
+        target.LastName = source.LastName,
+        target.Position = source.Position,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        Id,
+        UserName,
+        Name,
+        LastName,
+        Position
+    )
+    VALUES (
+        source.Id,
+        source.UserName,
+        source.Name,
+        source.LastName,
+        source.Position
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_sidon_user_usage_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factSidonUserUsage AS target
+USING (
+    SELECT
+        UserId,
+        [Date],
+        HasConnected,
+        MadeCompleteInteraction,
+        TimeConnected,
+        AvgLatency,
+        Latency95thPercentile
+    FROM stg.factSidonUserUsage
+    WHERE RunId = ?
+) AS source
+    ON target.[Date] = source.[Date]
+    AND target.UserId = source.UserId
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.HasConnected,
+        source.MadeCompleteInteraction,
+        source.TimeConnected,
+        source.AvgLatency,
+        source.Latency95thPercentile
+    EXCEPT
+    SELECT
+        target.HasConnected,
+        target.MadeCompleteInteraction,
+        target.TimeConnected,
+        target.AvgLatency,
+        target.Latency95thPercentile
+) THEN
+    UPDATE SET
+        target.HasConnected = source.HasConnected,
+        target.MadeCompleteInteraction = source.MadeCompleteInteraction,
+        target.TimeConnected = source.TimeConnected,
+        target.AvgLatency = source.AvgLatency,
+        target.Latency95thPercentile = source.Latency95thPercentile,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        UserId,
+        [Date],
+        HasConnected,
+        MadeCompleteInteraction,
+        TimeConnected,
+        AvgLatency,
+        Latency95thPercentile
+    )
+    VALUES (
+        source.UserId,
+        source.[Date],
+        source.HasConnected,
+        source.MadeCompleteInteraction,
+        source.TimeConnected,
+        source.AvgLatency,
+        source.Latency95thPercentile
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_readings_measurement_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
@@ -442,6 +568,48 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_dim_sidon_prod_dimensions_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_dim_aspnet_users_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.dimAspNetUsers WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_dim_aspnet_users(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_dim_aspnet_users_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_sidon_user_usage_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factSidonUserUsage WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_sidon_user_usage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_sidon_user_usage_merge_sql(), run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
