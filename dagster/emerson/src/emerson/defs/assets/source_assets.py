@@ -25,3 +25,11 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["emerson", "dbo_sublocation_tys"]),
     group_name="emerson",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["emerson", "dbo_aspnetusers"]),
+    group_name="emerson",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["emerson", "dbo_systemlogs"]),
+    group_name="emerson",
+)
