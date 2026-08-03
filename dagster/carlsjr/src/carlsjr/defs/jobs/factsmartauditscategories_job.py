@@ -6,5 +6,5 @@ fact_smartaudits_categories_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["carlsjr", "dwh_factsmartauditscategories"]),
     ),
-    tags={"job_type": "smartaudits", "user_code": "carlsjr"},
+    tags={"job_type": "smartaudits", "run_lane": "operational", "user_code": "carlsjr"},
 )
