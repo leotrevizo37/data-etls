@@ -712,6 +712,14 @@ services:
         condition: service_healthy
       dagster-user-code-mcd-cdp:
         condition: service_healthy
+      dagster-user-code-bafar-poc-gabinete:
+        condition: service_healthy
+      dagster-user-code-valledelencino:
+        condition: service_healthy
+      dagster-user-code-carlsjr:
+        condition: service_healthy
+      dagster-user-code-emerson:
+        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -720,6 +728,63 @@ services:
       "dagster-daemon", "run",
       "-w", "/opt/dagster/app/workspace.yaml"
     ]
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    container_name: data-blackbox-exporter
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    ports:
+      - "127.0.0.1:${BLACKBOX_EXPORTER_PORT:-9115}:9115"
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - data-dagster
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9115/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: data-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/targets.yml:/etc/prometheus/targets.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - data-dagster
+    depends_on:
+      blackbox-exporter:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   spark-master:
     user: "0:0"
@@ -823,6 +888,7 @@ services:
 volumes:
   spark-data:
   dagster_postgres_data:
+  prometheus_data:
 
 networks:
   data-dagster:
