@@ -1,0 +1,11 @@
+from dagster import AssetKey, AssetSelection, define_asset_job
+
+
+observability_url_availability_job = define_asset_job(
+    name="122_observability_url_availability",
+    selection=AssetSelection.keys(
+        AssetKey(["valledelencino", "observability_facturlavailabilitydaily"]),
+    ),
+    tags={"job_type": "observability", "user_code": "valledelencino"},
+)
+
