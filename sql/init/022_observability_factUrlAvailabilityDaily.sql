@@ -29,4 +29,3 @@ IF
         VALUES (N'factUrlAvailabilityDaily');
     END;
 GO
-

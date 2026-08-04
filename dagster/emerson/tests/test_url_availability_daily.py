@@ -339,33 +339,45 @@ class UrlAvailabilityDailyTests(unittest.TestCase):
             "carlsjr",
             "emerson",
         )
-        for user_code in standard_user_codes:
-            sql_path = (
-                repository_root
-                / "sql"
-                / "user_codes"
-                / user_code
-                / "init"
-                / "016_observability_factUrlAvailabilityDaily.sql"
-            )
-            sql = sql_path.read_text(encoding="utf-8")
-            self.assertIn(
-                "CREATE TABLE observability.factUrlAvailabilityDaily",
-                sql,
-            )
-            self.assertIn("PRIMARY KEY CLUSTERED ([Date], Url)", sql)
-            self.assertIn("TimeoutsPresent BIT NOT NULL", sql)
-            self.assertIn("N'factUrlAvailabilityDaily'", sql)
+        sql_path = (
+            repository_root
+            / "sql"
+            / "init"
+            / "022_observability_factUrlAvailabilityDaily.sql"
+        )
+        sql = sql_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "CREATE TABLE observability.factUrlAvailabilityDaily",
+            sql,
+        )
+        self.assertIn("PRIMARY KEY CLUSTERED ([Date], Url)", sql)
+        self.assertIn("TimeoutsPresent BIT NOT NULL", sql)
+        self.assertIn("N'factUrlAvailabilityDaily'", sql)
 
-        self.assertFalse(
-            (
-                repository_root
-                / "sql"
-                / "user_codes"
-                / "bafar"
-                / "init"
-                / "016_observability_factUrlAvailabilityDaily.sql"
-            ).exists()
+        for user_code in standard_user_codes:
+            self.assertFalse(
+                (
+                    repository_root
+                    / "sql"
+                    / "user_codes"
+                    / user_code
+                    / "init"
+                    / "016_observability_factUrlAvailabilityDaily.sql"
+                ).exists()
+            )
+
+        bafar_sql_path = (
+            repository_root
+            / "sql"
+            / "user_codes"
+            / "bafar"
+            / "init"
+            / "016_observability_factUrlAvailabilityDaily.sql"
+        )
+        bafar_sql = bafar_sql_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "DROP TABLE observability.factUrlAvailabilityDaily",
+            bafar_sql,
         )
 
 
