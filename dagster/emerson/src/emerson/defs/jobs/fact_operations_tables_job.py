@@ -8,5 +8,5 @@ fact_operations_tables_job = define_asset_job(
         AssetKey(["emerson", "dwh_factReadingsMeasurement"]),
         AssetKey(["emerson", "ctl_IngestionControl"])
     ),
-    tags={"job_type": "operaciones", "run_lane": "operational", "user_code": "emerson"},
+    tags={"job_type": "operaciones", "run_lane": "operational", "user_code_run_lane": "emerson_operational", "user_code": "emerson"},
 )
