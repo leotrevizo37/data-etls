@@ -6,6 +6,6 @@ observability_sidon_user_usage_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["mcdonalds", "observability_factsidonuserusage"]),
     ),
-    tags={"job_type": "observability", "user_code": "mcdonalds"},
+    tags={"job_type": "observability", "user_code_run_lane": "mcdonalds_observability", "user_code": "mcdonalds"},
 )
 
