@@ -6,6 +6,6 @@ observability_url_availability_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["carlsjr", "observability_facturlavailabilitydaily"]),
     ),
-    tags={"job_type": "observability", "user_code": "carlsjr"},
+    tags={"job_type": "url_availability", "user_code_run_lane": "carlsjr_observability", "user_code": "carlsjr"},
 )
 

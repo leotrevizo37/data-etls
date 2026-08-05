@@ -6,6 +6,6 @@ observability_url_availability_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["smartfit", "observability_facturlavailabilitydaily"]),
     ),
-    tags={"job_type": "observability", "user_code": "smartfit"},
+    tags={"job_type": "url_availability", "user_code_run_lane": "smartfit_observability", "user_code": "smartfit"},
 )
 
