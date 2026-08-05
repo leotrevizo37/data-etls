@@ -6,5 +6,5 @@ observability_sidon_user_usage_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["valledelencino", "observability_factsidonuserusage"]),
     ),
-    tags={"job_type": "observability", "user_code": "valledelencino"},
+    tags={"job_type": "observability", "user_code_run_lane": "valledelencino_observability", "user_code": "valledelencino"},
 )
