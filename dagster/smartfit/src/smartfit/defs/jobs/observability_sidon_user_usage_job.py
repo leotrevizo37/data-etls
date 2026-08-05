@@ -6,5 +6,5 @@ observability_sidon_user_usage_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["smartfit", "observability_factsidonuserusage"]),
     ),
-    tags={"job_type": "observability", "user_code": "smartfit"},
+    tags={"job_type": "observability", "user_code_run_lane": "smartfit_observability", "user_code": "smartfit"},
 )
