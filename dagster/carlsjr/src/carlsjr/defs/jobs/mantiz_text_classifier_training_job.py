@@ -90,6 +90,6 @@ def train_mantiz_text_classifier_op(context) -> dict:
     return results
 
 
-@job(name="101_mantiz_text_classifier_training", tags={"job_type": "mantiz", "run_lane": "operational", "user_code": "carlsjr"})
+@job(name="101_mantiz_text_classifier_training", tags={"job_type": "mantiz", "run_lane": "operational", "user_code_run_lane": "carlsjr_operational", "user_code": "carlsjr"})
 def mantiz_text_classifier_training_job():
     train_mantiz_text_classifier_op()
