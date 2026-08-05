@@ -6,5 +6,5 @@ fact_redings_audits_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["smartfit", "observability_factredingsaudits"]),
     ),
-    tags={"job_type": "observability", "run_lane": "observability", "user_code": "smartfit"},
+    tags={"job_type": "observability", "run_lane": "observability", "user_code_run_lane": "smartfit_observability", "user_code": "smartfit"},
 )

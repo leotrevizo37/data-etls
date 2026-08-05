@@ -67,13 +67,15 @@ concurrency:
   runs:
     max_concurrent_runs: 2
     tag_concurrency_limits:
-      - key: "run_lane"
-        value: "operational"
-        limit: 1
-      - key: "run_lane"
-        value: "observability"
-        limit: 1
-      - key: "job_type"
+      - key: dagster/code_location
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 2
+      - key: "user_code_run_lane"
         limit: 1
         value:
           applyLimitPerUniqueValue: true
+      - key: "job_type"
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
