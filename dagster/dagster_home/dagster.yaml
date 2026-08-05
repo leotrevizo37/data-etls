@@ -2,6 +2,12 @@ scheduler:
   module: dagster._core.scheduler
   class: DagsterDaemonScheduler
 
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 60
+  cancel_timeout_seconds: 60
+  poll_interval_seconds: 15
+
 run_coordinator:
   module: dagster._core.run_coordinator
   class: QueuedRunCoordinator
