@@ -6,5 +6,5 @@ observability_dim_aspnet_users_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["smartfit", "observability_dimaspnetusers"]),
     ),
-    tags={"job_type": "dimensiones", "user_code": "smartfit"},
+    tags={"job_type": "dimensiones", "user_code_run_lane": "smartfit_observability", "user_code": "smartfit"},
 )

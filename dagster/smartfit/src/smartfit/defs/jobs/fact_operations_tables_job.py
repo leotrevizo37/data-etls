@@ -7,5 +7,5 @@ fact_operations_tables_job = define_asset_job(
         AssetKey(["smartfit", "dwh_factReadingsMeasurement"]),
         AssetKey(["smartfit", "ctl_IngestionControl"])
     ),
-    tags={"job_type": "operaciones", "run_lane": "operational", "user_code": "smartfit"},
+    tags={"job_type": "operaciones", "run_lane": "operational", "user_code_run_lane": "smartfit_operational", "user_code": "smartfit"},
 )
