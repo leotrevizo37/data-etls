@@ -6,5 +6,5 @@ observability_dim_aspnet_users_job = define_asset_job(
     selection=AssetSelection.keys(
         AssetKey(["valledelencino", "observability_dimaspnetusers"]),
     ),
-    tags={"job_type": "dimensiones", "user_code": "valledelencino"},
+    tags={"job_type": "dimensiones", "user_code_run_lane": "valledelencino_observability", "user_code": "valledelencino"},
 )
