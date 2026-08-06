@@ -11,9 +11,15 @@ def datalake_readings_extended(
         spark_res: SparkResource,
         raw_dimensions: DataFrame,
         fetch_readings_from: datetime,
-        fetch_readings_to: datetime) -> Optional[DataFrame]:
+        fetch_readings_to: datetime,
+        use_utc_range: bool = False) -> Optional[DataFrame]:
+    read_lecturas_range = (
+        spark_res.read_lecturas_range
+        if use_utc_range
+        else spark_res.read_lecturas_local_range
+    )
     datalake_readings_df = (
-        spark_res.read_lecturas_local_range(fetch_readings_from, fetch_readings_to)
+        read_lecturas_range(fetch_readings_from, fetch_readings_to)
         .select("ReadId", "TimeSpan", "LocalTimeSpan", "Value", "SensorId")
         .dropDuplicates(["ReadId"])
     )
