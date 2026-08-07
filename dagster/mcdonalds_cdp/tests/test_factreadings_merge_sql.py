@@ -44,6 +44,8 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         self.assertIn("FROM stg.factReadingsMeasurement", sql)
         self.assertIn("WHERE RunId = ?", sql)
         self.assertIn("target.OperationId = source.OperationId", sql)
+        self.assertIn("target.TimeSpan = source.TimeSpan", sql)
+        self.assertIn("source.TimeSpan", sql)
         self.assertIn("target.Sales = source.Sales", sql)
         self.assertIn("source.Sales", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
