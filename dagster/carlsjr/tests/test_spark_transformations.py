@@ -456,6 +456,169 @@ class SparkTransformationsTests(unittest.TestCase):
         )
         self.assertAlmostEqual(rows_by_sensor["Humedad"]["MeasurementValue"], 50.0)
 
+    def test_cuartos_refrigeracion_preserves_repeated_local_hour_in_all_paths(self) -> None:
+        dimensions_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeZone": "America/Denver",
+                }
+            ]
+        )
+        scenarios = [
+            (
+                "with_readings",
+                [
+                    {
+                        "DeviceId": 1,
+                        "SensorId": 10,
+                        "LocationId": 100,
+                        "SensorTyId": 200,
+                        "sensor_type": "Temperatura F",
+                        "device_type": "C\u00e1mara fr\u00eda",
+                        "TimeSpan": datetime(2026, 11, 1, 7, 5),
+                        "Value": 35.0,
+                        "device_name": "C\u00e1mara fr\u00eda 1",
+                    },
+                    {
+                        "DeviceId": 1,
+                        "SensorId": 10,
+                        "LocationId": 100,
+                        "SensorTyId": 200,
+                        "sensor_type": "Temperatura F",
+                        "device_type": "C\u00e1mara fr\u00eda",
+                        "TimeSpan": datetime(2026, 11, 1, 8, 5),
+                        "Value": 36.0,
+                        "device_name": "C\u00e1mara fr\u00eda 1",
+                    },
+                ],
+                [1, 1],
+            ),
+            (
+                "without_readings",
+                [{"device_type": "Oficina"}],
+                [0, 0],
+            ),
+        ]
+        operation_ids_by_scenario = {}
+
+        for scenario, fact_rows, expected_readings_count in scenarios:
+            with self.subTest(scenario=scenario):
+                result = cuartos_refrigeracion(
+                    self._readings_df(fact_rows),
+                    dimensions_df,
+                    "2026-11-01 07:00:00",
+                    "2026-11-01 08:00:00",
+                )
+
+                rows = result.orderBy("TimeSpan").collect()
+
+                self.assertEqual(
+                    [row["TimeSpan"] for row in rows],
+                    [
+                        datetime(2026, 11, 1, 7, 0),
+                        datetime(2026, 11, 1, 8, 0),
+                    ],
+                )
+                self.assertEqual(
+                    [row["LocalTimeSpan"] for row in rows],
+                    [
+                        datetime(2026, 11, 1, 1, 0),
+                        datetime(2026, 11, 1, 1, 0),
+                    ],
+                )
+                self.assertEqual(
+                    [row["ReadingsCount"] for row in rows],
+                    expected_readings_count,
+                )
+                self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+                self.assertEqual(
+                    result.dropDuplicates(["OperationId"]).count(),
+                    2,
+                )
+                operation_ids_by_scenario[scenario] = {
+                    row["TimeSpan"]: row["OperationId"]
+                    for row in rows
+                }
+
+        self.assertEqual(
+            operation_ids_by_scenario["with_readings"],
+            operation_ids_by_scenario["without_readings"],
+        )
+
+    def test_cuartos_refrigeracion_preserves_utc_hours_across_skipped_local_hour(self) -> None:
+        factlecturas_extended_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeSpan": datetime(2026, 3, 8, 8, 5),
+                    "Value": 35.0,
+                    "device_name": "C\u00e1mara fr\u00eda 1",
+                },
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeSpan": datetime(2026, 3, 8, 9, 5),
+                    "Value": 36.0,
+                    "device_name": "C\u00e1mara fr\u00eda 1",
+                },
+            ]
+        )
+        dimensions_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeZone": "America/Denver",
+                }
+            ]
+        )
+
+        result = cuartos_refrigeracion(
+            factlecturas_extended_df,
+            dimensions_df,
+            "2026-03-08 08:00:00",
+            "2026-03-08 09:00:00",
+        )
+
+        rows = result.orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [row["TimeSpan"] for row in rows],
+            [
+                datetime(2026, 3, 8, 8, 0),
+                datetime(2026, 3, 8, 9, 0),
+            ],
+        )
+        self.assertEqual(
+            [row["LocalTimeSpan"] for row in rows],
+            [
+                datetime(2026, 3, 8, 1, 0),
+                datetime(2026, 3, 8, 3, 0),
+            ],
+        )
+        self.assertEqual([row["ReadingsCount"] for row in rows], [1, 1])
+        self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+        self.assertEqual(result.dropDuplicates(["OperationId"]).count(), 2)
+
     def test_presencia_uses_carlsjr_sensor_name_from_dimensions(self) -> None:
         factlecturas_extended_df = self._readings_df(
             [
