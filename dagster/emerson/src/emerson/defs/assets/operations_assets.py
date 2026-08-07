@@ -374,6 +374,7 @@ def write_factreadingsmeasurement_op(
                     "LocationId",
                     "DeviceType",
                     "SensorType",
+                    "TimeSpan",
                     "LocalTimeSpan",
                     "MeasurementValue",
                     "MeasurementStdDev",
