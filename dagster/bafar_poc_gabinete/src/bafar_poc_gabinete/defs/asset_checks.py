@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
 
 from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, asset_check
@@ -111,18 +111,18 @@ def _build_real_readings_ratio_result(
     )
 
 
-def _build_local_window_order_result(
+def _build_utc_window_order_result(
         metadata: Mapping[str, Any]) -> AssetCheckResult:
-    from_local = _coerce_datetime(_metadata_value(metadata, "from_local"))
-    to_local = _coerce_datetime(_metadata_value(metadata, "to_local"))
+    from_utc = _coerce_datetime(_metadata_value(metadata, "from_utc"))
+    to_utc = _coerce_datetime(_metadata_value(metadata, "to_utc"))
 
     return AssetCheckResult(
-        passed=bool(from_local is not None and to_local is not None
-                    and to_local > from_local),
+        passed=bool(from_utc is not None and to_utc is not None
+                    and to_utc > from_utc),
         severity=AssetCheckSeverity.WARN,
         metadata={
-            "from_local": str(from_local),
-            "to_local": str(to_local),
+            "from_utc": str(from_utc),
+            "to_utc": str(to_utc),
         },
     )
 
@@ -137,38 +137,55 @@ def _build_operations_succeeded_result(
     )
 
 
-def _build_to_local_gte_max_time_span_result(
+def _build_to_utc_gte_max_time_span_result(
         metadata: Mapping[str, Any]) -> AssetCheckResult:
-    to_local = _coerce_datetime(_metadata_value(metadata, "to_local"))
+    to_utc = _coerce_datetime(_metadata_value(metadata, "to_utc"))
     max_time_span = _coerce_datetime(_metadata_value(metadata, "max_time_span"))
-    passed = to_local is not None and (
-        max_time_span is None or to_local >= max_time_span
+    time_delta = (
+        to_utc - max_time_span
+        if to_utc is not None and max_time_span is not None
+        else None
+    )
+    passed = to_utc is not None and (
+        max_time_span is None or (
+            time_delta is not None
+            and timedelta(0) <= time_delta < timedelta(hours=1)
+        )
+    )
+    severity = (
+        AssetCheckSeverity.ERROR
+        if to_utc is None or (
+            time_delta is not None
+            and (time_delta < timedelta(0) or time_delta > timedelta(hours=2))
+        )
+        else AssetCheckSeverity.WARN
     )
 
     return AssetCheckResult(
         passed=bool(passed),
-        severity=AssetCheckSeverity.WARN,
+        severity=severity,
         metadata={
-            "to_local": str(to_local),
+            "to_utc": str(to_utc),
             "max_time_span": str(max_time_span),
+            "time_delta": str(time_delta),
         },
     )
 
 
-def _build_original_lte_to_local_result(
+def _build_original_lte_to_utc_result(
         metadata: Mapping[str, Any]) -> AssetCheckResult:
     original_last_loaded_at = _coerce_datetime(
         _metadata_value(metadata, "original_last_loaded_at")
     )
-    to_local = _coerce_datetime(_metadata_value(metadata, "to_local"))
+    to_utc = _coerce_datetime(_metadata_value(metadata, "to_utc"))
 
     return AssetCheckResult(
-        passed=bool(original_last_loaded_at is not None and to_local is not None
-                    and original_last_loaded_at <= to_local),
+        passed=bool(original_last_loaded_at is not None and to_utc is not None
+                    and original_last_loaded_at <= to_utc),
         severity=AssetCheckSeverity.WARN,
         metadata={
             "original_last_loaded_at": str(original_last_loaded_at),
-            "to_local": str(to_local),
+            "to_utc": str(to_utc),
         },
     )
 
@@ -213,11 +230,11 @@ def factreadings_real_readings_ratio_gt_0_6(context) -> AssetCheckResult:
 
 @asset_check(
     asset=FACTREADINGS_ASSET_KEY,
-    name="to_local_gt_from_local",
+    name="to_utc_gt_from_utc",
 )
-def factreadings_to_local_gt_from_local(context) -> AssetCheckResult:
+def factreadings_to_utc_gt_from_utc(context) -> AssetCheckResult:
     metadata = _latest_materialization_metadata(context, FACTREADINGS_ASSET_KEY)
-    return _build_local_window_order_result(metadata)
+    return _build_utc_window_order_result(metadata)
 
 
 @asset_check(
@@ -231,20 +248,20 @@ def operations_control_succeeded_is_true(context) -> AssetCheckResult:
 
 @asset_check(
     asset=OPERATIONS_CONTROL_ASSET_KEY,
-    name="to_local_gte_max_time_span",
+    name="to_utc_gte_max_time_span",
 )
-def operations_control_to_local_gte_max_time_span(context) -> AssetCheckResult:
+def operations_control_to_utc_gte_max_time_span(context) -> AssetCheckResult:
     metadata = _latest_materialization_metadata(context, OPERATIONS_CONTROL_ASSET_KEY)
-    return _build_to_local_gte_max_time_span_result(metadata)
+    return _build_to_utc_gte_max_time_span_result(metadata)
 
 
 @asset_check(
     asset=OPERATIONS_CONTROL_ASSET_KEY,
-    name="original_last_loaded_at_lte_to_local",
+    name="original_last_loaded_at_lte_to_utc",
 )
-def operations_control_original_lte_to_local(context) -> AssetCheckResult:
+def operations_control_original_lte_to_utc(context) -> AssetCheckResult:
     metadata = _latest_materialization_metadata(context, OPERATIONS_CONTROL_ASSET_KEY)
-    return _build_original_lte_to_local_result(metadata)
+    return _build_original_lte_to_utc_result(metadata)
 
 
 @asset_check(
@@ -267,10 +284,10 @@ def factlecturas_original_lte_to_utc(context) -> AssetCheckResult:
 
 quality_asset_checks = [
     factreadings_real_readings_ratio_gt_0_6,
-    factreadings_to_local_gt_from_local,
+    factreadings_to_utc_gt_from_utc,
     operations_control_succeeded_is_true,
-    operations_control_to_local_gte_max_time_span,
-    operations_control_original_lte_to_local,
+    operations_control_to_utc_gte_max_time_span,
+    operations_control_original_lte_to_utc,
     factlecturas_row_count_gt_0,
     factlecturas_original_lte_to_utc,
 ]

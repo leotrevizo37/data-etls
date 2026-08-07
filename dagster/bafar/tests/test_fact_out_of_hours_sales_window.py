@@ -33,7 +33,7 @@ finally:
 
 
 class FactOutOfHoursSalesWindowTests(unittest.TestCase):
-    def test_window_applies_overlap_without_changing_watermark(self) -> None:
+    def test_window_starts_at_previous_day_without_changing_watermark(self) -> None:
         last_loaded_at = datetime(2026, 7, 22, 14, 0)
         sqlserver = MagicMock()
         sqlserver.get_watermark.return_value = last_loaded_at
@@ -41,12 +41,15 @@ class FactOutOfHoursSalesWindowTests(unittest.TestCase):
             resources=SimpleNamespace(sqlserver=sqlserver),
         )
 
-        window = asset_module.get_fact_out_of_hours_sales_window_op.compute_fn.decorated_fn(
-            context,
-        )
+        with patch.object(asset_module, "datetime", wraps=datetime) as current_datetime:
+            current_datetime.now.return_value = datetime(2026, 7, 22, 14, 0)
+            window = asset_module.get_fact_out_of_hours_sales_window_op.compute_fn.decorated_fn(
+                context,
+            )
 
         self.assertEqual(window["last_loaded_at"], last_loaded_at)
-        self.assertEqual(window["from_value"], "2026-07-22T13:45:00.000000")
+        self.assertEqual(window["from_value"], "2026-07-21T00:00:00.000000")
+        current_datetime.now.assert_called_once_with(asset_module.FACT_OUT_OF_HOURS_SALES_TIMEZONE)
 
     def test_overlap_rows_do_not_move_watermark_backwards(self) -> None:
         last_loaded_at = datetime(2026, 7, 22, 14, 0)
@@ -90,7 +93,7 @@ class FactOutOfHoursSalesWindowTests(unittest.TestCase):
                         context,
                         {
                             "last_loaded_at": last_loaded_at,
-                            "from_value": "2026-07-22T13:45:00.000000",
+                            "from_value": "2026-07-21T00:00:00.000000",
                         },
                         sales_df,
                     )

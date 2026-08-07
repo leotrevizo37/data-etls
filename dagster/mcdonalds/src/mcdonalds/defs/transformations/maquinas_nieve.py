@@ -5,7 +5,8 @@ from pyspark.sql.functions import (
     col,
     date_trunc,
     lit,
-    expr)
+    expr,
+    from_utc_timestamp)
 
 from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import (stats_calculator)
@@ -38,6 +39,10 @@ def maquinas_nieve(
         group_with_guid_df = (
             empty_base_df
             .withColumn(
+                "LocalTimeSpan",
+                from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+            )
+            .withColumn(
                 "OperationId",
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
             )
@@ -61,7 +66,7 @@ def maquinas_nieve(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -69,7 +74,7 @@ def maquinas_nieve(
             "ReadingsCount",
             "device_type",
         )
-        .withColumn("LocalTimeSpan", date_trunc("hour", col("LocalTimeSpan")))
+        .withColumn("TimeSpan", date_trunc("hour", col("TimeSpan")))
     )
 
     scaffold_df = (
@@ -86,7 +91,7 @@ def maquinas_nieve(
             on=[
                 "SensorId",
                 "DeviceId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "SensorTyId",
                 "device_type",
                 "LocationId",
@@ -104,6 +109,10 @@ def maquinas_nieve(
 
     group_with_guid_df = (
         scaffold_enriched
+        .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+        )
         .withColumn(
             "OperationId",
             expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")

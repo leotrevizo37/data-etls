@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import expr, lit, col
+from pyspark.sql.functions import expr, lit, col, from_utc_timestamp
 from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
@@ -23,6 +23,10 @@ def gabinete(
     if len(base.head(1)) == 0:
         group_with_guid_df = (
             scaffold_base_df
+            .withColumn(
+                "LocalTimeSpan",
+                from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+            )
             .withColumn(
                 "OperationId",
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
@@ -51,7 +55,7 @@ def gabinete(
                 "LocationId",
                 "SensorTyId",
                 "SensorId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
                 "Anomalies",
@@ -75,7 +79,7 @@ def gabinete(
                 "LocationId",
                 "SensorTyId",
                 "SensorId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
                 "Anomalies",
@@ -106,7 +110,7 @@ def gabinete(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -125,7 +129,7 @@ def gabinete(
             on=[
                 "SensorId",
                 "DeviceId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "SensorTyId",
                 "device_type",
                 "LocationId",
@@ -139,6 +143,10 @@ def gabinete(
 
     group_with_guid_df = (
         scaffold_enriched
+        .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+        )
         .withColumn(
             "OperationId",
             expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
