@@ -45,10 +45,11 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         self.assertIn("WHERE RunId = ?", sql)
         self.assertIn("target.OperationId = source.OperationId", sql)
         self.assertIn("target.SensorId = source.SensorId", sql)
+        self.assertIn("target.TimeSpan = source.TimeSpan", sql)
+        self.assertIn("source.TimeSpan", sql)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
-
 
 if __name__ == "__main__":
     unittest.main()
