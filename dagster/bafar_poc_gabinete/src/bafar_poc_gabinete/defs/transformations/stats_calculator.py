@@ -22,7 +22,7 @@ def stats_calculator(
     base = (
         base
         .filter((col("sensor_type") == sensor_type))
-        .withColumn("HourStart", date_trunc("hour", col("LocalTimeSpan")))
+        .withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
     )
 
     agg_exprs = [
@@ -72,8 +72,7 @@ def stats_calculator(
     stats_current_df = (
         stats_df
         .withColumnRenamed("Val_dummy", "MeasurementValue")
-        .withColumnRenamed("LocalTimeSpan", "_LocalTimeSpan")
-        .withColumnRenamed("HourStart", "LocalTimeSpan")
+        .withColumnRenamed("HourStart", "TimeSpan")
         .withColumnRenamed("Val_std", "MeasurementStdDev")
     )
 

@@ -6,7 +6,7 @@
 
 ## Fuente de datos
 
-- Fuente primaria: lecturas extendidas desde parquets y `dwh.dimSidonProdDimensions`.
+- Fuente primaria: lecturas extendidas desde parquets y `dwh.dimSidonProdDimensions`, incluyendo `TimeZone`.
 - Pipeline: `operations_assets`.
 - Staging: `stg.factReadingsMeasurement`.
 - Control incremental: `ctl.IngestionControl` con `IngestionName = 'factReadingsMeasurement'`.
@@ -38,6 +38,8 @@ Un registro representa una combinacion `OperationId` asociada a sensor/dispositi
 - Se escribe primero en `stg.factReadingsMeasurement` con `RunId`.
 - La consolidacion a `dwh.factReadingsMeasurement` usa `MERGE` por `OperationId`.
 - Solo se materializan horas cerradas y no se avanza el watermark si no hay lecturas reales.
+- La ventana, el scaffold, las agregaciones, los cruces y el watermark usan `TimeSpan` UTC.
+- `LocalTimeSpan` se calcula al final desde `TimeSpan` y el `TimeZone` del sensor.
 - Las transformaciones disponibles dependen del `user_code`; CARLS, por ejemplo, usa `cisterna`, `cuartos_refrigeracion` y `presencia`.
 
 ## Dependencias
