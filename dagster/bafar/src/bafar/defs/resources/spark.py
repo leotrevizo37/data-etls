@@ -601,7 +601,6 @@ class SparkResource:
         to_value: Optional[str] = None,
     ) -> DataFrame:
         spark = self.get_spark()
-        from_operator = ">=" if to_value is not None else ">"
         to_filter = (
             f"\n    AND Fecha < CONVERT(DATETIME2(7), '{to_value}', 126)"
             if to_value is not None
@@ -622,7 +621,7 @@ SELECT
     NumeroVenta,
     Clave_Tienda
 FROM {BAFAR_SALES_SCHEMA}.{BAFAR_SALES_TABLE}
-WHERE Fecha {from_operator} CONVERT(DATETIME2(7), '{from_value}', 126){to_filter}
+WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126){to_filter}
 """,
             )
             .load()
