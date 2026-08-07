@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict
+from zoneinfo import ZoneInfo
 
 from dagster import In, MaterializeResult, Out, RetryPolicy, RetryRequested, graph_asset, op
 from pyspark.sql import DataFrame
@@ -9,7 +10,7 @@ from ..resources import SparkResource, SqlDimServerResource, SqlServerResource
 from ..transformations.fact_out_of_hours_sales import transform_fact_out_of_hours_sales
 
 
-FACT_OUT_OF_HOURS_SALES_OVERLAP_MINUTES = 15
+FACT_OUT_OF_HOURS_SALES_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
 FACT_OUT_OF_HOURS_SALES_MAX_RETRIES = 3
 FACT_OUT_OF_HOURS_SALES_RETRY_DELAY_SECONDS = 60
 FACT_OUT_OF_HOUR_SALES_BOOTSTRAP_DATE = datetime(2026, 5, 1)
@@ -53,8 +54,13 @@ def get_fact_out_of_hours_sales_window_op(context) -> Dict[str, Any]:
     return {
         "last_loaded_at": last_loaded_at,
         "from_value": (
-            last_loaded_at
-            - timedelta(minutes=FACT_OUT_OF_HOURS_SALES_OVERLAP_MINUTES)
+            datetime.now(FACT_OUT_OF_HOURS_SALES_TIMEZONE).replace(
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+            - timedelta(days=1)
         ).strftime("%Y-%m-%dT%H:%M:%S.%f"),
     }
 

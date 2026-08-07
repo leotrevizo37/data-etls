@@ -11,11 +11,11 @@ from dagster import AssetCheckSeverity  # noqa: E402
 from mcdonalds.defs.asset_checks import (  # noqa: E402
     _build_factlecturas_original_lte_to_utc_result,
     _build_factlecturas_row_count_result,
-    _build_local_window_order_result,
+    _build_utc_window_order_result,
     _build_operations_succeeded_result,
-    _build_original_lte_to_local_result,
+    _build_original_lte_to_utc_result,
     _build_real_readings_ratio_result,
-    _build_to_local_gte_max_time_span_result,
+    _build_to_utc_gte_max_time_span_result,
 )
 
 
@@ -37,17 +37,17 @@ class AssetChecksTests(unittest.TestCase):
         self.assertFalse(failing.passed)
         self.assertEqual(failing.severity, AssetCheckSeverity.ERROR)
 
-    def test_factreadings_local_window_requires_to_local_after_from_local(self):
-        passing = _build_local_window_order_result(
+    def test_factreadings_utc_window_requires_to_utc_after_from_utc(self):
+        passing = _build_utc_window_order_result(
             {
-                "from_local": "2026-05-01 10:00:00",
-                "to_local": "2026-05-01 11:00:00",
+                "from_utc": "2026-05-01 10:00:00",
+                "to_utc": "2026-05-01 11:00:00",
             }
         )
-        failing = _build_local_window_order_result(
+        failing = _build_utc_window_order_result(
             {
-                "from_local": "2026-05-01 10:00:00",
-                "to_local": "2026-05-01 10:00:00",
+                "from_utc": "2026-05-01 10:00:00",
+                "to_utc": "2026-05-01 10:00:00",
             }
         )
 
@@ -60,30 +60,50 @@ class AssetChecksTests(unittest.TestCase):
         metadata = {
             "succeeded": True,
             "original_last_loaded_at": "2026-05-01 09:00:00",
-            "max_time_span": "2026-05-01 10:00:00",
-            "to_local": "2026-05-01 11:00:00",
+            "max_time_span": "2026-05-01 10:30:00",
+            "to_utc": "2026-05-01 11:00:00",
         }
 
         succeeded = _build_operations_succeeded_result(metadata)
-        to_local_check = _build_to_local_gte_max_time_span_result(metadata)
-        original_check = _build_original_lte_to_local_result(metadata)
+        to_utc_check = _build_to_utc_gte_max_time_span_result(metadata)
+        original_check = _build_original_lte_to_utc_result(metadata)
         self.assertTrue(succeeded.passed)
-        self.assertTrue(to_local_check.passed)
+        self.assertTrue(to_utc_check.passed)
         self.assertTrue(original_check.passed)
         self.assertEqual(succeeded.severity, AssetCheckSeverity.ERROR)
-        self.assertEqual(to_local_check.severity, AssetCheckSeverity.WARN)
+        self.assertEqual(to_utc_check.severity, AssetCheckSeverity.WARN)
         self.assertEqual(original_check.severity, AssetCheckSeverity.WARN)
 
         self.assertFalse(
             _build_operations_succeeded_result({**metadata, "succeeded": False}).passed
         )
-        self.assertFalse(
-            _build_to_local_gte_max_time_span_result(
-                {**metadata, "max_time_span": "2026-05-01 12:00:00"}
+        future_check = _build_to_utc_gte_max_time_span_result(
+            {**metadata, "max_time_span": "2026-05-01 12:00:00"}
+        )
+        self.assertFalse(future_check.passed)
+        self.assertEqual(future_check.severity, AssetCheckSeverity.ERROR)
+        one_hour_check = _build_to_utc_gte_max_time_span_result(
+            {**metadata, "max_time_span": "2026-05-01 10:00:00"}
+        )
+        two_hours_check = _build_to_utc_gte_max_time_span_result(
+            {**metadata, "max_time_span": "2026-05-01 09:00:00"}
+        )
+        over_two_hours_check = _build_to_utc_gte_max_time_span_result(
+            {**metadata, "max_time_span": "2026-05-01 08:59:59"}
+        )
+        self.assertFalse(one_hour_check.passed)
+        self.assertEqual(one_hour_check.severity, AssetCheckSeverity.WARN)
+        self.assertFalse(two_hours_check.passed)
+        self.assertEqual(two_hours_check.severity, AssetCheckSeverity.WARN)
+        self.assertFalse(over_two_hours_check.passed)
+        self.assertEqual(over_two_hours_check.severity, AssetCheckSeverity.ERROR)
+        self.assertTrue(
+            _build_to_utc_gte_max_time_span_result(
+                {**metadata, "max_time_span": None}
             ).passed
         )
         self.assertFalse(
-            _build_original_lte_to_local_result(
+            _build_original_lte_to_utc_result(
                 {**metadata, "original_last_loaded_at": "2026-05-01 12:00:00"}
             ).passed
         )

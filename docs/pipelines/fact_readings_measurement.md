@@ -6,8 +6,8 @@ Construir la tabla operacional horaria `dwh.factReadingsMeasurement` desde lectu
 
 ## Entradas
 
-- Lecturas del data lake para la ventana local de operaciones.
-- `dwh.dimSidonProdDimensions`.
+- Lecturas del data lake para la ventana UTC de operaciones basada en `TimeSpan`.
+- `dwh.dimSidonProdDimensions`, incluyendo `TimeZone` por sensor.
 - Watermark `factReadingsMeasurement` en `ctl.IngestionControl`.
 
 ## Salida
@@ -17,22 +17,22 @@ Construir la tabla operacional horaria `dwh.factReadingsMeasurement` desde lectu
 
 ## Flujo
 
-1. Resuelve ventana local con zona `America/Ciudad_Juarez`.
+1. Resuelve la ventana y el watermark en UTC.
 2. Lee dimensiones activas.
-3. Lee lecturas extendidas y las cruza con dimensiones.
-4. Ejecuta transformaciones operativas del `user_code`.
-5. Limita filas a horas cerradas y a la ultima hora con lecturas reales.
-6. Escribe a `stg.factReadingsMeasurement` con `RunId`.
-7. Ejecuta `MERGE` hacia `dwh.factReadingsMeasurement` por `OperationId`.
-8. Limpia staging y actualiza watermark.
+3. Lee lecturas por `TimeSpan` y las cruza con dimensiones.
+4. Genera el scaffold, agrega y cruza las horas usando `TimeSpan`.
+5. Limita filas a horas UTC cerradas y al ultimo `TimeSpan` con lecturas reales.
+6. Convierte `TimeSpan` a `LocalTimeSpan` con el `TimeZone` del sensor.
+7. Escribe a `stg.factReadingsMeasurement` con `RunId`.
+8. Ejecuta `MERGE` hacia `dwh.factReadingsMeasurement` por `OperationId`.
+9. Limpia staging y actualiza watermark.
 
 ## Reglas de avance
 
 - Si no hay lecturas reales, conserva el watermark.
 - Si la corrida falla, conserva el watermark previo.
-- Si hay datos reales, avanza al maximo `LocalTimeSpan` materializado.
+- Si hay datos reales, avanza al maximo `TimeSpan` procesado.
 
 ## Compatibilidad entre `user_codes`
 
-El flujo es compartido, pero la lista de transformaciones puede variar por cliente. Los cambios de contrato deben sincronizar DDL, staging, writer Spark, merge SQL y tests en los `user_codes` que implementen el mismo contrato.
-
+El flujo es compartido, pero la lista de transformaciones puede variar por cliente. El procesamiento UTC y la conversion por `TimeZone` descritos aqui estan implementados en `bafar_poc_gabinete`, `carlsjr`, `emerson`, `mcdonalds`, `mcdonalds_cdp`, `smartfit` y `valledelencino`.
