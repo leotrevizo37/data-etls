@@ -22,7 +22,7 @@ fact_lecturas_sched_every_1h = ScheduleDefinition(
 fact_lecturas_sched_every_w = ScheduleDefinition(
     name="010_sense_lecturas_ingestion_every_w",
     job=fact_lecturas_ingestion_job,
-    cron_schedule="0 21 * * 1-5",
+    cron_schedule="0 21 * * *",
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.RUNNING,
 )
