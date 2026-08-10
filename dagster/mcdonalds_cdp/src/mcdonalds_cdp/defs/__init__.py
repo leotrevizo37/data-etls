@@ -21,6 +21,7 @@ def _build_defs() -> Any:
         dbo_sublocation_tys,
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
+        observability_factredingsaudits,
         operations_assets,
     )
     from .jobs import (
@@ -29,6 +30,7 @@ def _build_defs() -> Any:
         fact_lecturas_ingestion_job,
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
+        fact_redings_audits_job,
         index_maintenance_job,
         refresh_dimensions_job,
         spark_df_io_manager_healthcheck_job,
@@ -50,6 +52,7 @@ def _build_defs() -> Any:
         operations_sched_every_1h_w,
         operations_sched_every_6h,
         operations_sched_every_w,
+        redings_audits_sched_every_10m,
     )
     from .sensors import (
         dwh_dimsidonproddimensions_sensor,
@@ -61,6 +64,7 @@ def _build_defs() -> Any:
             fact_lecturas_backfill_daily_job,
             fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
+            fact_redings_audits_job,
             refresh_dimensions_job,
             spark_df_io_manager_healthcheck_job,
             index_maintenance_job,
@@ -81,6 +85,7 @@ def _build_defs() -> Any:
             operations_sched_every_w,
             operations_sched_every_1h_w,
             operations_sched_every_6h,
+            redings_audits_sched_every_10m,
             cleanup_schedule,
             index_maintenance_schedule,
         ],
@@ -95,6 +100,7 @@ def _build_defs() -> Any:
             dbo_sublocations,
             dbo_sublocation_tys,
             dwh_factlecturas,
+            observability_factredingsaudits,
             operations_assets,
             dwh_dimsidonproddimensions,
             cleanup_old_runs,

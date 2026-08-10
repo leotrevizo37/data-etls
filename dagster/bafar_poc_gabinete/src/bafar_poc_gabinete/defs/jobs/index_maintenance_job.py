@@ -43,6 +43,6 @@ def run_index_maintenance_op(context):
     return Output(value=result, metadata=INDEX_MAINTENANCE_DEFAULTS)
 
 
-@job(name="081_maintenance_index", tags={"job_type": "mantenimiento", "user_code": "bafar_poc_gabinete"})
+@job(name="081_maintenance_index", tags={"job_type": "mantenimiento", "run_lane": "operational", "user_code_run_lane": "bafar_poc_gabinete_operational", "user_code": "bafar_poc_gabinete"})
 def index_maintenance_job():
     run_index_maintenance_op()

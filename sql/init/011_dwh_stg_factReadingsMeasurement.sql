@@ -31,6 +31,7 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
             LocationId UNIQUEIDENTIFIER NOT NULL,
             DeviceType VARCHAR(255) NOT NULL,
             SensorType VARCHAR(255) NOT NULL,
+            TimeSpan DATETIME2(0) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             MeasurementStdDev DECIMAL(9, 4) NULL,
@@ -46,6 +47,15 @@ IF OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NULL
     END;
 GO
 
+IF
+    OBJECT_ID(N'dwh.factReadingsMeasurement', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.factReadingsMeasurement', N'TimeSpan') IS NULL
+    BEGIN
+        ALTER TABLE dwh.factReadingsMeasurement
+        ADD TimeSpan DATETIME2(0) NULL;
+    END;
+GO
+
 IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.factReadingsMeasurement
@@ -58,12 +68,22 @@ IF OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NULL
             LocationId UNIQUEIDENTIFIER NOT NULL,
             DeviceType VARCHAR(255) NOT NULL,
             SensorType VARCHAR(255) NOT NULL,
+            TimeSpan DATETIME2(0) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             MeasurementValue DECIMAL(9, 4) NULL,
             MeasurementStdDev DECIMAL(9, 4) NULL,
             Anomalies INT NULL,
             ReadingsCount INT NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factReadingsMeasurement', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factReadingsMeasurement', N'TimeSpan') IS NULL
+    BEGIN
+        ALTER TABLE stg.factReadingsMeasurement
+        ADD TimeSpan DATETIME2(0) NULL;
     END;
 GO
 

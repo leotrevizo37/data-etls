@@ -39,6 +39,7 @@ DEFAULT_SPARK_RESOURCE_PROFILES = {
     "dimensiones": {"min_cores": 1, "min_memory_mb": 1024, "cores_max": 1},
     "lecturas": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "operaciones": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
+    "observability": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
     "smartaudits": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "mantiz": {"min_cores": 2, "min_memory_mb": 3072, "cores_max": 2},
     "backfill": {"min_cores": 2, "min_memory_mb": 2048, "cores_max": 2},
@@ -207,7 +208,7 @@ def _build_executor_cores(
 ) -> int:
     current_env = env or os.environ
     if current_env.get("SPARK_EXECUTOR_CORES"):
-        return _env_int("SPARK_EXECUTOR_CORES", 1, current_env)
+        return max(1, min(_env_int("SPARK_EXECUTOR_CORES", 1, current_env), int(resource_profile["cores_max"])))
 
     legacy_worker_cores = _env_int("SPARK_WORKER_CORES", 1, current_env)
     return max(1, min(legacy_worker_cores, int(resource_profile["cores_max"])))
@@ -434,6 +435,7 @@ class SparkResource:
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
             .set("spark.cores.max", str(self.resource_profile["cores_max"]))
+            .set("spark.jars.ivy", os.path.join(os.path.expanduser("~"), ".ivy2.5.2", self.resource_profile["name"]))
             .set(
                 "spark.sql.maxPlanStringLength",
                 os.getenv(
@@ -891,6 +893,62 @@ class SparkResource:
             chunk_column="SensorId",
         )
 
+    def write_dim_aspnet_users(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> Optional[int]:
+        dimension_columns = [
+            "Id",
+            "UserName",
+            "Name",
+            "LastName",
+            "Position",
+        ]
+        df_stage = (
+            df
+            .select(*dimension_columns)
+            .dropDuplicates(["Id"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *dimension_columns)
+        )
+        if len(df_stage.head(1)) == 0:
+            return 0
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.dimAspNetUsers",
+            chunk_column="Id",
+        )
+
+    def write_fact_sidon_user_usage_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "UserId",
+            "Date",
+            "HasConnected",
+            "MadeCompleteInteraction",
+            "TimeConnected",
+            "AvgLatency",
+            "Latency95thPercentile",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["Date", "UserId"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factSidonUserUsage",
+            chunk_column="UserId",
+        )
+
     def read_dim_prod_dimensions(self) -> DataFrame:
         spark = self.get_spark()
 
@@ -898,6 +956,43 @@ class SparkResource:
             url=self._build_wh_path()["url"],
             table="dwh.dimSidonProdDimensions",
             properties=self._build_wh_path()["properties"]
+        )
+
+    def read_fact_redings_audits_state(
+        self,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        from_text = from_utc.strftime("%Y-%m-%d %H:%M:%S")
+        to_text = to_utc.strftime("%Y-%m-%d %H:%M:%S")
+        table = (
+            "(SELECT SensorId, TimeSpan, LastReadingAt "
+            "FROM observability.factRedingsAudits "
+            "WHERE TimeSpan >= '"
+            + from_text
+            + "' AND TimeSpan <= '"
+            + to_text
+            + "' "
+            "UNION ALL "
+            "SELECT SensorId, TimeSpan, LastReadingAt "
+            "FROM ("
+            "SELECT SensorId, TimeSpan, LastReadingAt, "
+            "ROW_NUMBER() OVER ("
+            "PARTITION BY SensorId ORDER BY TimeSpan DESC"
+            ") AS PreviousRow "
+            "FROM observability.factRedingsAudits "
+            "WHERE TimeSpan < '"
+            + from_text
+            + "'"
+            ") AS previous "
+            "WHERE PreviousRow = 1) AS fact_redings_audits_state"
+        )
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=table,
+            properties=self._build_wh_path()["properties"],
         )
 
     def read_dim_sensor_expected_values(self) -> DataFrame:
@@ -938,6 +1033,36 @@ class SparkResource:
             df_stage,
             table="stg.factSensorEvents",
             chunk_column="ReadId",
+        )
+
+    def write_fact_redings_audits_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "SensorId",
+            "TimeSpan",
+            "LocalTimeSpan",
+            "ReadingsCount",
+            "HasLateReadings",
+            "IsConnectionLost",
+            "LastReadingAt",
+            "ConnectionLostAt",
+            "MinutesWithoutReadings",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["SensorId", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factRedingsAudits",
+            chunk_column="SensorId",
         )
 
     def write_fact_smartaudits_categories_stage(
@@ -1336,6 +1461,10 @@ def spark_resource(init_context):
     driver_port = os.getenv("SPARK_DRIVER_PORT", "")
     driver_block_manager_port = os.getenv("SPARK_DRIVER_BLOCK_MANAGER_PORT", "")
     block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
+    if resource_profile["name"] == "observability":
+        driver_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_PORT", driver_port)
+        driver_block_manager_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT", driver_block_manager_port)
+        block_manager_port = os.getenv("SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT", block_manager_port)
     worker_network_timeout_seconds = int(
         os.getenv(
             "SPARK_WORKER_NETWORK_TIMEOUT_SECONDS",

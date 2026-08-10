@@ -2,6 +2,12 @@ scheduler:
   module: dagster._core.scheduler
   class: DagsterDaemonScheduler
 
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 60
+  cancel_timeout_seconds: 60
+  poll_interval_seconds: 15
+
 run_coordinator:
   module: dagster._core.run_coordinator
   class: QueuedRunCoordinator
@@ -65,9 +71,17 @@ retention:
 
 concurrency:
   runs:
-    max_concurrent_runs: 1
+    max_concurrent_runs: 2
     tag_concurrency_limits:
-      - key: "job_type"
+      - key: dagster/code_location
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 2
+      - key: "user_code_run_lane"
         limit: 1
         value:
           applyLimitPerUniqueValue: true
+      - key: "job_type"
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1

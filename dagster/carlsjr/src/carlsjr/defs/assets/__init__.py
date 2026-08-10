@@ -7,6 +7,7 @@ from .source_assets import (dbo_sensors,
                             dbo_sublocation_tys)
 from .dwh_factLecturas import dwh_factlecturas
 from .dwh_factSensorEvents import dwh_factsensorevents
+from .observability_factRedingsAudits import observability_factredingsaudits
 from .dwh_factSmartauditsCategories import dwh_factsmartauditscategories
 from .dwh_factMantizTicketLifecycle import dwh_factmantizticketlifecycle
 from .dwh_factMantizTicketTextInsights import dwh_factmantiztickettextinsights
@@ -23,6 +24,7 @@ __all__ = [
     "dbo_sublocation_tys",
     "dwh_factlecturas",
     "dwh_factsensorevents",
+    "observability_factredingsaudits",
     "dwh_factsmartauditscategories",
     "dwh_factmantizticketlifecycle",
     "dwh_factmantiztickettextinsights",

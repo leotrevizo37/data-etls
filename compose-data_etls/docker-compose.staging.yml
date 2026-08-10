@@ -38,6 +38,12 @@ services:
   dagster-daemon:
     restart: "no"
 
+  blackbox-exporter:
+    restart: "no"
+
+  prometheus:
+    restart: "no"
+
   spark-master:
     restart: "no"
 

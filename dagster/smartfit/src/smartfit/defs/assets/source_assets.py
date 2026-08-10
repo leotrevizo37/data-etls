@@ -24,6 +24,14 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["smartfit", "dbo_sublocation_tys"]),
     group_name="smartfit",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["smartfit", "dbo_aspnetusers"]),
+    group_name="smartfit",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["smartfit", "dbo_systemlogs"]),
+    group_name="smartfit",
+)
 dbo_ProgramProfileTys = SourceAsset(
     key=AssetKey(["smartfit", "dbo_ProgramProfileTys"]),
     group_name="smartfit",

@@ -25,3 +25,11 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["valledelencino", "dbo_sublocation_tys"]),
     group_name="valledelencino",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_aspnetusers"]),
+    group_name="valledelencino",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_systemlogs"]),
+    group_name="valledelencino",
+)
