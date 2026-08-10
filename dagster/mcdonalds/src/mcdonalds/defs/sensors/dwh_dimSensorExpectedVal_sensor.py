@@ -14,7 +14,7 @@ from ..jobs import refresh_sensor_expected_values_job
     minimum_interval_seconds=3600,
     required_resource_keys={"dim_sqlserver"},
     name="dwh_dimsensorexpectedval_sensor",
-    default_status=DefaultSensorStatus.RUNNING
+    default_status=DefaultSensorStatus.STOPPED
 )
 def dwh_dimsensorexpectedval_sensor(context: SensorEvaluationContext):
     dim_sql = context.resources.dim_sqlserver
