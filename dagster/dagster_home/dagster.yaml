@@ -71,7 +71,7 @@ retention:
 
 concurrency:
   runs:
-    max_concurrent_runs: 2
+    max_concurrent_runs: 3
     tag_concurrency_limits:
       - key: dagster/code_location
         value:
@@ -84,4 +84,4 @@ concurrency:
       - key: "job_type"
         value:
           applyLimitPerUniqueValue: true
-        limit: 1
+        limit: 2
