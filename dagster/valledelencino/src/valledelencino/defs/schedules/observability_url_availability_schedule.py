@@ -12,7 +12,7 @@ observability_url_availability_schedule = ScheduleDefinition(
     job=observability_url_availability_job,
     cron_schedule=os.getenv(
         "PROMETHEUS_ENDPOINT_PROBE_CRON",
-        "*/30 * * * *",
+        "0 */2 * * *",
     ),
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.RUNNING,

@@ -10,5 +10,5 @@ observability_sidon_user_usage_daily = ScheduleDefinition(
     job=observability_sidon_user_usage_job,
     cron_schedule="30 1 * * *",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.RUNNING,
+    default_status=DefaultScheduleStatus.STOPPED,
 )
