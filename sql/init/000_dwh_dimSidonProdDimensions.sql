@@ -39,12 +39,22 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NULL
             location_name NVARCHAR(255) NULL,
             city_name NVARCHAR(255) NULL,
             CityId UNIQUEIDENTIFIER NOT NULL,
+            TimeZone NVARCHAR(255) NOT NULL,
             LocationId UNIQUEIDENTIFIER NOT NULL,
             sublocation_type NVARCHAR(255) NULL,
             ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_dimSidonProdDimensions_ModifiedAt
             DEFAULT (SYSUTCDATETIME())
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'TimeZone') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD TimeZone NVARCHAR(255) NULL;
     END;
 GO
 
@@ -68,9 +78,19 @@ IF OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NULL
             location_name NVARCHAR(255) NULL,
             city_name NVARCHAR(255) NULL,
             CityId UNIQUEIDENTIFIER NOT NULL,
+            TimeZone NVARCHAR(255) NOT NULL,
             LocationId UNIQUEIDENTIFIER NOT NULL,
             sublocation_type NVARCHAR(255) NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'TimeZone') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD TimeZone NVARCHAR(255) NULL;
     END;
 GO
 

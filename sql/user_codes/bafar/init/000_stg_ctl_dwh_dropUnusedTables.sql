@@ -82,12 +82,6 @@ IF OBJECT_ID(N'ctl.SmartauditsAiCommentLookup', N'U') IS NOT NULL
     END;
 GO
 
-IF OBJECT_ID(N'ctl.IndexMaintenanceLog', N'U') IS NOT NULL
-    BEGIN
-        DROP TABLE ctl.IndexMaintenanceLog;
-    END;
-GO
-
 IF OBJECT_ID(N'dwh.factMantizTicketTextInsights', N'U') IS NOT NULL
     BEGIN
         DROP TABLE dwh.factMantizTicketTextInsights;
@@ -133,5 +127,41 @@ GO
 IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
     BEGIN
         DROP TABLE dwh.dimSidonProdDimensions;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factRedingsAudits;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.dimAspNetUsers', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.dimAspNetUsers;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factSidonUserUsage', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factSidonUserUsage;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factRedingsAudits;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.dimAspNetUsers', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.dimAspNetUsers;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factSidonUserUsage', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factSidonUserUsage;
     END;
 GO

@@ -48,3 +48,11 @@ dbo_GroupHasSensors = SourceAsset(
     key=AssetKey(["mcdonalds", "dbo_GroupHasSensors"]),
     group_name="mcdonalds",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["mcdonalds", "dbo_aspnetusers"]),
+    group_name="mcdonalds",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["mcdonalds", "dbo_systemlogs"]),
+    group_name="mcdonalds",
+)

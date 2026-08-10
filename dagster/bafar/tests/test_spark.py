@@ -317,7 +317,7 @@ class SparkResourceTests(unittest.TestCase):
         live_query = query_option.call_args.args[1]
         self.assertIn("FROM Replica.Ventas", live_query)
         self.assertIn(
-            "WHERE Fecha > CONVERT(DATETIME2(7), '2026-05-01T00:00:00.000000', 126)",
+            "WHERE Fecha >= CONVERT(DATETIME2(7), '2026-05-01T00:00:00.000000', 126)",
             live_query,
         )
         self.assertNotIn("AND Fecha <", live_query)

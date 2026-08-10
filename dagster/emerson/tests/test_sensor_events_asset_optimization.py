@@ -46,6 +46,8 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         ).read_text()
 
         self.assertIn("def datalake_readings_extended(", source)
+        self.assertIn("use_utc_range: bool = False", source)
+        self.assertIn('col("rd.LocalTimeSpan")', source)
         self.assertIn("if len(readings_extended_df.head(1)) == 0:", source)
         self.assertNotIn("validate_non_empty", source)
 

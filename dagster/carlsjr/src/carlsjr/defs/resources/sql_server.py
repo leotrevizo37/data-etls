@@ -30,6 +30,7 @@ USING (
         location_name,
         city_name,
         CityId,
+        TimeZone,
         LocationId,
         sublocation_type
     FROM stg.dimSidonProdDimensions
@@ -52,6 +53,7 @@ WHEN MATCHED AND EXISTS (
         source.location_name,
         source.city_name,
         source.CityId,
+        source.TimeZone,
         source.LocationId,
         source.sublocation_type
     EXCEPT
@@ -70,6 +72,7 @@ WHEN MATCHED AND EXISTS (
         target.location_name,
         target.city_name,
         target.CityId,
+        target.TimeZone,
         target.LocationId,
         target.sublocation_type
 ) THEN
@@ -88,6 +91,7 @@ WHEN MATCHED AND EXISTS (
         target.location_name = source.location_name,
         target.city_name = source.city_name,
         target.CityId = source.CityId,
+        target.TimeZone = source.TimeZone,
         target.LocationId = source.LocationId,
         target.sublocation_type = source.sublocation_type,
         target.ModifiedAt = SYSUTCDATETIME()
@@ -108,6 +112,7 @@ WHEN NOT MATCHED BY TARGET THEN
         location_name,
         city_name,
         CityId,
+        TimeZone,
         LocationId,
         sublocation_type
     )
@@ -127,6 +132,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.location_name,
         source.city_name,
         source.CityId,
+        source.TimeZone,       
         source.LocationId,
         source.sublocation_type
     )
@@ -134,6 +140,132 @@ WHEN NOT MATCHED BY SOURCE AND target.Active = 1 THEN
     UPDATE SET
         target.Active = 0,
         target.ModifiedAt = SYSUTCDATETIME()
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_dim_aspnet_users_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.dimAspNetUsers AS target
+USING (
+    SELECT
+        Id,
+        UserName,
+        Name,
+        LastName,
+        Position
+    FROM stg.dimAspNetUsers
+    WHERE RunId = ?
+) AS source
+    ON target.Id = source.Id
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.UserName,
+        source.Name,
+        source.LastName,
+        source.Position
+    EXCEPT
+    SELECT
+        target.UserName,
+        target.Name,
+        target.LastName,
+        target.Position
+) THEN
+    UPDATE SET
+        target.UserName = source.UserName,
+        target.Name = source.Name,
+        target.LastName = source.LastName,
+        target.Position = source.Position,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        Id,
+        UserName,
+        Name,
+        LastName,
+        Position
+    )
+    VALUES (
+        source.Id,
+        source.UserName,
+        source.Name,
+        source.LastName,
+        source.Position
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_sidon_user_usage_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factSidonUserUsage AS target
+USING (
+    SELECT
+        UserId,
+        [Date],
+        HasConnected,
+        MadeCompleteInteraction,
+        TimeConnected,
+        AvgLatency,
+        Latency95thPercentile
+    FROM stg.factSidonUserUsage
+    WHERE RunId = ?
+) AS source
+    ON target.[Date] = source.[Date]
+    AND target.UserId = source.UserId
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.HasConnected,
+        source.MadeCompleteInteraction,
+        source.TimeConnected,
+        source.AvgLatency,
+        source.Latency95thPercentile
+    EXCEPT
+    SELECT
+        target.HasConnected,
+        target.MadeCompleteInteraction,
+        target.TimeConnected,
+        target.AvgLatency,
+        target.Latency95thPercentile
+) THEN
+    UPDATE SET
+        target.HasConnected = source.HasConnected,
+        target.MadeCompleteInteraction = source.MadeCompleteInteraction,
+        target.TimeConnected = source.TimeConnected,
+        target.AvgLatency = source.AvgLatency,
+        target.Latency95thPercentile = source.Latency95thPercentile,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        UserId,
+        [Date],
+        HasConnected,
+        MadeCompleteInteraction,
+        TimeConnected,
+        AvgLatency,
+        Latency95thPercentile
+    )
+    VALUES (
+        source.UserId,
+        source.[Date],
+        source.HasConnected,
+        source.MadeCompleteInteraction,
+        source.TimeConnected,
+        source.AvgLatency,
+        source.Latency95thPercentile
+    )
 OUTPUT $action INTO @MergeActions;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
@@ -156,6 +288,7 @@ USING (
         LocationId,
         DeviceType,
         SensorType,
+        TimeSpan,
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
@@ -173,6 +306,7 @@ WHEN MATCHED THEN
         target.LocationId = source.LocationId,
         target.DeviceType = source.DeviceType,
         target.SensorType = source.SensorType,
+        target.TimeSpan = source.TimeSpan,
         target.LocalTimeSpan = source.LocalTimeSpan,
         target.MeasurementValue = source.MeasurementValue,
         target.MeasurementStdDev = source.MeasurementStdDev,
@@ -188,6 +322,7 @@ WHEN NOT MATCHED BY TARGET THEN
         LocationId,
         DeviceType,
         SensorType,
+        TimeSpan,
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
@@ -202,6 +337,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.LocationId,
         source.DeviceType,
         source.SensorType,
+        source.TimeSpan,
         source.LocalTimeSpan,
         source.MeasurementValue,
         source.MeasurementStdDev,
@@ -281,6 +417,70 @@ WHEN NOT MATCHED BY TARGET THEN
         source.Value,
         source.EventMinutes,
         source.IsEventCompleted
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+FACT_REDINGS_AUDITS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factRedingsAudits AS target
+USING (
+    SELECT
+        SensorId,
+        TimeSpan,
+        LocalTimeSpan,
+        ReadingsCount,
+        HasLateReadings,
+        IsConnectionLost,
+        LastReadingAt,
+        ConnectionLostAt,
+        MinutesWithoutReadings
+    FROM stg.factRedingsAudits
+    WHERE RunId = ?
+) AS source
+    ON target.SensorId = source.SensorId
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED THEN
+    UPDATE SET
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.ReadingsCount = source.ReadingsCount,
+        target.HasLateReadings = CASE
+            WHEN target.HasLateReadings = 1 OR source.HasLateReadings = 1 THEN 1
+            ELSE 0
+        END,
+        target.IsConnectionLost = source.IsConnectionLost,
+        target.LastReadingAt = source.LastReadingAt,
+        target.ConnectionLostAt = source.ConnectionLostAt,
+        target.MinutesWithoutReadings = source.MinutesWithoutReadings,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        SensorId,
+        TimeSpan,
+        LocalTimeSpan,
+        ReadingsCount,
+        HasLateReadings,
+        IsConnectionLost,
+        LastReadingAt,
+        ConnectionLostAt,
+        MinutesWithoutReadings
+    )
+    VALUES (
+        source.SensorId,
+        source.TimeSpan,
+        source.LocalTimeSpan,
+        source.ReadingsCount,
+        source.HasLateReadings,
+        source.IsConnectionLost,
+        source.LastReadingAt,
+        source.ConnectionLostAt,
+        source.MinutesWithoutReadings
     )
 OUTPUT $action INTO @MergeActions;
 
@@ -1180,6 +1380,48 @@ class SqlServerResource:
                     return 0
                 return int(row.AffectedRows)
 
+    def clear_dim_aspnet_users_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.dimAspNetUsers WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_dim_aspnet_users(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_dim_aspnet_users_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_sidon_user_usage_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factSidonUserUsage WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_sidon_user_usage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_sidon_user_usage_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
     def clear_fact_sensor_events_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
@@ -1195,6 +1437,27 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_fact_sensor_events_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_redings_audits_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factRedingsAudits WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_redings_audits(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(FACT_REDINGS_AUDITS_MERGE_SQL, run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:

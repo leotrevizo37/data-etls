@@ -63,9 +63,9 @@ class SparkTransformationsTests(unittest.TestCase):
     def test_lecturas_time_hours_builds_an_inclusive_hourly_scaffold(self) -> None:
         base = self.spark.createDataFrame(
             [
-                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11},
-                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11},
-                {"SensorId": 11, "DeviceId": 1, "SensorTyId": 101, "sensor_type": 2, "device_type": 1, "LocationId": 11},
+                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
+                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
+                {"SensorId": 11, "DeviceId": 1, "SensorTyId": 101, "sensor_type": 2, "device_type": 1, "LocationId": 11, "TimeZone": "America/Denver"},
             ]
         )
 
@@ -75,12 +75,12 @@ class SparkTransformationsTests(unittest.TestCase):
             "2026-03-29 12:00:00",
         )
 
-        rows = result.orderBy("SensorId", "LocalTimeSpan").collect()
+        rows = result.orderBy("SensorId", "TimeSpan").collect()
 
         self.assertIsNotNone(result)
         self.assertEqual(len(rows), 6)
         self.assertEqual(
-            [row["LocalTimeSpan"] for row in rows[:3]],
+            [row["TimeSpan"] for row in rows[:3]],
             [
                 datetime(2026, 3, 29, 10, 0),
                 datetime(2026, 3, 29, 11, 0),
@@ -97,6 +97,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 StructField("device_type", IntegerType(), True),
                 StructField("sensor_type", IntegerType(), True),
                 StructField("LocationId", IntegerType(), True),
+                StructField("TimeZone", StringType(), True),
             ]
         )
         base = self.spark.createDataFrame([], schema=empty_schema)
@@ -118,7 +119,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Presion",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 3),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 3),
                     "Value": 21.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -129,7 +130,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Presion",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 18),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 18),
                     "Value": 24.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -140,7 +141,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Presion",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 43),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 43),
                     "Value": 10.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -151,7 +152,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 55),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 55),
                     "Value": 999.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -167,7 +168,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         row = result.collect()[0]
 
-        self.assertEqual(row["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
+        self.assertEqual(row["TimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 55 / 3)
@@ -181,7 +182,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Presion",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 25.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -192,7 +193,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Presion",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 110.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -222,7 +223,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Temperatura",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 5.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -243,7 +244,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 0.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -254,7 +255,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 20),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 20),
                     "Value": 0.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -265,7 +266,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 1.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -281,7 +282,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         row = result.collect()[0]
 
-        self.assertEqual(row["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
+        self.assertEqual(row["TimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
         self.assertEqual(row["Anomalies"], 1)
         self.assertAlmostEqual(row["MeasurementValue"], 1 / 3)
@@ -295,7 +296,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 0),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 0),
                     "Value": 1.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -306,7 +307,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Corriente",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 40),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 1.0,
                     "device_type": "A/C Rooftop",
                     "device_name": "A/C Rooftop 1",
@@ -336,7 +337,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "nivel de cisterna porcentaje",
                     "device_type": "Nivel de cisterna ",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 55.0,
                     "device_name": "Cisterna 1",
                 },
@@ -347,7 +348,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "nivel de cisterna porcentaje",
                     "device_type": "Nivel de cisterna ",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 65.0,
                     "device_name": "Cisterna 1",
                 },
@@ -363,6 +364,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "nivel de cisterna porcentaje",
                     "device_type": "Nivel de cisterna ",
                     "device_name": "Cisterna 1",
+                    "TimeZone": "America/Chihuahua",
                 },
             ]
         )
@@ -379,6 +381,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["ReadingsCount"], 2)
         self.assertAlmostEqual(rows[0]["MeasurementValue"], 60.0)
+        self.assertEqual(rows[0]["LocalTimeSpan"], datetime(2026, 3, 29, 4, 0))
 
     def test_cuartos_refrigeracion_uses_carlsjr_temperature_f_sensor(self) -> None:
         factlecturas_extended_df = self._readings_df(
@@ -390,7 +393,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "Temperatura F",
                     "device_type": "C\u00e1mara fr\u00eda",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 35.0,
                     "device_name": "C\u00e1mara fr\u00eda 1",
                 },
@@ -401,7 +404,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 201,
                     "sensor_type": "Humedad",
                     "device_type": "C\u00e1mara fr\u00eda",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 10),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 10),
                     "Value": 50.0,
                     "device_name": "C\u00e1mara fr\u00eda 1",
                 },
@@ -417,6 +420,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Temperatura F",
                     "device_type": "C\u00e1mara fr\u00eda",
                     "device_name": "C\u00e1mara fr\u00eda 1",
+                    "TimeZone": "America/Tijuana",
                 },
                 {
                     "DeviceId": 1,
@@ -426,6 +430,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Humedad",
                     "device_type": "C\u00e1mara fr\u00eda",
                     "device_name": "C\u00e1mara fr\u00eda 1",
+                    "TimeZone": "America/Tijuana",
                 },
             ]
         )
@@ -451,6 +456,169 @@ class SparkTransformationsTests(unittest.TestCase):
         )
         self.assertAlmostEqual(rows_by_sensor["Humedad"]["MeasurementValue"], 50.0)
 
+    def test_cuartos_refrigeracion_preserves_repeated_local_hour_in_all_paths(self) -> None:
+        dimensions_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeZone": "America/Denver",
+                }
+            ]
+        )
+        scenarios = [
+            (
+                "with_readings",
+                [
+                    {
+                        "DeviceId": 1,
+                        "SensorId": 10,
+                        "LocationId": 100,
+                        "SensorTyId": 200,
+                        "sensor_type": "Temperatura F",
+                        "device_type": "C\u00e1mara fr\u00eda",
+                        "TimeSpan": datetime(2026, 11, 1, 7, 5),
+                        "Value": 35.0,
+                        "device_name": "C\u00e1mara fr\u00eda 1",
+                    },
+                    {
+                        "DeviceId": 1,
+                        "SensorId": 10,
+                        "LocationId": 100,
+                        "SensorTyId": 200,
+                        "sensor_type": "Temperatura F",
+                        "device_type": "C\u00e1mara fr\u00eda",
+                        "TimeSpan": datetime(2026, 11, 1, 8, 5),
+                        "Value": 36.0,
+                        "device_name": "C\u00e1mara fr\u00eda 1",
+                    },
+                ],
+                [1, 1],
+            ),
+            (
+                "without_readings",
+                [{"device_type": "Oficina"}],
+                [0, 0],
+            ),
+        ]
+        operation_ids_by_scenario = {}
+
+        for scenario, fact_rows, expected_readings_count in scenarios:
+            with self.subTest(scenario=scenario):
+                result = cuartos_refrigeracion(
+                    self._readings_df(fact_rows),
+                    dimensions_df,
+                    "2026-11-01 07:00:00",
+                    "2026-11-01 08:00:00",
+                )
+
+                rows = result.orderBy("TimeSpan").collect()
+
+                self.assertEqual(
+                    [row["TimeSpan"] for row in rows],
+                    [
+                        datetime(2026, 11, 1, 7, 0),
+                        datetime(2026, 11, 1, 8, 0),
+                    ],
+                )
+                self.assertEqual(
+                    [row["LocalTimeSpan"] for row in rows],
+                    [
+                        datetime(2026, 11, 1, 1, 0),
+                        datetime(2026, 11, 1, 1, 0),
+                    ],
+                )
+                self.assertEqual(
+                    [row["ReadingsCount"] for row in rows],
+                    expected_readings_count,
+                )
+                self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+                self.assertEqual(
+                    result.dropDuplicates(["OperationId"]).count(),
+                    2,
+                )
+                operation_ids_by_scenario[scenario] = {
+                    row["TimeSpan"]: row["OperationId"]
+                    for row in rows
+                }
+
+        self.assertEqual(
+            operation_ids_by_scenario["with_readings"],
+            operation_ids_by_scenario["without_readings"],
+        )
+
+    def test_cuartos_refrigeracion_preserves_utc_hours_across_skipped_local_hour(self) -> None:
+        factlecturas_extended_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeSpan": datetime(2026, 3, 8, 8, 5),
+                    "Value": 35.0,
+                    "device_name": "C\u00e1mara fr\u00eda 1",
+                },
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeSpan": datetime(2026, 3, 8, 9, 5),
+                    "Value": 36.0,
+                    "device_name": "C\u00e1mara fr\u00eda 1",
+                },
+            ]
+        )
+        dimensions_df = self._readings_df(
+            [
+                {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "LocationId": 100,
+                    "SensorTyId": 200,
+                    "sensor_type": "Temperatura F",
+                    "device_type": "C\u00e1mara fr\u00eda",
+                    "TimeZone": "America/Denver",
+                }
+            ]
+        )
+
+        result = cuartos_refrigeracion(
+            factlecturas_extended_df,
+            dimensions_df,
+            "2026-03-08 08:00:00",
+            "2026-03-08 09:00:00",
+        )
+
+        rows = result.orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [row["TimeSpan"] for row in rows],
+            [
+                datetime(2026, 3, 8, 8, 0),
+                datetime(2026, 3, 8, 9, 0),
+            ],
+        )
+        self.assertEqual(
+            [row["LocalTimeSpan"] for row in rows],
+            [
+                datetime(2026, 3, 8, 1, 0),
+                datetime(2026, 3, 8, 3, 0),
+            ],
+        )
+        self.assertEqual([row["ReadingsCount"] for row in rows], [1, 1])
+        self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+        self.assertEqual(result.dropDuplicates(["OperationId"]).count(), 2)
+
     def test_presencia_uses_carlsjr_sensor_name_from_dimensions(self) -> None:
         factlecturas_extended_df = self._readings_df(
             [
@@ -461,7 +629,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "Camara de presencia",
                     "device_type": "Monitoreo camara",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 5),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 1.0,
                     "device_name": "Monitoreo 1",
                 },
@@ -472,7 +640,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "Camara de presencia",
                     "device_type": "Monitoreo camara",
-                    "LocalTimeSpan": datetime(2026, 3, 29, 10, 25),
+                    "TimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 0.0,
                     "device_name": "Monitoreo 1",
                 },
@@ -488,6 +656,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Camara de presencia",
                     "device_type": "Monitoreo camara",
                     "device_name": "Monitoreo 1",
+                    "TimeZone": "America/Denver",
                 },
             ]
         )
@@ -510,7 +679,7 @@ class SparkTransformationsTests(unittest.TestCase):
             [
                 StructField("DeviceId", IntegerType(), True),
                 StructField("SensorId", IntegerType(), True),
-                StructField("LocalTimeSpan", TimestampType(), True),
+                StructField("TimeSpan", TimestampType(), True),
                 StructField("sensor_type", StringType(), True),
                 StructField("MeasurementValue", DoubleType(), True),
             ]
@@ -528,10 +697,23 @@ class SparkTransformationsTests(unittest.TestCase):
             datetime(2026, 3, 29, 10, 0),
         )
 
-        rows = result.orderBy("LocalTimeSpan").collect()
+        rows = result.orderBy("TimeSpan").collect()
 
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["LocalTimeSpan"], datetime(2026, 3, 29, 10, 0))
+        self.assertEqual(rows[0]["TimeSpan"], datetime(2026, 3, 29, 10, 0))
+
+    def test_factreadingsmeasurement_processes_utc_timespan(self) -> None:
+        operations_path = PROJECT_SRC / "carlsjr" / "defs" / "assets" / "operations_assets.py"
+        datalake_path = PROJECT_SRC / "carlsjr" / "defs" / "transformations" / "datalake_readings_extended.py"
+        operations_source = operations_path.read_text(encoding="utf-8")
+        datalake_source = datalake_path.read_text(encoding="utf-8")
+
+        self.assertIn("read_lecturas_range(", datalake_source)
+        self.assertIn("read_lecturas_local_range", datalake_source)
+        self.assertIn("use_utc_range=True", operations_source)
+        self.assertIn('spark_max("TimeSpan")', operations_source)
+        self.assertIn('get_max_time_span(devices_df, "TimeSpan")', operations_source)
+        self.assertNotIn('spark_max("LocalTimeSpan")', operations_source)
 
     def test_factreadingsmeasurement_uses_stage_merge_without_window_cleanup(self) -> None:
         operations_path = PROJECT_SRC / "carlsjr" / "defs" / "assets" / "operations_assets.py"

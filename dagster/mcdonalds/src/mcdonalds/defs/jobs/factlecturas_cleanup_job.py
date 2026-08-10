@@ -47,6 +47,6 @@ def delete_old_factlecturas_op(context):
         }
     )
 
-@job(name="011_sense_lecturas_cleanup", tags={"job_type": "limpieza", "user_code": "mcdonalds"})
+@job(name="011_sense_lecturas_cleanup", tags={"job_type": "limpieza", "run_lane": "operational", "user_code_run_lane": "mcdonalds_operational", "user_code": "mcdonalds"})
 def factlecturas_cleanup_job():
     delete_old_factlecturas_op()

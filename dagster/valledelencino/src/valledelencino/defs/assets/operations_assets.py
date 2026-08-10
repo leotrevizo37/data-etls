@@ -53,14 +53,14 @@ def _current_operational_hour_start() -> datetime:
     )
 
 
-def _get_latest_real_local_hour(devices_df: DataFrame) -> Optional[datetime]:
+def _get_latest_real_time_span(devices_df: DataFrame) -> Optional[datetime]:
     if "ReadingsCount" not in devices_df.columns or len(devices_df.head(1)) == 0:
         return None
 
     latest_row = (
         devices_df
         .filter(col("ReadingsCount") > 0)
-        .agg(spark_max("LocalTimeSpan").alias("max_ts"))
+        .agg(spark_max("TimeSpan").alias("max_ts"))
         .collect()[0]
     )
     return latest_row.max_ts
@@ -93,19 +93,19 @@ def start_operations_run_and_get_range_op(
     window = build_operations_window(last_loaded_at)
     if window["watermark_in_future"]:
         context.log.warning(
-            "factReadingsMeasurement watermark %s is ahead of current local hour %s. "
-            "This run will clamp processing to the current local window.",
-            window["from_local"],
-            window["max_local_hour"],
+            "factReadingsMeasurement watermark %s is ahead of current UTC hour %s. "
+            "This run will clamp processing to the current UTC window.",
+            window["from_time_span"],
+            window["max_utc_hour"],
         )
 
     sql.mark_run_started("factReadingsMeasurement")
     context.log.info(
-        "factReadingsMeasurement local run window from "
+        "factReadingsMeasurement UTC run window from "
         + str(window["fetch_from"])
         + " to "
-        + str(window["max_local_hour"])
-        + " [tz=America/Ciudad_Juarez]"
+        + str(window["max_utc_hour"])
+        + " [tz=UTC]"
         + deps
     )
 
@@ -189,6 +189,7 @@ def load_datalake_readings_extended_op(
         raw_dimensions=raw_dims_df,
         fetch_readings_from=window["fetch_from"],
         fetch_readings_to=window["read_to_utc"],
+        use_utc_range=True,
     )
 
     if readings_extended_df is None:
@@ -242,7 +243,7 @@ def build_devices_df_op(
                 readings_extended_df,
                 dims,
                 window["fetch_from"],
-                window["max_local_hour"],
+                window["max_utc_hour"],
             )
 
             if method_df is None:
@@ -258,6 +259,7 @@ def build_devices_df_op(
                 col("MeasurementValue"),
                 col("MeasurementStdDev"),
                 col("Anomalies"),
+                col("TimeSpan"),
                 col("LocalTimeSpan"),
                 col("ReadingsCount"),
                 col("sensor_type").alias("SensorType"),
@@ -279,11 +281,11 @@ def build_devices_df_op(
 
         limited_df = limit_operations_rows_to_closed_hours(
             union_df,
-            window["max_local_hour"],
+            window["max_utc_hour"],
         )
-        latest_real_local_hour = _get_latest_real_local_hour(limited_df)
+        latest_real_time_span = _get_latest_real_time_span(limited_df)
 
-        if latest_real_local_hour is None:
+        if latest_real_time_span is None:
             context.log.info(
                 "No real readings found in the current operations window. "
                 "Skipping scaffold-only rows and keeping the watermark in place."
@@ -293,9 +295,9 @@ def build_devices_df_op(
         context.log.info(
             "Latest real operations hour found at %s. "
             "Rows scaffolded beyond that hour will not be materialized.",
-            latest_real_local_hour,
+            latest_real_time_span,
         )
-        return limited_df.filter(col("LocalTimeSpan") <= lit(latest_real_local_hour))
+        return limited_df.filter(col("TimeSpan") <= lit(latest_real_time_span))
     finally:
         readings_extended_df.unpersist()
 
@@ -342,8 +344,8 @@ def write_factreadingsmeasurement_op(
             "merged_rows": merged_rows,
             "rows_with_readings_count_gt_0": rows_with_readings_count_gt_0,
             "elapsed_seconds": round(perf_counter() - start_time, 3),
-            "from_local": str(window["fetch_from"]),
-            "to_local": str(window["max_local_hour"]),
+            "from_utc": str(window["fetch_from"]),
+            "to_utc": str(window["max_utc_hour"]),
             "max_time_span": str(max_time_span) if max_time_span else None,
             "succeeded": succeeded,
         }
@@ -376,6 +378,7 @@ def write_factreadingsmeasurement_op(
                     "LocationId",
                     "DeviceType",
                     "SensorType",
+                    "TimeSpan",
                     "LocalTimeSpan",
                     "MeasurementValue",
                     "MeasurementStdDev",
@@ -385,7 +388,7 @@ def write_factreadingsmeasurement_op(
                 run_id,
             )
             merged_rows = sqlserver.merge_fact_readings_measurement(run_id)
-            max_time_span = spark_res.get_max_time_span(devices_df, "LocalTimeSpan")
+            max_time_span = spark_res.get_max_time_span(devices_df, "TimeSpan")
             succeeded = True
             context.log.info(
                 str(staged_rows)
@@ -429,7 +432,7 @@ def write_factreadingsmeasurement_op(
     return (
         None,
         {
-            "to_local": window["max_local_hour"],
+            "to_time_span": window["max_utc_hour"],
             "original_last_loaded_at": window["original_last_loaded_at"],
             "max_time_span": max_time_span,
             "succeeded": succeeded,
@@ -462,7 +465,7 @@ def finalize_operations_run_op(
     if not succeeded:
         context.log.warning("error readings: " + str(error_message))
 
-    to_local: datetime = hourly_readings["to_local"]
+    to_time_span: datetime = hourly_readings["to_time_span"]
     original_last_loaded_at: datetime = hourly_readings["original_last_loaded_at"]
     max_time_span: Optional[datetime] = hourly_readings["max_time_span"]
 
@@ -470,7 +473,7 @@ def finalize_operations_run_op(
         succeeded=succeeded,
         original_last_loaded_at=original_last_loaded_at,
         max_time_span=max_time_span,
-        max_local_hour=to_local,
+        max_utc_hour=to_time_span,
     )
 
     if not succeeded:
@@ -499,7 +502,7 @@ def finalize_operations_run_op(
     )
     metadata: Dict[str, Any] = {
         "succeeded": succeeded,
-        "to_local": str(to_local),
+        "to_utc": str(to_time_span),
         "max_time_span": str(max_time_span) if max_time_span else None,
         "original_last_loaded_at": str(original_last_loaded_at),
     }

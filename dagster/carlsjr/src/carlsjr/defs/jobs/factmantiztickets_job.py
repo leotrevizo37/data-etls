@@ -8,5 +8,5 @@ fact_mantiz_tickets_job = define_asset_job(
         AssetKey(["carlsjr", "dwh_factmantiztickettextinsights"]),
     ),
     executor_def=in_process_executor,
-    tags={"job_type": "mantiz", "user_code": "carlsjr"},
+    tags={"job_type": "mantiz", "run_lane": "operational", "user_code_run_lane": "carlsjr_operational", "user_code": "carlsjr"},
 )

@@ -5,7 +5,8 @@ from pyspark.sql.functions import (
     col,
     date_trunc,
     lit,
-    expr)
+    expr,
+    from_utc_timestamp)
 from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
@@ -43,8 +44,12 @@ def maquinas_soda(
         group_with_guid_df = (
             empty_base_df
             .withColumn(
+                "LocalTimeSpan",
+                from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+            )
+            .withColumn(
                 "OperationId",
-                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(1).cast("integer"))
@@ -68,7 +73,7 @@ def maquinas_soda(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -76,7 +81,7 @@ def maquinas_soda(
             "ReadingsCount",
             "device_type",
         )
-        .withColumn("LocalTimeSpan", date_trunc("hour", col("LocalTimeSpan")))
+        .withColumn("TimeSpan", date_trunc("hour", col("TimeSpan")))
     )
 
     pressure_stats_df = (
@@ -91,7 +96,7 @@ def maquinas_soda(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -108,7 +113,7 @@ def maquinas_soda(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -137,7 +142,7 @@ def maquinas_soda(
             on=[
                 "SensorId",
                 "DeviceId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "SensorTyId",
                 "device_type",
                 "LocationId",
@@ -156,8 +161,12 @@ def maquinas_soda(
     group_with_guid_df = (
         scaffold_enriched
         .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+        )
+        .withColumn(
             "OperationId",
-            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
         )
     )
 

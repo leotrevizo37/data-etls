@@ -105,6 +105,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_name": sensor_name,
                     "device_type": device_type,
                     "device_name": device_name,
+                    "TimeZone": "America/Chihuahua",
                 }
             )
             for read_idx, value in enumerate(values):
@@ -119,7 +120,7 @@ class SparkTransformationsTests(unittest.TestCase):
                         "sensor_name": sensor_name,
                         "device_type": device_type,
                         "device_name": device_name,
-                        "LocalTimeSpan": datetime(2026, 3, 29, 10, 5 + read_idx * 20),
+                        "TimeSpan": datetime(2026, 3, 29, 10, 5 + read_idx * 20),
                         "Value": float(value),
                     }
                 )
@@ -134,6 +135,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 "sensor_name": "Nivel",
                 "device_type": device_type,
                 "device_name": device_name,
+                "TimeZone": "America/Chihuahua",
             }
         )
         reading_rows.append(
@@ -147,7 +149,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 "sensor_name": "Nivel",
                 "device_type": device_type,
                 "device_name": device_name,
-                "LocalTimeSpan": datetime(2026, 3, 29, 10, 15),
+                "TimeSpan": datetime(2026, 3, 29, 10, 15),
                 "Value": 999.0,
             }
         )
@@ -181,8 +183,12 @@ class SparkTransformationsTests(unittest.TestCase):
                 self.assertEqual({row["SensorId"] for row in rows}, expected_sensor_ids)
                 self.assertEqual({row["device_type"] for row in rows}, {device_type})
                 self.assertEqual(
-                    {row["LocalTimeSpan"] for row in rows},
+                    {row["TimeSpan"] for row in rows},
                     {datetime(2026, 3, 29, 10, 0)},
+                )
+                self.assertEqual(
+                    {row["LocalTimeSpan"] for row in rows},
+                    {datetime(2026, 3, 29, 4, 0)},
                 )
                 self.assertEqual(len({row["OperationId"] for row in rows}), 6)
                 self.assertEqual(
@@ -210,7 +216,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 StructField("sensor_name", StringType(), True),
                 StructField("device_type", StringType(), True),
                 StructField("device_name", StringType(), True),
-                StructField("LocalTimeSpan", TimestampType(), True),
+                StructField("TimeSpan", TimestampType(), True),
                 StructField("Value", DoubleType(), True),
             ]
         )
@@ -300,6 +306,19 @@ class SparkTransformationsTests(unittest.TestCase):
 
                 self.assertIn(".rlike(", source)
                 self.assertNotIn(".isin(\"Cuarto Frio 2\"", source)
+
+    def test_factreadingsmeasurement_processes_utc_timespan(self) -> None:
+        operations_path = PROJECT_SRC / "emerson" / "defs" / "assets" / "operations_assets.py"
+        datalake_path = PROJECT_SRC / "emerson" / "defs" / "transformations" / "datalake_readings_extended.py"
+        operations_source = operations_path.read_text(encoding="utf-8")
+        datalake_source = datalake_path.read_text(encoding="utf-8")
+
+        self.assertIn("read_lecturas_range(", datalake_source)
+        self.assertIn("read_lecturas_local_range", datalake_source)
+        self.assertIn("use_utc_range=True", operations_source)
+        self.assertIn('spark_max("TimeSpan")', operations_source)
+        self.assertIn('get_max_time_span(devices_df, "TimeSpan")', operations_source)
+        self.assertNotIn('spark_max("LocalTimeSpan")', operations_source)
 
     def test_factreadingsmeasurement_uses_stage_merge_without_window_cleanup(self) -> None:
         operations_path = PROJECT_SRC / "emerson" / "defs" / "assets" / "operations_assets.py"

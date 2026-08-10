@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lit, expr
+from pyspark.sql.functions import col, lit, expr, from_utc_timestamp
 from pyspark import StorageLevel
 
 from .lecturas_time_hours import lecturas_time_hours
@@ -40,8 +40,12 @@ def cuartos_refrigeracion(
         group_with_guid_df = (
             empty_base_df
             .withColumn(
+                "LocalTimeSpan",
+                from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+            )
+            .withColumn(
                 "OperationId",
-                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+                expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
             .withColumn("Anomalies", lit(1).cast("integer"))
@@ -67,7 +71,7 @@ def cuartos_refrigeracion(
                 "LocationId",
                 "SensorTyId",
                 "SensorId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
                 "Anomalies",
@@ -91,7 +95,7 @@ def cuartos_refrigeracion(
                 "LocationId",
                 "SensorTyId",
                 "SensorId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
                 "Anomalies",
@@ -115,7 +119,7 @@ def cuartos_refrigeracion(
                 "LocationId",
                 "SensorTyId",
                 "SensorId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
                 "Anomalies",
@@ -145,7 +149,7 @@ def cuartos_refrigeracion(
             "LocationId",
             "SensorTyId",
             "SensorId",
-            "LocalTimeSpan",
+            "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
             "Anomalies",
@@ -174,7 +178,7 @@ def cuartos_refrigeracion(
             on=[
                 "SensorId",
                 "DeviceId",
-                "LocalTimeSpan",
+                "TimeSpan",
                 "SensorTyId",
                 "device_type",
                 "LocationId",
@@ -193,8 +197,12 @@ def cuartos_refrigeracion(
     group_with_guid_df = (
         scaffold_enriched
         .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone"))
+        )
+        .withColumn(
             "OperationId",
-            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(LocalTimeSpan as string))), 21, 12)))")
+            expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
         )
     )
 

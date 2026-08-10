@@ -47,6 +47,7 @@ class DimSidonProdDimensionsMergeSqlTests(unittest.TestCase):
         self.assertIn("WHEN MATCHED AND EXISTS", sql)
         self.assertIn("EXCEPT", sql)
         self.assertIn("target.Active = source.Active", sql)
+        self.assertIn("target.TimeZone = source.TimeZone", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY SOURCE AND target.Active = 1 THEN", sql)
         self.assertIn("target.Active = 0", sql)

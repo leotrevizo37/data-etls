@@ -24,3 +24,11 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["mcdonalds_cdp", "dbo_sublocation_tys"]),
     group_name="mcdonalds_cdp",
 )
+dbo_aspnetusers = SourceAsset(
+    key=AssetKey(["mcdonalds_cdp", "dbo_aspnetusers"]),
+    group_name="mcdonalds_cdp",
+)
+dbo_systemlogs = SourceAsset(
+    key=AssetKey(["mcdonalds_cdp", "dbo_systemlogs"]),
+    group_name="mcdonalds_cdp",
+)
