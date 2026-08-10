@@ -123,8 +123,8 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             "SMARTFIT_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS=1",
             example,
         )
-        self.assertIn('cron_schedule="*/10 * * * *"', schedule)
-        self.assertIn("DefaultScheduleStatus.RUNNING", schedule)
+        self.assertIn('cron_schedule="*/30 * * * *"', schedule)
+        self.assertIn("DefaultScheduleStatus.STOPPED", schedule)
         self.assertIn('name="022_sense_redings_audits"', job)
         self.assertIn(
             'name="022_sense_redings_audits_every_10m"',
