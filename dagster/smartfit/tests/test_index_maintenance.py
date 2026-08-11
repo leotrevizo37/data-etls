@@ -43,12 +43,12 @@ class IndexMaintenanceTests(unittest.TestCase):
         self.assertEqual(defaults["max_dop"], 1)
         self.assertEqual(defaults["use_online_rebuild"], 0)
 
-    def test_schedule_runs_weekly_at_expected_time(self) -> None:
+    def test_schedule_runs_at_expected_times(self) -> None:
         cron = _schedule_keyword(SCHEDULE_FILE, "cron_schedule")
         timezone = _schedule_keyword(SCHEDULE_FILE, "execution_timezone")
         status = _schedule_keyword(SCHEDULE_FILE, "default_status")
 
-        self.assertEqual(ast.literal_eval(cron), "40 4 * * 0")
+        self.assertEqual(ast.literal_eval(cron), ["40 4 * * 0", "0 2 * * 3"])
         self.assertEqual(ast.literal_eval(timezone), "America/Ciudad_Juarez")
         self.assertEqual(status.attr, "RUNNING")
 

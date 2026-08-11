@@ -6,16 +6,16 @@ from ..jobs import fact_smartaudits_categories_job, smartaudits_classifier_train
 smartaudits_categories_sched_every_6h = ScheduleDefinition(
     name="110_smartaudits_categories_every_6h",
     job=fact_smartaudits_categories_job,
-    cron_schedule="25 */6 * * *",
+    cron_schedule="25 2 * * *",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 smartaudits_classifier_training_daily = ScheduleDefinition(
     name="111_smartaudits_classifier_training_daily",
     job=smartaudits_classifier_training_job,
-    cron_schedule="10 2 * * *",
+    cron_schedule="10 2 * * 0",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 

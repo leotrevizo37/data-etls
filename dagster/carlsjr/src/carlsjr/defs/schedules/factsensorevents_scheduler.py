@@ -6,7 +6,10 @@ from ..jobs import fact_sensor_events_job
 sensor_events_sched_every_6h = ScheduleDefinition(
     name="021_sense_sensor_events_every_6h",
     job=fact_sensor_events_job,
-    cron_schedule="40 */6 * * *",
+    cron_schedule=[
+        "40 */6 * * *",
+        "0 9,16 * * *",
+    ],
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.STOPPED,
 )
