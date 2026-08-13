@@ -18,6 +18,8 @@ IF OBJECT_ID(N'observability.factDagsterAssetExecutionDaily', N'U') IS NULL
             [Date] DATE NOT NULL,
             ExecutionCount INT NOT NULL,
             MaterializationCount INT NOT NULL,
+            InsertedRowCount BIGINT NULL,
+            MergedRowCount BIGINT NULL,
             ExecutionFailureCount INT NOT NULL,
             AssetCheckCount INT NOT NULL,
             AssetCheckFailureCount INT NOT NULL,

@@ -76,6 +76,258 @@ materializations AS (
         event_logs.asset_key,
         event_logs.partition
 ),
+materialization_metadata_values AS (
+    SELECT
+        event_logs.run_id,
+        event_logs.step_key,
+        event_logs.asset_key,
+        event_logs.partition,
+        metadata_entry ->> 'label' AS metadata_key,
+        NULLIF(
+            metadata_entry -> 'entry_data' ->> 'value',
+            ''
+        )::BIGINT AS metadata_value
+    FROM event_logs
+    INNER JOIN materializations
+        ON materializations.run_id = event_logs.run_id
+        AND materializations.step_key = event_logs.step_key
+        AND materializations.asset_key = event_logs.asset_key
+        AND materializations.partition IS NOT DISTINCT FROM event_logs.partition
+    CROSS JOIN LATERAL jsonb_array_elements(
+        COALESCE(
+            event_logs.event::jsonb #> '{dagster_event,event_specific_data,materialization,metadata_entries}',
+            '[]'::jsonb
+        )
+    ) AS metadata_entry
+    WHERE
+        event_logs.dagster_event_type = 'ASSET_MATERIALIZATION'
+        AND metadata_entry ->> 'label' IN (
+            'row_count',
+            'staged_row_count',
+            'staged_rows',
+            'merged_rows',
+            'evaluated_rows',
+            'affected_rows',
+            'review_queue_rows',
+            'review_queue_merged_rows',
+            'detail_row_count'
+        )
+),
+materialization_row_metadata AS (
+    SELECT
+        run_id,
+        step_key,
+        asset_key,
+        partition,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'row_count'
+        ) AS row_count,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'staged_row_count'
+        ) AS staged_row_count,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'staged_rows'
+        ) AS staged_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'merged_rows'
+        ) AS merged_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'evaluated_rows'
+        ) AS evaluated_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'affected_rows'
+        ) AS affected_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'review_queue_rows'
+        ) AS review_queue_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'review_queue_merged_rows'
+        ) AS review_queue_merged_rows,
+        MAX(metadata_value) FILTER (
+            WHERE metadata_key = 'detail_row_count'
+        ) AS detail_row_count
+    FROM materialization_metadata_values
+    GROUP BY run_id, step_key, asset_key, partition
+),
+asset_check_row_metadata AS (
+    SELECT
+        asset_check_executions.run_id,
+        asset_check_executions.asset_key,
+        MAX(
+            NULLIF(check_metadata.value ->> 'value', '')::BIGINT
+        ) AS row_count
+    FROM asset_check_executions
+    CROSS JOIN LATERAL jsonb_each(
+        COALESCE(
+            asset_check_executions.evaluation_event::jsonb #> '{dagster_event,event_specific_data,metadata}',
+            '{}'::jsonb
+        )
+    ) AS check_metadata
+    WHERE
+        asset_check_executions.asset_key IS NOT NULL
+        AND asset_check_executions.asset_key::jsonb ->> 0 = :user_code
+        AND asset_check_executions.evaluation_event IS NOT NULL
+        AND asset_check_executions.evaluation_event_timestamp
+            < CAST(:to_utc AS TIMESTAMP)
+        AND check_metadata.key = 'row_count'
+    GROUP BY
+        asset_check_executions.run_id,
+        asset_check_executions.asset_key
+),
+run_asset_materialization_metadata AS (
+    SELECT
+        materializations.run_id,
+        materializations.asset_key,
+        CAST(materializations.materialized_at AS DATE) AS metric_date,
+        SUM(materialization_row_metadata.row_count) AS row_count,
+        SUM(
+            materialization_row_metadata.staged_row_count
+        ) AS staged_row_count,
+        SUM(materialization_row_metadata.staged_rows) AS staged_rows,
+        SUM(materialization_row_metadata.merged_rows) AS merged_rows,
+        SUM(
+            materialization_row_metadata.evaluated_rows
+        ) AS evaluated_rows,
+        SUM(materialization_row_metadata.affected_rows) AS affected_rows,
+        SUM(
+            materialization_row_metadata.review_queue_rows
+        ) AS review_queue_rows,
+        SUM(
+            materialization_row_metadata.review_queue_merged_rows
+        ) AS review_queue_merged_rows,
+        SUM(
+            materialization_row_metadata.detail_row_count
+        ) AS detail_row_count
+    FROM materializations
+    LEFT JOIN materialization_row_metadata
+        ON materialization_row_metadata.run_id = materializations.run_id
+        AND materialization_row_metadata.step_key = materializations.step_key
+        AND materialization_row_metadata.asset_key = materializations.asset_key
+        AND materialization_row_metadata.partition
+            IS NOT DISTINCT FROM materializations.partition
+    WHERE
+        materializations.materialized_at < CAST(:to_utc AS TIMESTAMP)
+        AND (
+            :from_utc IS NULL
+            OR materializations.materialized_at
+                >= CAST(:from_utc AS TIMESTAMP)
+        )
+    GROUP BY
+        materializations.run_id,
+        materializations.asset_key,
+        CAST(materializations.materialized_at AS DATE)
+),
+materialization_row_changes AS (
+    SELECT
+        run_asset_materialization_metadata.asset_key,
+        run_asset_materialization_metadata.metric_date,
+        CASE
+            WHEN
+                run_asset_materialization_metadata.staged_row_count
+                    IS NOT NULL
+                OR run_asset_materialization_metadata.staged_rows IS NOT NULL
+                OR run_asset_materialization_metadata.evaluated_rows
+                    IS NOT NULL
+                OR run_asset_materialization_metadata.review_queue_rows
+                    IS NOT NULL
+                OR run_asset_materialization_metadata.detail_row_count
+                    IS NOT NULL
+                OR (
+                    (
+                        run_asset_materialization_metadata.merged_rows
+                            IS NOT NULL
+                        OR run_asset_materialization_metadata.asset_key::jsonb
+                            ->> -1 IN (
+                                'dwh_factlecturas',
+                                'dwh_factReadingsMeasurement'
+                            )
+                    )
+                    AND COALESCE(
+                        run_asset_materialization_metadata.row_count,
+                        asset_check_row_metadata.row_count
+                    ) IS NOT NULL
+                )
+                THEN CAST(
+                    COALESCE(
+                        run_asset_materialization_metadata.staged_row_count,
+                        run_asset_materialization_metadata.staged_rows,
+                        run_asset_materialization_metadata.evaluated_rows,
+                        COALESCE(
+                            run_asset_materialization_metadata.row_count,
+                            asset_check_row_metadata.row_count
+                        ),
+                        0
+                    )
+                    + COALESCE(
+                        run_asset_materialization_metadata.review_queue_rows,
+                        0
+                    )
+                    + COALESCE(
+                        run_asset_materialization_metadata.detail_row_count,
+                        0
+                    )
+                    AS BIGINT
+                )
+        END AS inserted_row_count,
+        CASE
+            WHEN
+                run_asset_materialization_metadata.merged_rows IS NOT NULL
+                OR run_asset_materialization_metadata.affected_rows IS NOT NULL
+                OR run_asset_materialization_metadata.review_queue_merged_rows
+                    IS NOT NULL
+                OR (
+                    (
+                        run_asset_materialization_metadata.staged_row_count
+                            IS NOT NULL
+                        OR run_asset_materialization_metadata.staged_rows
+                            IS NOT NULL
+                        OR run_asset_materialization_metadata.asset_key::jsonb
+                            ->> -1 IN (
+                                'dwh_factReadingsMeasurement',
+                                'dwh_factsensorevents',
+                                'observability_factredingsaudits',
+                                'observability_facturlavailabilitydaily',
+                                'observability_factdagsterassetexecutiondaily'
+                            )
+                    )
+                    AND COALESCE(
+                        run_asset_materialization_metadata.row_count,
+                        asset_check_row_metadata.row_count
+                    ) IS NOT NULL
+                )
+                THEN CAST(
+                    COALESCE(
+                        run_asset_materialization_metadata.merged_rows,
+                        run_asset_materialization_metadata.affected_rows,
+                        COALESCE(
+                            run_asset_materialization_metadata.row_count,
+                            asset_check_row_metadata.row_count
+                        ),
+                        0
+                    )
+                    + COALESCE(
+                        run_asset_materialization_metadata.review_queue_merged_rows,
+                        0
+                    )
+                    AS BIGINT
+                )
+        END AS merged_row_count
+    FROM run_asset_materialization_metadata
+    LEFT JOIN asset_check_row_metadata
+        ON asset_check_row_metadata.run_id
+            = run_asset_materialization_metadata.run_id
+        AND asset_check_row_metadata.asset_key
+            = run_asset_materialization_metadata.asset_key
+),
+asset_row_aggregates AS (
+    SELECT
+        asset_key,
+        metric_date,
+        SUM(inserted_row_count)::BIGINT AS inserted_row_count,
+        SUM(merged_row_count)::BIGINT AS merged_row_count
+    FROM materialization_row_changes
+    GROUP BY asset_key, metric_date
+),
 step_failures AS (
     SELECT
         event_logs.run_id,
@@ -643,6 +895,9 @@ asset_dates AS (
     UNION
     SELECT asset_key, metric_date
     FROM asset_busy_aggregates
+    UNION
+    SELECT asset_key, metric_date
+    FROM asset_row_aggregates
 )
 SELECT
     :user_code AS user_code,
@@ -653,6 +908,8 @@ SELECT
         execution_aggregates.materialization_count,
         0
     ) AS materialization_count,
+    asset_row_aggregates.inserted_row_count,
+    asset_row_aggregates.merged_row_count,
     COALESCE(
         execution_aggregates.execution_failure_count,
         0
@@ -721,6 +978,9 @@ LEFT JOIN asset_check_aggregates
 LEFT JOIN asset_busy_aggregates
     ON asset_busy_aggregates.asset_key = asset_dates.asset_key
     AND asset_busy_aggregates.metric_date = asset_dates.metric_date
+LEFT JOIN asset_row_aggregates
+    ON asset_row_aggregates.asset_key = asset_dates.asset_key
+    AND asset_row_aggregates.metric_date = asset_dates.metric_date
 ORDER BY asset_dates.metric_date, asset_dates.asset_key
 """
 FACT_DAGSTER_ASSET_EXECUTION_DAILY_MERGE_SQL = """
@@ -732,6 +992,8 @@ USING (
         CAST(? AS DATE) AS [Date],
         CAST(? AS INT) AS ExecutionCount,
         CAST(? AS INT) AS MaterializationCount,
+        CAST(? AS BIGINT) AS InsertedRowCount,
+        CAST(? AS BIGINT) AS MergedRowCount,
         CAST(? AS INT) AS ExecutionFailureCount,
         CAST(? AS INT) AS AssetCheckCount,
         CAST(? AS INT) AS AssetCheckFailureCount,
@@ -752,6 +1014,8 @@ WHEN MATCHED THEN
     UPDATE SET
         ExecutionCount = source.ExecutionCount,
         MaterializationCount = source.MaterializationCount,
+        InsertedRowCount = source.InsertedRowCount,
+        MergedRowCount = source.MergedRowCount,
         ExecutionFailureCount = source.ExecutionFailureCount,
         AssetCheckCount = source.AssetCheckCount,
         AssetCheckFailureCount = source.AssetCheckFailureCount,
@@ -771,6 +1035,8 @@ WHEN NOT MATCHED THEN
         [Date],
         ExecutionCount,
         MaterializationCount,
+        InsertedRowCount,
+        MergedRowCount,
         ExecutionFailureCount,
         AssetCheckCount,
         AssetCheckFailureCount,
@@ -789,6 +1055,8 @@ WHEN NOT MATCHED THEN
         source.[Date],
         source.ExecutionCount,
         source.MaterializationCount,
+        source.InsertedRowCount,
+        source.MergedRowCount,
         source.ExecutionFailureCount,
         source.AssetCheckCount,
         source.AssetCheckFailureCount,
@@ -850,6 +1118,8 @@ def observability_factdagsterassetexecutiondaily(
                 row["metric_date"],
                 row["execution_count"],
                 row["materialization_count"],
+                row["inserted_row_count"],
+                row["merged_row_count"],
                 row["execution_failure_count"],
                 row["asset_check_count"],
                 row["asset_check_failure_count"],

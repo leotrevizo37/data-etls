@@ -145,6 +145,8 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
                 "metric_date": date(2026, 8, 10),
                 "execution_count": 2,
                 "materialization_count": 1,
+                "inserted_row_count": 4500,
+                "merged_row_count": 4300,
                 "execution_failure_count": 1,
                 "asset_check_count": 1,
                 "asset_check_failure_count": 1,
@@ -192,6 +194,8 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
                 date(2026, 8, 10),
                 2,
                 1,
+                4500,
+                4300,
                 1,
                 1,
                 1,
@@ -306,14 +310,24 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
         self.assertIn("'queued_seconds'", source_sql)
         self.assertIn("'evaluation_event_storage_id'", source_sql)
         self.assertIn("'materialization_event_storage_id'", source_sql)
+        self.assertIn("materialization_metadata_values AS", source_sql)
+        self.assertIn("asset_check_row_metadata AS", source_sql)
+        self.assertIn("check_metadata.key = 'row_count'", source_sql)
+        self.assertIn("'staged_row_count'", source_sql)
+        self.assertIn("'merged_rows'", source_sql)
+        self.assertIn("'evaluated_rows'", source_sql)
+        self.assertIn("'affected_rows'", source_sql)
+        self.assertIn("'review_queue_rows'", source_sql)
+        self.assertIn("'review_queue_merged_rows'", source_sql)
+        self.assertIn("'detail_row_count'", source_sql)
+        self.assertIn("AS inserted_row_count", source_sql)
+        self.assertIn("AS merged_row_count", source_sql)
 
-    def test_ddl_job_and_schedule_are_scoped_to_carlsjr(self) -> None:
+    def test_global_ddl_job_and_schedule_cover_all_code_locations(self) -> None:
         sql_name = "023_observability_factDagsterAssetExecutionDaily.sql"
         sql_path = (
             REPOSITORY_ROOT
             / "sql"
-            / "user_codes"
-            / "carlsjr"
             / "init"
             / sql_name
         )
@@ -325,6 +339,11 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
         )
         self.assertIn("StepDetailsJson NVARCHAR(MAX) NOT NULL", ddl)
         self.assertIn("AssetCheckDetailsJson NVARCHAR(MAX) NOT NULL", ddl)
+        self.assertIn("InsertedRowCount BIGINT NULL", ddl)
+        self.assertIn("MergedRowCount BIGINT NULL", ddl)
+        self.assertIn("N'InsertedRowCount'", ddl)
+        self.assertIn("N'MergedRowCount'", ddl)
+        self.assertIn("LastLoadedAt = NULL", ddl)
         self.assertEqual(ddl.count("CHECK (ISJSON("), 2)
         self.assertIn(
             "PRIMARY KEY CLUSTERED ([Date], UserCode, AssetKey)",
@@ -334,10 +353,61 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
 
         user_codes_root = REPOSITORY_ROOT / "sql" / "user_codes"
         for user_code_path in user_codes_root.iterdir():
-            if user_code_path.is_dir() and user_code_path.name != "carlsjr":
+            if user_code_path.is_dir():
                 self.assertFalse(
                     (user_code_path / "init" / sql_name).exists()
                 )
+
+        for user_code in (
+            "bafar",
+            "bafar_poc_gabinete",
+            "carlsjr",
+            "emerson",
+            "mcdonalds",
+            "mcdonalds_cdp",
+            "smartfit",
+            "valledelencino",
+        ):
+            definitions_root = (
+                REPOSITORY_ROOT
+                / "dagster"
+                / user_code
+                / "src"
+                / user_code
+                / "defs"
+            )
+            asset_source = (
+                definitions_root
+                / "assets"
+                / "observability_factDagsterAssetExecutionDaily.py"
+            ).read_text(encoding="utf-8")
+            job_source = (
+                definitions_root
+                / "jobs"
+                / "observability_dagster_asset_execution_job.py"
+            ).read_text(encoding="utf-8")
+            schedule_source = (
+                definitions_root
+                / "schedules"
+                / "observability_dagster_asset_execution_schedule.py"
+            ).read_text(encoding="utf-8")
+            self.assertIn(f'key_prefix=["{user_code}"]', asset_source)
+            self.assertIn(f'"user_code": "{user_code}"', asset_source)
+            self.assertIn(
+                f'["{user_code}", '
+                '"observability_factdagsterassetexecutiondaily"]',
+                job_source,
+            )
+            self.assertIn(
+                f'"user_code_run_lane": "{user_code}_observability"',
+                job_source,
+            )
+            self.assertIn(f'"user_code": "{user_code}"', job_source)
+            self.assertIn('cron_schedule="15 1 * * *"', schedule_source)
+            self.assertIn(
+                "default_status=DefaultScheduleStatus.RUNNING",
+                schedule_source,
+            )
 
         job = job_module.observability_dagster_asset_execution_job
         self.assertEqual(
@@ -359,7 +429,7 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
             schedule.name,
             "123_observability_dagster_asset_execution_every_2h",
         )
-        self.assertEqual(schedule.cron_schedule, "15 */2 * * *")
+        self.assertEqual(schedule.cron_schedule, "15 1 * * *")
         self.assertEqual(
             schedule.execution_timezone,
             "America/Ciudad_Juarez",
