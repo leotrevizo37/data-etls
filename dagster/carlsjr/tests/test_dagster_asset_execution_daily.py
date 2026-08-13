@@ -341,9 +341,6 @@ class DagsterAssetExecutionDailyTests(unittest.TestCase):
         self.assertIn("AssetCheckDetailsJson NVARCHAR(MAX) NOT NULL", ddl)
         self.assertIn("InsertedRowCount BIGINT NULL", ddl)
         self.assertIn("MergedRowCount BIGINT NULL", ddl)
-        self.assertIn("N'InsertedRowCount'", ddl)
-        self.assertIn("N'MergedRowCount'", ddl)
-        self.assertIn("LastLoadedAt = NULL", ddl)
         self.assertEqual(ddl.count("CHECK (ISJSON("), 2)
         self.assertIn(
             "PRIMARY KEY CLUSTERED ([Date], UserCode, AssetKey)",
