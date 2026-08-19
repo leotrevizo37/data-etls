@@ -2,7 +2,24 @@ from datetime import datetime
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lag, lead, lit, max, row_number, sum, when, unix_timestamp
+from pyspark.sql.functions import (
+    col,
+    collect_set,
+    concat,
+    concat_ws,
+    from_utc_timestamp,
+    lag,
+    lead,
+    lit,
+    max,
+    md5,
+    row_number,
+    size,
+    substring,
+    sum,
+    unix_timestamp,
+    when,
+)
 from pyspark.sql.window import Window
 
 
@@ -29,7 +46,24 @@ def sensor_events(
     base = factlecturas_extended_df.filter(
         (col("device_type").rlike(PRESENCE_DEVICE_PATTERN))
         & (col("sensor_type") == PRESENCE_SENSOR_TYPE)
-        & (col("Value").isin(PRESENCE_VALUE, ABSENCE_VALUE))
+    )
+
+    reading_window = Window.partitionBy("SensorId", "TimeSpan")
+    base = (
+        base
+        .withColumn(
+            "reading_variants",
+            size(collect_set("Value").over(reading_window)),
+        )
+        .withColumn(
+            "reading_row_number",
+            row_number().over(reading_window.orderBy("ReadId")),
+        )
+        .filter(
+            (col("reading_variants") == lit(1))
+            & (col("reading_row_number") == lit(1))
+            & (col("Value").isin(PRESENCE_VALUE, ABSENCE_VALUE))
+        )
     )
 
     sensor_window = Window.partitionBy("SensorId").orderBy("TimeSpan")
@@ -132,6 +166,35 @@ def sensor_events(
             lit(True),
         )
         .otherwise(lit(False)),
+    )
+
+    result = (
+        result
+        .withColumn(
+            "event_hash",
+            md5(
+                concat(
+                    lit("event"),
+                    col("SensorId").cast("string"),
+                    col("TimeSpan").cast("string"),
+                )
+            ),
+        )
+        .withColumn(
+            "ReadId",
+            concat_ws(
+                "-",
+                substring("event_hash", 1, 8),
+                substring("event_hash", 9, 4),
+                substring("event_hash", 13, 4),
+                substring("event_hash", 17, 4),
+                substring("event_hash", 21, 12),
+            ),
+        )
+        .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone")),
+        )
     )
 
     return result.select(

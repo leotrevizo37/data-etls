@@ -286,6 +286,27 @@ def temperature_events(
             .otherwise(lit(False)),
         )
         .filter(col("EventMinutes") >= lit(TEMPERATURE_EVENT_MINUTES))
+        .withColumn(
+            "event_hash",
+            F.md5(
+                F.concat(
+                    lit("event"),
+                    col("SensorId").cast("string"),
+                    col("TimeSpan").cast("string"),
+                )
+            ),
+        )
+        .withColumn(
+            "ReadId",
+            F.concat_ws(
+                "-",
+                F.substring("event_hash", 1, 8),
+                F.substring("event_hash", 9, 4),
+                F.substring("event_hash", 13, 4),
+                F.substring("event_hash", 17, 4),
+                F.substring("event_hash", 21, 12),
+            ),
+        )
         .select(
             col("ReadId"),
             col("SensorId"),

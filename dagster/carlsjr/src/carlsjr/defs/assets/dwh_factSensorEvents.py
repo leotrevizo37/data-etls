@@ -133,6 +133,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             raw_dimensions=dimensions_df,
             fetch_readings_from=readings_from,
             fetch_readings_to=to_utc,
+            use_utc_range=True,
         )
 
         if readings_extended_df is None:
