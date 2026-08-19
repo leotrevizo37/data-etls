@@ -297,7 +297,7 @@ def temperature_events(
             ),
         )
         .withColumn(
-            "ReadId",
+            "EventId",
             F.concat_ws(
                 "-",
                 F.substring("event_hash", 1, 8),
@@ -308,6 +308,7 @@ def temperature_events(
             ),
         )
         .select(
+            col("EventId"),
             col("ReadId"),
             col("SensorId"),
             col("DeviceId"),

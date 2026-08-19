@@ -84,10 +84,11 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertIn("FROM stg.factSensorEvents", merge_section)
         self.assertIn("DECLARE @RunId NVARCHAR(100) = ?", merge_section)
         self.assertIn("WHERE RunId = @RunId", merge_section)
+        self.assertIn("target.EventId = source.EventId", merge_section)
         self.assertIn("target.ReadId = source.ReadId", merge_section)
         for column in columns:
             self.assertIn("target." + column + " = source." + column, merge_section)
-        for column in ("ReadId", *columns):
+        for column in ("EventId", "ReadId", *columns):
             self.assertIn("source." + column, insert_section)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", merge_section)
         self.assertIn("DELETE target", merge_section)
@@ -121,7 +122,10 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertNotIn("delete_range(", write_section)
         self.assertNotIn("delete_sensor_events_range(", write_section)
         self.assertIn('.withColumn("RunId", lit(run_id))', writer_section)
+        self.assertIn('"EventId",', writer_section)
         self.assertIn('"TimeSpan",', writer_section)
+        self.assertIn('.dropDuplicates(["EventId"])', writer_section)
+        self.assertIn('chunk_column="EventId"', writer_section)
         self.assertIn('table="stg.factSensorEvents"', writer_section)
 
 

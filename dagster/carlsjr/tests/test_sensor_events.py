@@ -299,9 +299,11 @@ class SensorEventsTransformationTests(unittest.TestCase):
         event_hash = md5(b"events12026-07-26 09:00:00").hexdigest()
         reading_hash = md5(b"s12026-07-26 09:00:00").hexdigest()
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["ReadId"], str(UUID(event_hash)))
-        self.assertEqual(events[0]["ReadId"], second_events[0]["ReadId"])
-        self.assertNotEqual(events[0]["ReadId"], str(UUID(reading_hash)))
+        self.assertEqual(events[0]["EventId"], str(UUID(event_hash)))
+        self.assertEqual(events[0]["EventId"], second_events[0]["EventId"])
+        self.assertNotEqual(events[0]["EventId"], str(UUID(reading_hash)))
+        self.assertEqual(events[0]["ReadId"], "a-start")
+        self.assertEqual(second_events[0]["ReadId"], "another-start")
         self.assertAlmostEqual(events[0]["EventMinutes"], 90.0)
         self.assertTrue(events[0]["IsEventCompleted"])
 
@@ -424,7 +426,8 @@ class SensorEventsTransformationTests(unittest.TestCase):
 
         rows = result.collect()
         self.assertEqual(len(rows), 1)
-        self.assertNotEqual(rows[0]["ReadId"], "t1")
+        self.assertNotEqual(rows[0]["EventId"], "t1")
+        self.assertEqual(rows[0]["ReadId"], "t1")
         self.assertEqual(rows[0]["SensorType"], "Temperatura F")
         self.assertAlmostEqual(rows[0]["Value"], 50.0)
         self.assertAlmostEqual(rows[0]["EventMinutes"], 120.0)
@@ -493,7 +496,8 @@ class SensorEventsTransformationTests(unittest.TestCase):
 
         rows = result.collect()
         self.assertEqual(len(rows), 1)
-        self.assertNotEqual(rows[0]["ReadId"], "t1")
+        self.assertNotEqual(rows[0]["EventId"], "t1")
+        self.assertEqual(rows[0]["ReadId"], "t1")
         self.assertAlmostEqual(rows[0]["EventMinutes"], 150.0)
         self.assertFalse(rows[0]["IsEventCompleted"])
 
@@ -602,7 +606,8 @@ class SensorEventsTransformationTests(unittest.TestCase):
 
         rows = result.collect()
         self.assertEqual(len(rows), 1)
-        self.assertNotEqual(rows[0]["ReadId"], "t1")
+        self.assertNotEqual(rows[0]["EventId"], "t1")
+        self.assertEqual(rows[0]["ReadId"], "t1")
         self.assertAlmostEqual(rows[0]["EventMinutes"], 120.0)
         self.assertTrue(rows[0]["IsEventCompleted"])
 
@@ -657,6 +662,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(
             result.columns,
             [
+                "EventId",
                 "ReadId",
                 "SensorId",
                 "DeviceId",

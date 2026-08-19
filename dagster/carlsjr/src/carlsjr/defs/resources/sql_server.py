@@ -360,6 +360,7 @@ DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
 MERGE dwh.factSensorEvents AS target
 USING (
     SELECT
+        EventId,
         ReadId,
         SensorId,
         DeviceId,
@@ -376,9 +377,10 @@ USING (
     FROM stg.factSensorEvents
     WHERE RunId = @RunId
 ) AS source
-    ON target.ReadId = source.ReadId
+    ON target.EventId = source.EventId
 WHEN MATCHED THEN
     UPDATE SET
+        target.ReadId = source.ReadId,
         target.SensorId = source.SensorId,
         target.DeviceId = source.DeviceId,
         target.LocationId = source.LocationId,
@@ -394,6 +396,7 @@ WHEN MATCHED THEN
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
+        EventId,
         ReadId,
         SensorId,
         DeviceId,
@@ -409,6 +412,7 @@ WHEN NOT MATCHED BY TARGET THEN
         IsEventCompleted
     )
     VALUES (
+        source.EventId,
         source.ReadId,
         source.SensorId,
         source.DeviceId,

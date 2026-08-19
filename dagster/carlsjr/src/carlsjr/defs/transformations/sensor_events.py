@@ -181,7 +181,7 @@ def sensor_events(
             ),
         )
         .withColumn(
-            "ReadId",
+            "EventId",
             concat_ws(
                 "-",
                 substring("event_hash", 1, 8),
@@ -198,6 +198,7 @@ def sensor_events(
     )
 
     return result.select(
+        col("EventId"),
         col("ReadId"),
         col("SensorId"),
         col("DeviceId"),
