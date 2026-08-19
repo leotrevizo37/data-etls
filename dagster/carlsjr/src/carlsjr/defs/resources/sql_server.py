@@ -354,6 +354,7 @@ def build_fact_sensor_events_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
 
+DECLARE @RunId NVARCHAR(100) = ?;
 DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
 
 MERGE dwh.factSensorEvents AS target
@@ -367,12 +368,13 @@ USING (
         DeviceType,
         SensorType,
         SensorName,
+        TimeSpan,
         LocalTimeSpan,
         Value,
         EventMinutes,
         IsEventCompleted
     FROM stg.factSensorEvents
-    WHERE RunId = ?
+    WHERE RunId = @RunId
 ) AS source
     ON target.ReadId = source.ReadId
 WHEN MATCHED THEN
@@ -384,6 +386,7 @@ WHEN MATCHED THEN
         target.DeviceType = source.DeviceType,
         target.SensorType = source.SensorType,
         target.SensorName = source.SensorName,
+        target.TimeSpan = source.TimeSpan,
         target.LocalTimeSpan = source.LocalTimeSpan,
         target.Value = source.Value,
         target.EventMinutes = source.EventMinutes,
@@ -399,6 +402,7 @@ WHEN NOT MATCHED BY TARGET THEN
         DeviceType,
         SensorType,
         SensorName,
+        TimeSpan,
         LocalTimeSpan,
         Value,
         EventMinutes,
@@ -413,12 +417,22 @@ WHEN NOT MATCHED BY TARGET THEN
         source.DeviceType,
         source.SensorType,
         source.SensorName,
+        source.TimeSpan,
         source.LocalTimeSpan,
         source.Value,
         source.EventMinutes,
         source.IsEventCompleted
     )
 OUTPUT $action INTO @MergeActions;
+
+DELETE target
+FROM dwh.factSensorEvents AS target
+INNER JOIN stg.factSensorEvents AS source
+    ON target.SensorId = source.SensorId
+    AND target.LocalTimeSpan = source.LocalTimeSpan
+WHERE
+    source.RunId = @RunId
+    AND target.TimeSpan IS NULL;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
@@ -1240,13 +1254,13 @@ class SqlServerResource:
                 try:
                     if sensor_type is None:
                         cursor.execute(
-                            "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
+                            "SELECT MIN(COALESCE(TimeSpan, LocalTimeSpan)) AS OpenEventFrom "
                             "FROM dwh.factSensorEvents "
                             "WHERE IsEventCompleted = 0"
                         )
                     else:
                         cursor.execute(
-                            "SELECT MIN(LocalTimeSpan) AS OpenEventFrom "
+                            "SELECT MIN(COALESCE(TimeSpan, LocalTimeSpan)) AS OpenEventFrom "
                             "FROM dwh.factSensorEvents "
                             "WHERE IsEventCompleted = 0 "
                             "AND SensorType = ?",

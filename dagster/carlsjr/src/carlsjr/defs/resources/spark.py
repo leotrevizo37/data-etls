@@ -1016,6 +1016,7 @@ class SparkResource:
                 "DeviceType",
                 "SensorType",
                 "SensorName",
+                "TimeSpan",
                 "LocalTimeSpan",
                 "Value",
                 "EventMinutes",

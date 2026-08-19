@@ -32,7 +32,7 @@ def sensor_events(
         & (col("Value").isin(PRESENCE_VALUE, ABSENCE_VALUE))
     )
 
-    sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    sensor_window = Window.partitionBy("SensorId").orderBy("TimeSpan")
 
     with_prev = (
         base
@@ -70,17 +70,16 @@ def sensor_events(
         .withColumn("last_event_time", max("TimeSpan").over(event_window))
         .withColumn(
             "event_row_number",
-            row_number().over(event_window.orderBy("LocalTimeSpan", "ReadId")),
+            row_number().over(event_window.orderBy("TimeSpan")),
         )
         .filter(col("event_row_number") == lit(1))
     )
 
-    change_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    change_window = Window.partitionBy("SensorId").orderBy("TimeSpan")
 
     with_next_event = (
         state_changes
-        .withColumn("next_event_time", lead("LocalTimeSpan").over(change_window))
-        .withColumn("next_event_utc_time", lead("TimeSpan").over(change_window))
+        .withColumn("next_event_time", lead("TimeSpan").over(change_window))
     )
 
     result = with_next_event.withColumn(
@@ -88,7 +87,7 @@ def sensor_events(
         when(
             col("next_event_time").isNotNull(),
             when(
-                unix_timestamp(col("next_event_utc_time"))
+                unix_timestamp(col("next_event_time"))
                 - unix_timestamp(col("last_event_time"))
                 >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
                 (
@@ -100,7 +99,7 @@ def sensor_events(
             ).otherwise(
                 (
                     unix_timestamp(col("next_event_time"))
-                    - unix_timestamp(col("LocalTimeSpan"))
+                    - unix_timestamp(col("TimeSpan"))
                 )
                 / lit(60)
             ),
@@ -144,6 +143,7 @@ def sensor_events(
         col("device_type").alias("DeviceType"),
         col("sensor_type").alias("SensorType"),
         col("sensor_name").alias("SensorName"),
+        col("TimeSpan"),
         col("LocalTimeSpan"),
         col("Value"),
         col("EventMinutes"),
