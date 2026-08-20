@@ -324,6 +324,203 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(events[0]["EventMinutes"], 25.0)
         self.assertFalse(events[0]["IsEventCompleted"])
 
+    def test_discards_first_event_contained_in_previous_completed_event(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 0.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 51, 47),
+                }
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:52:00",
+            previous_events_df,
+        ).collect()
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["TimeSpan"], datetime(2026, 8, 20, 14, 51, 47))
+        self.assertEqual(events[0]["Value"], 1.0)
+
+    def test_keeps_first_event_after_previous_completed_interval(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 0.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 49, 0),
+                }
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:52:00",
+            previous_events_df,
+        ).orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [event["TimeSpan"] for event in events],
+            [
+                datetime(2026, 8, 20, 14, 49, 41),
+                datetime(2026, 8, 20, 14, 51, 47),
+            ],
+        )
+
+    def test_keeps_first_event_when_completed_interval_end_differs(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 52), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 0.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 51, 47),
+                }
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:53:00",
+            previous_events_df,
+        ).orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [event["TimeSpan"] for event in events],
+            [
+                datetime(2026, 8, 20, 14, 49, 41),
+                datetime(2026, 8, 20, 14, 52),
+            ],
+        )
+
+    def test_keeps_first_event_when_previous_completed_value_differs(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 1.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 51, 47),
+                }
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:52:00",
+            previous_events_df,
+        ).orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [event["TimeSpan"] for event in events],
+            [
+                datetime(2026, 8, 20, 14, 49, 41),
+                datetime(2026, 8, 20, 14, 51, 47),
+            ],
+        )
+
+    def test_previous_completed_event_validation_is_per_sensor(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+                self._row("r3", "s2", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r4", "s2", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 0.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 51, 47),
+                }
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:52:00",
+            previous_events_df,
+        ).orderBy("SensorId", "TimeSpan").collect()
+
+        self.assertEqual(
+            [(event["SensorId"], event["TimeSpan"]) for event in events],
+            [
+                ("s1", datetime(2026, 8, 20, 14, 51, 47)),
+                ("s2", datetime(2026, 8, 20, 14, 49, 41)),
+                ("s2", datetime(2026, 8, 20, 14, 51, 47)),
+            ],
+        )
+
+    def test_uses_latest_containing_previous_completed_event(self) -> None:
+        df = self._readings_df(
+            [
+                self._row("r1", "s1", datetime(2026, 8, 20, 14, 49, 41), 0.0),
+                self._row("r2", "s1", datetime(2026, 8, 20, 14, 51, 47), 1.0),
+            ]
+        )
+        previous_events_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 40),
+                    "PreviousValue": 0.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 15),
+                },
+                {
+                    "SensorId": "s1",
+                    "PreviousTimeSpan": datetime(2026, 8, 20, 14, 47, 19),
+                    "PreviousValue": 1.0,
+                    "PreviousEndTime": datetime(2026, 8, 20, 14, 51, 47),
+                },
+            ]
+        )
+
+        events = sensor_events(
+            df,
+            "2026-08-20 14:52:00",
+            previous_events_df,
+        ).orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [event["TimeSpan"] for event in events],
+            [
+                datetime(2026, 8, 20, 14, 49, 41),
+                datetime(2026, 8, 20, 14, 51, 47),
+            ],
+        )
+
     def test_ignores_temperature_out_of_range_when_under_two_hours(self) -> None:
         df = self._readings_df(
             [
