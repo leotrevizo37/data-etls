@@ -34,7 +34,27 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertIn("use_utc_range=True", source)
         self.assertIn('col("TimeSpan") >= from_utc', source)
         self.assertIn('col("TimeSpan") >= temperature_from_utc', source)
+        self.assertIn("read_completed_sensor_events_range(", source)
+        self.assertIn("previous_completed_events_df", source)
         self.assertNotIn("head(1)", source)
+
+    def test_completed_sensor_events_range_uses_utc_intersection(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "src"
+            / "emerson"
+            / "defs"
+            / "resources"
+            / "spark.py"
+        ).read_text()
+        method = source.split(
+            "def read_completed_sensor_events_range", 1
+        )[1].split("    def ", 1)[0]
+
+        self.assertIn("IsEventCompleted = 1", method)
+        self.assertIn("TimeSpan < '", method)
+        self.assertIn("PreviousEndTime", method)
+        self.assertIn("DATEADD(SECOND", method)
 
     def test_datalake_readings_extended_exposes_time_zone(self) -> None:
         source = (

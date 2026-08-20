@@ -38,8 +38,12 @@ class TransformationOps:
         return cuarto_residuos(df, dims, min_hour, max_hour)
     def cuartos_frios(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return cuartos_frios(df, dims, min_hour, max_hour)
-    def sensor_events(self, df: DataFrame, to_utc_str: str) -> Optional[DataFrame]:
-        return sensor_events(df, to_utc_str)
+    def sensor_events(
+            self,
+            df: DataFrame,
+            to_utc_str: str,
+            previous_completed_events_df: DataFrame) -> Optional[DataFrame]:
+        return sensor_events(df, to_utc_str, previous_completed_events_df)
     def temperature_events(
             self,
             df: DataFrame,
