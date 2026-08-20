@@ -995,6 +995,38 @@ class SparkResource:
             properties=self._build_wh_path()["properties"]
         )
 
+    def read_completed_sensor_events_range(
+        self,
+        sensor_type: str,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        from_text = from_utc.strftime("%Y-%m-%d %H:%M:%S")
+        to_text = to_utc.strftime("%Y-%m-%d %H:%M:%S")
+        table = (
+            "(SELECT SensorId, TimeSpan AS PreviousTimeSpan, "
+            "Value AS PreviousValue, "
+            "DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
+            "TimeSpan) AS PreviousEndTime "
+            "FROM dwh.factSensorEvents "
+            "WHERE SensorType = '"
+            + sensor_type
+            + "' AND IsEventCompleted = 1 "
+            "AND TimeSpan < '"
+            + to_text
+            + "' AND DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
+            "TimeSpan) > '"
+            + from_text
+            + "') AS completed_sensor_events_range"
+        )
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=table,
+            properties=self._build_wh_path()["properties"],
+        )
+
     def write_fact_sensor_events(self, df: DataFrame, run_id: str) -> int:
         df_dedup = (
             df

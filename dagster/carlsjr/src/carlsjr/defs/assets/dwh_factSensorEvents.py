@@ -151,11 +151,22 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             temperature_extended_df = readings_extended_df.filter(
                 col("TimeSpan") >= temperature_from_utc
             )
+            previous_completed_events_df = (
+                spark_res.read_completed_sensor_events_range(
+                    PRESENCE_SENSOR_TYPE,
+                    from_utc,
+                    to_utc,
+                )
+            )
             expected_values_df = spark_res.read_dim_sensor_expected_values()
             transformations = [
                 (
                     "sensor_events",
-                    (presence_extended_df, to_utc_str),
+                    (
+                        presence_extended_df,
+                        to_utc_str,
+                        previous_completed_events_df,
+                    ),
                 ),
                 (
                     "temperature_events",

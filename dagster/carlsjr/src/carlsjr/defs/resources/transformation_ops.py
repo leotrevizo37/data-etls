@@ -36,8 +36,12 @@ class TransformationOps:
         return factReadingsMeasurement_device(df)
     def presencia(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return presencia(df, dims, min_hour, max_hour)
-    def sensor_events(self, df: DataFrame, to_utc_str: str) -> Optional[DataFrame]:
-        return sensor_events(df, to_utc_str)
+    def sensor_events(
+            self,
+            df: DataFrame,
+            to_utc_str: str,
+            previous_completed_events_df: DataFrame) -> Optional[DataFrame]:
+        return sensor_events(df, to_utc_str, previous_completed_events_df)
     def temperature_events(
             self,
             df: DataFrame,
