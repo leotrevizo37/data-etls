@@ -133,6 +133,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             raw_dimensions=dimensions_df,
             fetch_readings_from=readings_from,
             fetch_readings_to=to_utc,
+            use_utc_range=True,
         )
 
         if readings_extended_df is None:
@@ -145,10 +146,10 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             )
             to_utc_str = to_utc.strftime("%Y-%m-%d %H:%M:%S")
             presence_extended_df = readings_extended_df.filter(
-                col("LocalTimeSpan") >= from_utc
+                col("TimeSpan") >= from_utc
             )
             temperature_extended_df = readings_extended_df.filter(
-                col("LocalTimeSpan") >= temperature_from_utc
+                col("TimeSpan") >= temperature_from_utc
             )
             expected_values_df = spark_res.read_dim_sensor_expected_values()
             transformations = [
@@ -190,14 +191,14 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
                 if row_count > 0:
                     max_time_span = spark_res.get_max_time_span(
                         events_df,
-                        "LocalTimeSpan",
+                        "TimeSpan",
                     )
                 context.log.info(
                     str(staged_rows)
                     + " sensor event rows staged and "
                     + str(row_count)
                     + " rows merged into dwh.factSensorEvents. "
-                    + "Max LocalTimeSpan "
+                    + "Max TimeSpan "
                     + str(max_time_span)
                 )
                 succeeded = True

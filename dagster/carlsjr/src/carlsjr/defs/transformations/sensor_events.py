@@ -2,7 +2,24 @@ from datetime import datetime
 from typing import Optional
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lag, lead, lit, max, row_number, sum, when, unix_timestamp
+from pyspark.sql.functions import (
+    col,
+    collect_set,
+    concat,
+    concat_ws,
+    from_utc_timestamp,
+    lag,
+    lead,
+    lit,
+    max,
+    md5,
+    row_number,
+    size,
+    substring,
+    sum,
+    unix_timestamp,
+    when,
+)
 from pyspark.sql.window import Window
 
 
@@ -29,10 +46,27 @@ def sensor_events(
     base = factlecturas_extended_df.filter(
         (col("device_type").rlike(PRESENCE_DEVICE_PATTERN))
         & (col("sensor_type") == PRESENCE_SENSOR_TYPE)
-        & (col("Value").isin(PRESENCE_VALUE, ABSENCE_VALUE))
     )
 
-    sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    reading_window = Window.partitionBy("SensorId", "TimeSpan")
+    base = (
+        base
+        .withColumn(
+            "reading_variants",
+            size(collect_set("Value").over(reading_window)),
+        )
+        .withColumn(
+            "reading_row_number",
+            row_number().over(reading_window.orderBy("ReadId")),
+        )
+        .filter(
+            (col("reading_variants") == lit(1))
+            & (col("reading_row_number") == lit(1))
+            & (col("Value").isin(PRESENCE_VALUE, ABSENCE_VALUE))
+        )
+    )
+
+    sensor_window = Window.partitionBy("SensorId").orderBy("TimeSpan")
 
     with_prev = (
         base
@@ -70,17 +104,16 @@ def sensor_events(
         .withColumn("last_event_time", max("TimeSpan").over(event_window))
         .withColumn(
             "event_row_number",
-            row_number().over(event_window.orderBy("LocalTimeSpan", "ReadId")),
+            row_number().over(event_window.orderBy("TimeSpan")),
         )
         .filter(col("event_row_number") == lit(1))
     )
 
-    change_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    change_window = Window.partitionBy("SensorId").orderBy("TimeSpan")
 
     with_next_event = (
         state_changes
-        .withColumn("next_event_time", lead("LocalTimeSpan").over(change_window))
-        .withColumn("next_event_utc_time", lead("TimeSpan").over(change_window))
+        .withColumn("next_event_time", lead("TimeSpan").over(change_window))
     )
 
     result = with_next_event.withColumn(
@@ -88,7 +121,7 @@ def sensor_events(
         when(
             col("next_event_time").isNotNull(),
             when(
-                unix_timestamp(col("next_event_utc_time"))
+                unix_timestamp(col("next_event_time"))
                 - unix_timestamp(col("last_event_time"))
                 >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
                 (
@@ -100,7 +133,7 @@ def sensor_events(
             ).otherwise(
                 (
                     unix_timestamp(col("next_event_time"))
-                    - unix_timestamp(col("LocalTimeSpan"))
+                    - unix_timestamp(col("TimeSpan"))
                 )
                 / lit(60)
             ),
@@ -135,7 +168,37 @@ def sensor_events(
         .otherwise(lit(False)),
     )
 
+    result = (
+        result
+        .withColumn(
+            "event_hash",
+            md5(
+                concat(
+                    lit("event"),
+                    col("SensorId").cast("string"),
+                    col("TimeSpan").cast("string"),
+                )
+            ),
+        )
+        .withColumn(
+            "EventId",
+            concat_ws(
+                "-",
+                substring("event_hash", 1, 8),
+                substring("event_hash", 9, 4),
+                substring("event_hash", 13, 4),
+                substring("event_hash", 17, 4),
+                substring("event_hash", 21, 12),
+            ),
+        )
+        .withColumn(
+            "LocalTimeSpan",
+            from_utc_timestamp(col("TimeSpan"), col("TimeZone")),
+        )
+    )
+
     return result.select(
+        col("EventId"),
         col("ReadId"),
         col("SensorId"),
         col("DeviceId"),
@@ -144,6 +207,7 @@ def sensor_events(
         col("device_type").alias("DeviceType"),
         col("sensor_type").alias("SensorType"),
         col("sensor_name").alias("SensorName"),
+        col("TimeSpan"),
         col("LocalTimeSpan"),
         col("Value"),
         col("EventMinutes"),

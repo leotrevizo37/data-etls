@@ -990,6 +990,7 @@ class SparkResource:
         df_dedup = (
             df
             .select(
+                "EventId",
                 "ReadId",
                 "SensorId",
                 "DeviceId",
@@ -998,12 +999,13 @@ class SparkResource:
                 "DeviceType",
                 "SensorType",
                 "SensorName",
+                "TimeSpan",
                 "LocalTimeSpan",
                 "Value",
                 "EventMinutes",
                 "IsEventCompleted",
             )
-            .dropDuplicates(["ReadId"])
+            .dropDuplicates(["EventId"])
         )
         df_stage = (
             df_dedup
@@ -1014,7 +1016,7 @@ class SparkResource:
         return self._write_jdbc_in_chunks(
             df_stage,
             table="stg.factSensorEvents",
-            chunk_column="ReadId",
+            chunk_column="EventId",
         )
 
     def write_fact_redings_audits_stage(

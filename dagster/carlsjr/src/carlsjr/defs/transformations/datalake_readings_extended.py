@@ -49,7 +49,8 @@ def datalake_readings_extended(
             col("dim.SubLocationTyId"),
             col("dim.sublocation_name"),
             col("dim.LocationId"),
-            col("dim.sublocation_type")
+            col("dim.sublocation_type"),
+            col("dim.TimeZone")
         )
     )
 

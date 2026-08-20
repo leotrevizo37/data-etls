@@ -31,11 +31,12 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertIn("readings_from = min(from_utc, temperature_from_utc)", source)
         self.assertIn("readings_extended_df.localCheckpoint(", source)
         self.assertIn("readings_extended_df.unpersist(blocking=True)", source)
-        self.assertIn('col("LocalTimeSpan") >= from_utc', source)
-        self.assertIn('col("LocalTimeSpan") >= temperature_from_utc', source)
+        self.assertIn("use_utc_range=True", source)
+        self.assertIn('col("TimeSpan") >= from_utc', source)
+        self.assertIn('col("TimeSpan") >= temperature_from_utc', source)
         self.assertNotIn("head(1)", source)
 
-    def test_datalake_readings_extended_contract_is_unchanged(self) -> None:
+    def test_datalake_readings_extended_exposes_time_zone(self) -> None:
         source = (
             PROJECT_ROOT
             / "src"
@@ -48,6 +49,7 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertIn("def datalake_readings_extended(", source)
         self.assertIn("use_utc_range: bool = False", source)
         self.assertIn('col("rd.LocalTimeSpan")', source)
+        self.assertIn('col("dim.TimeZone")', source)
         self.assertIn("if len(readings_extended_df.head(1)) == 0:", source)
         self.assertNotIn("validate_non_empty", source)
 
@@ -66,7 +68,20 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertNotIn("range(self.jdbc_write_num_chunks)", section)
         self.assertNotIn("head(1)", section)
 
-    def test_merge_upserts_all_sensor_event_columns_without_deletes(self) -> None:
+    def test_temperature_events_does_not_normalize_duplicate_readings(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "src"
+            / "emerson"
+            / "defs"
+            / "transformations"
+            / "temperature_events.py"
+        ).read_text()
+
+        self.assertNotIn("collect_set", source)
+        self.assertIn('orderBy("TimeSpan", "ReadId")', source)
+
+    def test_merge_upserts_columns_and_reconciles_legacy_events(self) -> None:
         source = (
             PROJECT_ROOT / "src" / "emerson" / "defs" / "resources" / "sql_server.py"
         ).read_text()
@@ -81,6 +96,7 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
             "DeviceType",
             "SensorType",
             "SensorName",
+            "TimeSpan",
             "LocalTimeSpan",
             "Value",
             "EventMinutes",
@@ -90,15 +106,18 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
 
         self.assertIn("MERGE dwh.factSensorEvents", merge_section)
         self.assertIn("FROM stg.factSensorEvents", merge_section)
-        self.assertIn("WHERE RunId = ?", merge_section)
+        self.assertIn("DECLARE @RunId NVARCHAR(100) = ?", merge_section)
+        self.assertIn("WHERE RunId = @RunId", merge_section)
+        self.assertIn("target.EventId = source.EventId", merge_section)
         self.assertIn("target.ReadId = source.ReadId", merge_section)
         for column in columns:
             self.assertIn("target." + column + " = source." + column, merge_section)
-        for column in ("ReadId", *columns):
+        for column in ("EventId", "ReadId", *columns):
             self.assertIn("source." + column, insert_section)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", merge_section)
         self.assertNotIn("WHEN NOT MATCHED BY SOURCE", merge_section)
-        self.assertNotIn("DELETE", merge_section.upper())
+        self.assertIn("DELETE target", merge_section)
+        self.assertIn("target.TimeSpan IS NULL", merge_section)
 
     def test_asset_uses_stage_merge_without_dwh_cleanup(self) -> None:
         asset_source = (
@@ -125,6 +144,10 @@ class SensorEventsAssetOptimizationTests(unittest.TestCase):
         self.assertNotIn("delete_range(", write_section)
         self.assertNotIn("delete_sensor_events_range(", write_section)
         self.assertIn('.withColumn("RunId", lit(run_id))', writer_section)
+        self.assertIn('"EventId",', writer_section)
+        self.assertIn('"TimeSpan",', writer_section)
+        self.assertIn('.dropDuplicates(["EventId"])', writer_section)
+        self.assertIn('chunk_column="EventId"', writer_section)
         self.assertIn('table="stg.factSensorEvents"', writer_section)
 
 
