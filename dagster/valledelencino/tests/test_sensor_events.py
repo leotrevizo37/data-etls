@@ -1,10 +1,12 @@
 import sys
 import unittest
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
+from hashlib import md5
 from importlib import import_module
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -51,6 +53,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         device_type: str = "Puerta",
         sensor_type: str = "Estado",
         time_span: Optional[datetime] = None,
+        time_zone: str = "UTC",
     ) -> dict:
         return {
             "ReadId": read_id,
@@ -63,6 +66,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
             "sensor_name": "sensor-" + sensor_id,
             "TimeSpan": time_span if time_span is not None else local_time,
             "LocalTimeSpan": local_time,
+            "TimeZone": time_zone,
             "Value": value,
         }
 
@@ -224,6 +228,80 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(rows[1]["EventMinutes"], 30.0)
         self.assertFalse(rows[1]["IsEventCompleted"])
 
+    def test_long_event_closes_before_new_event_after_outage(self) -> None:
+        start = datetime(2026, 7, 26, 9, 0)
+        rows = [
+            self._row("r" + str(index), "s1", start + timedelta(minutes=index * 30), 0.0)
+            for index in range(43)
+        ]
+        rows.extend(
+            [
+                self._row("r-last", "s1", start + timedelta(minutes=1275), 0.0),
+                self._row("r-return", "s1", datetime(2026, 8, 12, 16, 0), 0.0),
+            ]
+        )
+
+        events = sensor_events(
+            self._readings_df(rows),
+            "2026-08-12 16:30:00",
+        ).orderBy("TimeSpan").collect()
+
+        self.assertEqual(
+            [row["TimeSpan"] for row in events],
+            [datetime(2026, 7, 26, 9, 0), datetime(2026, 8, 12, 16, 0)],
+        )
+        self.assertAlmostEqual(events[0]["EventMinutes"], 1335.0)
+        self.assertTrue(events[0]["IsEventCompleted"])
+        self.assertAlmostEqual(events[1]["EventMinutes"], 30.0)
+        self.assertFalse(events[1]["IsEventCompleted"])
+
+    def test_identical_duplicate_readings_use_namespaced_event_id(self) -> None:
+        first_result = sensor_events(
+            self._readings_df(
+                [
+                    self._row("z-start", "s1", datetime(2026, 7, 26, 9, 0), 0.0),
+                    self._row("a-start", "s1", datetime(2026, 7, 26, 9, 0), 0.0),
+                    self._row("z-last", "s1", datetime(2026, 7, 26, 9, 30), 0.0),
+                    self._row("a-last", "s1", datetime(2026, 7, 26, 9, 30), 0.0),
+                ]
+            ),
+            "2026-07-26 10:30:00",
+        ).collect()
+        second_result = sensor_events(
+            self._readings_df(
+                [
+                    self._row("another-start", "s1", datetime(2026, 7, 26, 9, 0), 0.0),
+                    self._row("another-last", "s1", datetime(2026, 7, 26, 9, 30), 0.0),
+                ]
+            ),
+            "2026-07-26 10:30:00",
+        ).collect()
+        event_hash = md5(b"events12026-07-26 09:00:00").hexdigest()
+
+        self.assertEqual(len(first_result), 1)
+        self.assertEqual(first_result[0]["EventId"], str(UUID(event_hash)))
+        self.assertEqual(first_result[0]["EventId"], second_result[0]["EventId"])
+        self.assertEqual(first_result[0]["ReadId"], "a-start")
+        self.assertEqual(second_result[0]["ReadId"], "another-start")
+
+    def test_conflicting_duplicate_readings_are_discarded(self) -> None:
+        events = sensor_events(
+            self._readings_df(
+                [
+                    self._row("r1", "s1", datetime(2026, 7, 26, 9, 0), 0.0),
+                    self._row("r2", "s1", datetime(2026, 7, 26, 9, 0), 1.0),
+                    self._row("r3", "s1", datetime(2026, 7, 26, 9, 5), 1.0),
+                ]
+            ),
+            "2026-07-26 09:30:00",
+        ).collect()
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["TimeSpan"], datetime(2026, 7, 26, 9, 5))
+        self.assertAlmostEqual(events[0]["EventMinutes"], 25.0)
+        self.assertFalse(events[0]["IsEventCompleted"])
+
+
     def test_multiple_sensors_compute_independently(self) -> None:
         df = self._readings_df(
             [
@@ -353,6 +431,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertEqual(
             result.columns,
             [
+                "EventId",
                 "ReadId",
                 "SensorId",
                 "DeviceId",
@@ -361,6 +440,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
                 "DeviceType",
                 "SensorType",
                 "SensorName",
+                "TimeSpan",
                 "LocalTimeSpan",
                 "Value",
                 "EventMinutes",

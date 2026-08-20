@@ -49,13 +49,21 @@ def temperature_events(
             col("rd.sensor_type"),
             col("rd.sensor_name"),
             col("rd.TimeSpan"),
-            col("rd.LocalTimeSpan"),
+            col("rd.TimeZone"),
             col("rd.Value"),
             col("ev.min_expected_value"),
             col("ev.max_expected_value"),
             col("ev.StartTime"),
             col("ev.EndTime"),
             col("ev.scheduledDays"),
+        )
+    )
+
+    base = (
+        base
+        .withColumn(
+            "LocalTimeSpan",
+            F.from_utc_timestamp(col("TimeSpan"), col("TimeZone")),
         )
     )
 
@@ -178,7 +186,7 @@ def temperature_events(
         )
     )
 
-    sensor_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    sensor_window = Window.partitionBy("SensorId").orderBy("TimeSpan", "ReadId")
     with_prev = (
         scheduled
         .withColumn("prev_is_out_of_range", lag("is_out_of_range").over(sensor_window))
@@ -212,15 +220,14 @@ def temperature_events(
         .withColumn("last_event_time", max("TimeSpan").over(event_window))
         .withColumn(
             "event_row_number",
-            row_number().over(event_window.orderBy("LocalTimeSpan", "ReadId")),
+            row_number().over(event_window.orderBy("TimeSpan", "ReadId")),
         )
         .filter(col("event_row_number") == lit(1))
     )
-    change_window = Window.partitionBy("SensorId").orderBy("LocalTimeSpan", "ReadId")
+    change_window = Window.partitionBy("SensorId").orderBy("TimeSpan", "ReadId")
     state_changes = (
         state_changes
-        .withColumn("next_event_time", lead("LocalTimeSpan").over(change_window))
-        .withColumn("next_event_utc_time", lead("TimeSpan").over(change_window))
+        .withColumn("next_event_time", lead("TimeSpan").over(change_window))
     )
 
     return (
@@ -231,7 +238,7 @@ def temperature_events(
             when(
                 col("next_event_time").isNotNull(),
                 when(
-                    unix_timestamp(col("next_event_utc_time"))
+                    unix_timestamp(col("next_event_time"))
                     - unix_timestamp(col("last_event_time"))
                     >= lit(COMMUNICATION_THRESHOLD_MINUTES * 60),
                     (
@@ -243,7 +250,7 @@ def temperature_events(
                 ).otherwise(
                     (
                         unix_timestamp(col("next_event_time"))
-                        - unix_timestamp(col("LocalTimeSpan"))
+                        - unix_timestamp(col("TimeSpan"))
                     )
                     / lit(60)
                 ),
@@ -279,7 +286,29 @@ def temperature_events(
             .otherwise(lit(False)),
         )
         .filter(col("EventMinutes") >= lit(TEMPERATURE_EVENT_MINUTES))
+        .withColumn(
+            "event_hash",
+            F.md5(
+                F.concat(
+                    lit("event"),
+                    col("SensorId").cast("string"),
+                    col("TimeSpan").cast("string"),
+                )
+            ),
+        )
+        .withColumn(
+            "EventId",
+            F.concat_ws(
+                "-",
+                F.substring("event_hash", 1, 8),
+                F.substring("event_hash", 9, 4),
+                F.substring("event_hash", 13, 4),
+                F.substring("event_hash", 17, 4),
+                F.substring("event_hash", 21, 12),
+            ),
+        )
         .select(
+            col("EventId"),
             col("ReadId"),
             col("SensorId"),
             col("DeviceId"),
@@ -288,6 +317,7 @@ def temperature_events(
             col("device_type").alias("DeviceType"),
             col("sensor_type").alias("SensorType"),
             col("sensor_name").alias("SensorName"),
+            col("TimeSpan"),
             col("LocalTimeSpan"),
             col("Value"),
             col("EventMinutes"),

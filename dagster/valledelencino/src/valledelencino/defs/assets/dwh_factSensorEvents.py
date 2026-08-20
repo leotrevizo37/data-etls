@@ -103,6 +103,7 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             raw_dimensions=dimensions_df,
             fetch_readings_from=from_utc,
             fetch_readings_to=to_utc,
+            use_utc_range=True,
         )
 
         if extended_df is None:
@@ -116,14 +117,14 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             if row_count > 0:
                 max_time_span = spark_res.get_max_time_span(
                     events_df,
-                    "LocalTimeSpan",
+                    "TimeSpan",
                 )
             context.log.info(
                 str(staged_rows)
                 + " sensor event rows staged and "
                 + str(row_count)
                 + " rows merged into dwh.factSensorEvents. "
-                + "Max LocalTimeSpan "
+                + "Max TimeSpan "
                 + str(max_time_span)
             )
             succeeded = True
