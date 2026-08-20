@@ -14,6 +14,7 @@ from pyspark.sql.functions import (
     max,
     md5,
     row_number,
+    round as spark_round,
     size,
     substring,
     sum,
@@ -42,6 +43,7 @@ def resolve_sensor_events_from(
 def sensor_events(
     factlecturas_extended_df: DataFrame,
     to_utc_str: str,
+    previous_completed_events_df: Optional[DataFrame] = None,
 ) -> DataFrame:
     base = factlecturas_extended_df.filter(
         (col("device_type").rlike(PRESENCE_DEVICE_PATTERN))
@@ -167,6 +169,62 @@ def sensor_events(
         )
         .otherwise(lit(False)),
     )
+
+    if previous_completed_events_df is not None:
+        result = result.withColumn(
+            "sensor_event_row_number",
+            row_number().over(change_window),
+        )
+        first_events = result.filter(col("sensor_event_row_number") == lit(1)).alias(
+            "current"
+        )
+        previous_events = previous_completed_events_df.alias("previous")
+        previous_event_window = Window.partitionBy(
+            col("current.SensorId"),
+            col("current.TimeSpan"),
+        ).orderBy(col("previous.PreviousTimeSpan").desc_nulls_last())
+        first_events = (
+            first_events
+            .join(
+                previous_events,
+                (col("current.SensorId") == col("previous.SensorId"))
+                & (
+                    col("previous.PreviousTimeSpan")
+                    < col("current.TimeSpan")
+                )
+                & (
+                    col("current.TimeSpan")
+                    < col("previous.PreviousEndTime")
+                ),
+                "left",
+            )
+            .withColumn(
+                "previous_event_row_number",
+                row_number().over(previous_event_window),
+            )
+            .filter(col("previous_event_row_number") == lit(1))
+            .filter(
+                ~(
+                    col("previous.PreviousTimeSpan").isNotNull()
+                    & (col("current.Value") == col("previous.PreviousValue"))
+                    & col("current.IsEventCompleted")
+                    & (
+                        unix_timestamp(col("current.TimeSpan"))
+                        + spark_round(col("current.EventMinutes") * lit(60)).cast(
+                            "long"
+                        )
+                        == unix_timestamp(col("previous.PreviousEndTime"))
+                    )
+                )
+            )
+            .select("current.*")
+        )
+        result = (
+            result
+            .filter(col("sensor_event_row_number") > lit(1))
+            .unionByName(first_events)
+            .drop("sensor_event_row_number")
+        )
 
     result = (
         result

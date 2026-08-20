@@ -18,6 +18,7 @@ SENSOR_EVENTS_RETRY_POLICY = RetryPolicy(
 )
 
 INGESTION_NAME = "FactSensorEvents"
+DOOR_SENSOR_TYPE = "Estado"
 
 
 def _truncate_to_seconds(dt: datetime) -> datetime:
@@ -110,7 +111,18 @@ def transform_and_load_sensor_events_op(context, window: Dict[str, Any]) -> Dict
             context.log.info("No extended readings found after joining dimensions.")
             succeeded = True
         else:
-            events_df = sensor_events(extended_df, to_utc.strftime("%Y-%m-%d %H:%M:%S"))
+            previous_completed_events_df = (
+                spark_res.read_completed_sensor_events_range(
+                    DOOR_SENSOR_TYPE,
+                    from_utc,
+                    to_utc,
+                )
+            )
+            events_df = sensor_events(
+                extended_df,
+                to_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                previous_completed_events_df,
+            )
             events_df = events_df.persist(StorageLevel.MEMORY_AND_DISK)
             staged_rows = spark_res.write_fact_sensor_events(events_df, run_id)
             row_count = sql.merge_fact_sensor_events(run_id)
