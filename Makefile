@@ -7,7 +7,7 @@ export COMPOSE_ENV_FILE := $(notdir $(ENV_FILE))
 
 COMPOSE := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 
-.PHONY: help up down restart build ps lint-python test-python lint-mcdonalds lint-smartfit test-mcdonalds test-smartfit lint-emerson test-emerson
+.PHONY: help up down restart build ps lint-python test-python lint-emerson test-emerson
 
 help:
 	@echo "Targets:"

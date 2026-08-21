@@ -2,7 +2,7 @@
 
 ## Estado
 
-En proceso. Mcdonalds y centro de postres eliminados
+Aceptado. 
 
 ## Contexto
 
