@@ -7,7 +7,7 @@ ENV ACCEPT_EULA=Y \
     DAGSTER_HOME=/opt/dagster/dagster_home \
     PYTHONPATH=/opt/dagster/app/src
 
-RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/smartfit /opt/dagster/app/mcdonalds_cdp /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr /opt/dagster/app/emerson /opt/dagster/app/bafar
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/smartfit /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr /opt/dagster/app/emerson /opt/dagster/app/bafar
 
 WORKDIR /opt/dagster/app
 
@@ -45,7 +45,6 @@ RUN spark_jars_dir="$(python -c 'import pathlib, pyspark; print(pathlib.Path(pys
        https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar
 
 COPY dagster/smartfit /opt/dagster/app/smartfit
-COPY dagster/mcdonalds_cdp /opt/dagster/app/mcdonalds_cdp
 COPY dagster/bafar_poc_gabinete /opt/dagster/app/bafar_poc_gabinete
 COPY dagster/valledelencino /opt/dagster/app/valledelencino
 COPY dagster/carlsjr /opt/dagster/app/carlsjr

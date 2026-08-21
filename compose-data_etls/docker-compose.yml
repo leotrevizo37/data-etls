@@ -7,7 +7,6 @@ x-dagster-common: &dagster_common
   volumes:
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/smartfit:/opt/dagster/app/smartfit
-    - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../dagster/carlsjr:/opt/dagster/app/carlsjr
@@ -53,7 +52,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr emerson=emerson bafar=bafar}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-smartfit=smartfit valledelencino=valledelencino carlsjr=carlsjr emerson=emerson bafar=bafar}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -210,63 +209,6 @@ services:
       timeout: 25s
       retries: 10
       start_period: 30s
-
-  dagster-user-code-mcd-cdp:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: mcdonalds_cdp-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/mcdonalds_cdp
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/mcdonalds_cdp/src
-      APP_DB: ${CDP_DB:-cdp}
-      DIM_DB: ${CDP_DIM_DB:-cdp}
-      ADLS_CONTAINER_NAME: ${CDP_ADLS_CONTAINER_NAME:-cdp}
-      FACTREADINGS_OVERLAP_HOURS: ${CDP_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
-      FACTREDINGSAUDITS_OVERLAP_HOURS: ${CDP_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${CDP_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/mcdonalds_cdp}
-      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
-      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
-      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
-      SPARK_OBSERVABILITY_DRIVER_PORT: ${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}
-      SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT: ${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}
-      SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT: ${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}
-      SPARK_DRIVER_PORT: ${CDP_SPARK_DRIVER_PORT}
-      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${CDP_SPARK_BLOCK_MANAGER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}
-      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
-    ports:
-      - "${CDP_USER_CODE_PORT:-4003}:4003"
-      - "${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}:${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}"
-      - "${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}:${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}"
-      - "${CDP_SPARK_DRIVER_PORT}:${CDP_SPARK_DRIVER_PORT}"
-      - "${CDP_SPARK_BLOCK_MANAGER_PORT}:${CDP_SPARK_BLOCK_MANAGER_PORT}"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4003",
-      "-m", "mcdonalds_cdp.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4003 -h 127.0.0.1"
-        ]
-      interval: 20s
-      timeout: 25s
-      retries: 10
-      start_period: 40s
 
   dagster-user-code-bafar-poc-gabinete:
     build:
@@ -597,8 +539,6 @@ services:
     depends_on:
       dagster-user-code-smft:
         condition: service_healthy
-      dagster-user-code-mcd-cdp:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -622,8 +562,6 @@ services:
     depends_on:
       dagster-user-code-smft:
         condition: service_healthy
-      dagster-user-code-mcd-cdp:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -645,8 +583,6 @@ services:
     <<: *dagster_common
     depends_on:
       dagster-user-code-smft:
-        condition: service_healthy
-      dagster-user-code-mcd-cdp:
         condition: service_healthy
       dagster-user-code-bafar-poc-gabinete:
         condition: service_healthy
@@ -784,8 +720,6 @@ services:
     ports:
       - "${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}:${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}"
       - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
-      - "${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}:${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}"
-      - "${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}:${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}"
       - "${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}:${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}"
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}:${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}"

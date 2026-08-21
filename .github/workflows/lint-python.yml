@@ -26,7 +26,6 @@ jobs:
           pip install -r requirements.txt
           pip install ruff==0.16.0 pytest
           pip install -e smartfit
-          pip install -e mcdonalds_cdp
           pip install -e bafar
           pip install -e bafar_poc_gabinete
           pip install -e carlsjr

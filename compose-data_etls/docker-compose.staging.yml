@@ -8,9 +8,6 @@ services:
   dagster-user-code-smft:
     restart: "no"
 
-  dagster-user-code-mcd-cdp:
-    restart: "no"
-
   dagster-user-code-bafar-poc-gabinete:
     restart: "no"
 

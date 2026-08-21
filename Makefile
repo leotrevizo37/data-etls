@@ -34,13 +34,10 @@ build:
 ps:
 	$(COMPOSE) ps
 
-lint-python: lint-smartfit lint-cdp lint-gabinete lint-valledelencino lint-carlsjr lint-emerson
+lint-python: lint-smartfit lint-gabinete lint-valledelencino lint-carlsjr lint-emerson
 
 lint-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/smartfit && ruff check src tests"
-
-lint-cdp:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd-cdp -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/mcdonalds_cdp && ruff check src tests"
 
 lint-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/bafar_poc_gabinete && ruff check src tests"
@@ -54,13 +51,10 @@ lint-carlsjr:
 lint-emerson:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-emerson -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/emerson && ruff check src tests"
 
-test-python: test-smartfit test-cdp test-gabinete test-valledelencino test-carlsjr test-emerson
+test-python: test-smartfit test-gabinete test-valledelencino test-carlsjr test-emerson
 
 test-smartfit:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "cd /opt/dagster/app/smartfit && python -m unittest discover tests -p 'test_*.py'"
-
-test-cdp:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-mcd-cdp -lc "cd /opt/dagster/app/mcdonalds_cdp && python -m unittest discover tests -p 'test_*.py'"
 
 test-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "cd /opt/dagster/app/bafar_poc_gabinete && python -m unittest discover tests -p 'test_*.py'"
