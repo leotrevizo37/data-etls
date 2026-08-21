@@ -1,11 +1,6 @@
 - targets:
     - http://host.docker.internal:3005/
   labels:
-    user_code: mcdonalds
-
-- targets:
-    - http://host.docker.internal:3005/
-  labels:
     user_code: smartfit
 
 - targets:
