@@ -19,3 +19,7 @@ load_from:
       host: bafar-dagster-user-code
       port: 4008
       location_name: bafar
+  - grpc_server:
+      host: alerting-dagster-user-code
+      port: 4009
+      location_name: alerting

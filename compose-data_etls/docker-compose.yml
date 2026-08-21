@@ -473,6 +473,56 @@ services:
       retries: 10
       start_period: 40s
 
+  dagster-user-code-alerting:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: alerting-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/alerting
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/alerting/src
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      DAGSTER_PG_HOSTNAME: dagster-postgres
+      DAGSTER_PG_USER: ${DAGSTER_PG_USER}
+      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB}
+      DAGSTER_PG_PORT: 5432
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
+      ALERT_SMTP_TO: ${ALERT_SMTP_TO}
+      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
+    volumes:
+      - ../dagster/dagster_home:/opt/dagster/dagster_home
+      - ../dagster/alerting:/opt/dagster/app/alerting
+      - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
+    ports:
+      - "${ALERTING_USER_CODE_PORT:-4009}:4009"
+    command: [
+      "dagster", "code-server", "start",
+      "-h", "0.0.0.0",
+      "-p", "4009",
+      "-m", "alerting.definitions"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL", "dagster api grpc-health-check -p 4009 -h 127.0.0.1"]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 20s
+
   dagster-web:
     build:
       context: ..
@@ -529,6 +579,8 @@ services:
         condition: service_healthy
       dagster-user-code-emerson:
         condition: service_healthy
+      dagster-user-code-alerting:
+        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -576,6 +628,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/targets.yml:/etc/prometheus/targets.yml:ro
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus_data:/prometheus
     networks:
       - data-dagster
@@ -590,6 +643,74 @@ services:
         max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: data-alertmanager
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+          set -eu
+          umask 077
+          printf '%s' "$${ALERT_SMTP_PASSWORD}" > /run/alertmanager/smtp_password
+          sed \
+            -e "s|__ALERT_SMTP_HOST__|$${ALERT_SMTP_HOST}|g" \
+            -e "s|__ALERT_SMTP_PORT__|$${ALERT_SMTP_PORT}|g" \
+            -e "s|__ALERT_SMTP_FROM__|$${ALERT_SMTP_FROM}|g" \
+            -e "s|__ALERT_SMTP_USER__|$${ALERT_SMTP_USER}|g" \
+            -e "s|__ALERT_SMTP_USE_TLS__|$${ALERT_SMTP_USE_TLS}|g" \
+            -e "s|__ALERT_SMTP_TO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE__|$${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE}|g" \
+            /etc/alertmanager/alertmanager.template.yml \
+            > /run/alertmanager/alertmanager.yml
+          exec /bin/alertmanager \
+            --config.file=/run/alertmanager/alertmanager.yml \
+            --storage.path=/alertmanager \
+            --web.external-url=http://localhost:$${ALERTMANAGER_PORT}
+    env_file:
+      - ${COMPOSE_ENV_FILE:-.env}
+    environment:
+      ALERTMANAGER_PORT: ${ALERTMANAGER_PORT:-9093}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
+      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
+      ALERT_SMTP_TO_INFRASTRUCTURE: ${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}
+      ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE: ${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE: ${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE: ${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.template.yml:ro
+      - alertmanager_data:/alertmanager
+    tmpfs:
+      - /run/alertmanager:uid=65534,gid=65534,mode=0700
+    networks:
+      - data-dagster
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/-/healthy"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -692,6 +813,7 @@ volumes:
   spark-data:
   dagster_postgres_data:
   prometheus_data:
+  alertmanager_data:
 
 networks:
   data-dagster:
