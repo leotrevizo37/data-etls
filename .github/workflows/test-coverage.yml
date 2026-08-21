@@ -22,7 +22,6 @@ jobs:
             dagster/requirements.txt
             dagster/bafar_poc_gabinete/pyproject.toml
             dagster/carlsjr/pyproject.toml
-            dagster/smartfit/pyproject.toml
             dagster/valledelencino/pyproject.toml
 
       - uses: actions/setup-java@v4
@@ -47,9 +46,8 @@ jobs:
           python -m coverage erase
           (cd bafar_poc_gabinete && python -m coverage run --parallel-mode --source=src/bafar_poc_gabinete -m unittest discover tests -p "test_*.py")
           (cd carlsjr && python -m coverage run --parallel-mode --source=src/carlsjr -m unittest discover tests -p "test_*.py")
-          (cd smartfit && python -m coverage run --parallel-mode --source=src/smartfit -m unittest discover tests -p "test_*.py")
           (cd valledelencino && python -m coverage run --parallel-mode --source=src/valledelencino -m unittest discover tests -p "test_*.py")
-          python -m coverage combine bafar_poc_gabinete carlsjr smartfit valledelencino
+          python -m coverage combine bafar_poc_gabinete carlsjr valledelencino
           python -m coverage report --show-missing
           python -m coverage xml -o coverage.xml
 

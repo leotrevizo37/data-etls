@@ -153,63 +153,6 @@ services:
       retries: 10
       start_period: 15s
 
-  dagster-user-code-smft:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: smartfit-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/smartfit
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/smartfit/src
-      APP_DB: ${SMARTFIT_DB:-smartfit}
-      DIM_DB: ${SMARTFIT_DIM_DB:-smartfit}
-      ADLS_CONTAINER_NAME: ${SMARTFIT_ADLS_CONTAINER_NAME:-smartfit}
-      FACTREADINGS_OVERLAP_HOURS: ${SMARTFIT_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
-      FACTREDINGSAUDITS_OVERLAP_HOURS: ${SMARTFIT_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${SMARTFIT_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/smartfit}
-      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
-      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
-      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
-      SPARK_OBSERVABILITY_DRIVER_PORT: ${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}
-      SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT: ${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}
-      SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT: ${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}
-      SPARK_DRIVER_PORT: ${SMFT_SPARK_DRIVER_PORT}
-      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${SMFT_SPARK_BLOCK_MANAGER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}
-      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
-    ports:
-      - "${SMARTFIT_USER_CODE_PORT:-4002}:4002"
-      - "${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}:${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}"
-      - "${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}:${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}"
-      - "${SMFT_SPARK_DRIVER_PORT}:${SMFT_SPARK_DRIVER_PORT}"
-      - "${SMFT_SPARK_BLOCK_MANAGER_PORT}:${SMFT_SPARK_BLOCK_MANAGER_PORT}"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4002",
-      "-m", "smartfit.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4002 -h 127.0.0.1"
-        ]
-      interval: 10s
-      timeout: 25s
-      retries: 10
-      start_period: 30s
-
   dagster-user-code-bafar-poc-gabinete:
     build:
       context: ..
@@ -537,8 +480,6 @@ services:
     container_name: data-dagster-web
     <<: *dagster_common
     depends_on:
-      dagster-user-code-smft:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -560,8 +501,6 @@ services:
     container_name: data-dagster-web-admin
     <<: *dagster_common
     depends_on:
-      dagster-user-code-smft:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -582,8 +521,6 @@ services:
     container_name: data-dagster-daemon
     <<: *dagster_common
     depends_on:
-      dagster-user-code-smft:
-        condition: service_healthy
       dagster-user-code-bafar-poc-gabinete:
         condition: service_healthy
       dagster-user-code-valledelencino:
@@ -718,8 +655,6 @@ services:
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
       - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-10800}"
     ports:
-      - "${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}:${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}"
-      - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
       - "${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}:${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}"
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}:${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}"

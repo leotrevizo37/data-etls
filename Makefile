@@ -34,10 +34,7 @@ build:
 ps:
 	$(COMPOSE) ps
 
-lint-python: lint-smartfit lint-gabinete lint-valledelencino lint-carlsjr lint-emerson
-
-lint-smartfit:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/smartfit && ruff check src tests"
+lint-python: lint-gabinete lint-valledelencino lint-carlsjr lint-emerson
 
 lint-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/bafar_poc_gabinete && ruff check src tests"
@@ -51,10 +48,7 @@ lint-carlsjr:
 lint-emerson:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-emerson -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/emerson && ruff check src tests"
 
-test-python: test-smartfit test-gabinete test-valledelencino test-carlsjr test-emerson
-
-test-smartfit:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-smft -lc "cd /opt/dagster/app/smartfit && python -m unittest discover tests -p 'test_*.py'"
+test-python: test-gabinete test-valledelencino test-carlsjr test-emerson
 
 test-gabinete:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "cd /opt/dagster/app/bafar_poc_gabinete && python -m unittest discover tests -p 'test_*.py'"

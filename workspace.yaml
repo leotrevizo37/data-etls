@@ -1,9 +1,5 @@
 load_from:
   - grpc_server:
-      host: smartfit-dagster-user-code
-      port: 4002
-      location_name: smartfit
-  - grpc_server:
       host: mcdonalds_cdp-dagster-user-code
       port: 4003
       location_name: mcdonalds_cdp
