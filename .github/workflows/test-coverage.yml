@@ -22,7 +22,6 @@ jobs:
             dagster/requirements.txt
             dagster/bafar_poc_gabinete/pyproject.toml
             dagster/carlsjr/pyproject.toml
-            dagster/mcdonalds/pyproject.toml
             dagster/mcdonalds_cdp/pyproject.toml
             dagster/smartfit/pyproject.toml
             dagster/valledelencino/pyproject.toml
