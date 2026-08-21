@@ -36,7 +36,6 @@ jobs:
           pip install coverage pytest
           pip install -e bafar_poc_gabinete
           pip install -e carlsjr
-          pip install -e smartfit
           pip install -e valledelencino
 
       - name: Run tests with coverage
