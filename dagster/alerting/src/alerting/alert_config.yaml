@@ -1,0 +1,89 @@
+# Operational alerting configuration per user_code.
+# The operational_alerts_sensor reads this file to determine
+# which signals to check and what the expected ingestion cadences are.
+
+defaults:
+  sensor_alerts:
+    connection_lost: true
+    late_readings: false
+    lookback_hours: 1
+  pipeline_alerts:
+    ingestion_control_failed: true
+    dagster_run_failure: true
+    stale_detection: false
+    default_expected_interval_minutes: 720
+
+  reminder_interval_minutes:
+    connection_lost: 12
+    late_readings: 480
+    pipeline_failure: 30
+    pipeline_stale: 240
+    dagster_run_failure: 120
+
+  quiet_hours:
+    enabled: true
+    start: "18:00"
+    end: "08:00"
+    timezone: America/Mexico_City
+
+user_codes:
+  bafar_poc_gabinete:
+    database: cdp
+    database_env: GABINETE_DB
+    sensor_alerts:
+      connection_lost: false
+      late_readings: false
+    ingestions:
+      FactLecturas:
+        expected_interval_minutes: 1800
+
+  carlsjr:
+    database: carlsjr
+    database_env: CARLSJR_DB
+    ingestions:
+      factRedingsAudits:
+        expected_interval_minutes: 60
+      FactLecturas:
+        expected_interval_minutes: 1660
+      FactSensorEvents:
+        expected_interval_minutes: 4320
+      factReadingsMeasurement:
+        expected_interval_minutes: 4320
+      factSmartauditsCategories:
+        expected_interval_minutes: 1500
+      factUrlAvailabilityDaily:
+        expected_interval_minutes: 2000
+
+  valledelencino:
+    database: valledelencino
+    database_env: VALLEDELENCINO_DB
+    ingestions:
+      factRedingsAudits:
+        expected_interval_minutes: 200
+      FactSensorEvents:
+        expected_interval_minutes: 5000
+      factReadingsMeasurement:
+        expected_interval_minutes: 5000
+
+  emerson:
+    database: emerson
+    database_env: EMERSON_DB
+    ingestions:
+      factRedingsAudits:
+        expected_interval_minutes: 60
+      FactSensorEvents:
+        expected_interval_minutes: 4500
+      factReadingsMeasurement:
+        expected_interval_minutes: 4500
+
+  bafar:
+    database: bafar
+    database_env: BAFAR_DB
+    sensor_alerts:
+      connection_lost: false
+      late_readings: false
+    ingestions:
+      FactOutOfHoursSales:
+        expected_interval_minutes: 900
+      FactStoreSalesDaily:
+        expected_interval_minutes: 1700
