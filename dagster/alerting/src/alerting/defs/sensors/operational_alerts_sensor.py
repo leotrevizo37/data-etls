@@ -79,7 +79,10 @@ def _get_recent_dagster_failures(
         SELECT
             r.run_id,
             r.pipeline_name  AS job_name,
-            r.run_body::json->>'remote_job_origin' AS origin_json,
+            COALESCE(
+                r.run_body::json->>'remote_job_origin',
+                r.run_body::json->>'external_pipeline_origin'
+            ) AS origin_json,
             r.status,
             r.create_timestamp,
             r.update_timestamp
@@ -97,10 +100,16 @@ def _get_recent_dagster_failures(
                 code_location = "unknown"
                 try:
                     origin = json.loads(row[2]) if row[2] else {}
-                    code_location = (
-                        origin.get("repository_origin", {})
-                        .get("code_location_origin", {})
-                        .get("location_name", "unknown")
+                    location_origin = (
+                        origin.get("external_repository_origin", {}).get(
+                            "repository_location_origin", {}
+                        )
+                        or origin.get("repository_origin", {}).get(
+                            "code_location_origin", {}
+                        )
+                    )
+                    code_location = location_origin.get(
+                        "location_name", "unknown"
                     )
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     pass

@@ -137,15 +137,34 @@ def test_dagster_failure_query_uses_parameterized_interval(monkeypatch):
             "FAILURE",
             datetime.now(timezone.utc),
             datetime.now(timezone.utc),
-        )
+        ),
+        (
+            "run-2",
+            "job-2",
+            json.dumps(
+                {
+                    "external_repository_origin": {
+                        "repository_location_origin": {
+                            "location_name": "valledelencino"
+                        }
+                    }
+                }
+            ),
+            "FAILURE",
+            datetime.now(timezone.utc),
+            datetime.now(timezone.utc),
+        ),
     ]
     with patch.object(sensor_module.psycopg2, "connect", return_value=connection):
         failures = sensor_module._get_recent_dagster_failures(2)
 
     query, parameters = cursor.execute.call_args.args
     assert "%s * INTERVAL '1 hour'" in query
+    assert "remote_job_origin" in query
+    assert "external_pipeline_origin" in query
     assert parameters == (2,)
     assert failures[0]["code_location"] == "carlsjr"
+    assert failures[1]["code_location"] == "valledelencino"
 
 
 def _make_base_config(**overrides):
