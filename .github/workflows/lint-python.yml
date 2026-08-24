@@ -30,6 +30,7 @@ jobs:
           pip install -e carlsjr
           pip install -e emerson
           pip install -e valledelencino
+          pip install -e alerting
 
       - name: Ruff
         run: ruff check --select E4,E7,E9,F .
