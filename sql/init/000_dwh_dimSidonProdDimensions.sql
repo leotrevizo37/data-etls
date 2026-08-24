@@ -27,8 +27,15 @@ IF OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NULL
             SensorId UNIQUEIDENTIFIER NOT NULL,
             SensorTyId UNIQUEIDENTIFIER NOT NULL,
             DeviceId UNIQUEIDENTIFIER NOT NULL,
+            ModelId UNIQUEIDENTIFIER NULL,
+            SensorHubId UNIQUEIDENTIFIER NULL,
+            PhysicalIdentifier NVARCHAR(255) NULL,
+            PerEvent BIT NULL,
             sensor_name NVARCHAR(255) NULL,
             sensor_type NVARCHAR(255) NULL,
+            model_name NVARCHAR(255) NULL,
+            hub_model_name NVARCHAR(255) NULL,
+            hub_name NVARCHAR(255) NULL,
             DeviceTyId UNIQUEIDENTIFIER NOT NULL,
             SubLocationId UNIQUEIDENTIFIER NOT NULL,
             Active BIT NOT NULL,
@@ -51,6 +58,69 @@ GO
 
 IF
     OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'ModelId') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD ModelId UNIQUEIDENTIFIER NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'SensorHubId') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD SensorHubId UNIQUEIDENTIFIER NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'PhysicalIdentifier') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD PhysicalIdentifier NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'PerEvent') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD PerEvent BIT NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'model_name') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD model_name NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'hub_model_name') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD hub_model_name NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'hub_name') IS NULL
+    BEGIN
+        ALTER TABLE dwh.dimSidonProdDimensions
+        ADD hub_name NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'dwh.dimSidonProdDimensions', N'U') IS NOT NULL
     AND COL_LENGTH(N'dwh.dimSidonProdDimensions', N'TimeZone') IS NULL
     BEGIN
         ALTER TABLE dwh.dimSidonProdDimensions
@@ -66,8 +136,15 @@ IF OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NULL
             SensorId UNIQUEIDENTIFIER NOT NULL,
             SensorTyId UNIQUEIDENTIFIER NOT NULL,
             DeviceId UNIQUEIDENTIFIER NOT NULL,
+            ModelId UNIQUEIDENTIFIER NULL,
+            SensorHubId UNIQUEIDENTIFIER NULL,
+            PhysicalIdentifier NVARCHAR(255) NULL,
+            PerEvent BIT NULL,
             sensor_name NVARCHAR(255) NULL,
             sensor_type NVARCHAR(255) NULL,
+            model_name NVARCHAR(255) NULL,
+            hub_model_name NVARCHAR(255) NULL,
+            hub_name NVARCHAR(255) NULL,
             DeviceTyId UNIQUEIDENTIFIER NOT NULL,
             SubLocationId UNIQUEIDENTIFIER NOT NULL,
             Active BIT NOT NULL,
@@ -82,6 +159,69 @@ IF OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NULL
             LocationId UNIQUEIDENTIFIER NOT NULL,
             sublocation_type NVARCHAR(255) NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'ModelId') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD ModelId UNIQUEIDENTIFIER NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'SensorHubId') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD SensorHubId UNIQUEIDENTIFIER NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'PhysicalIdentifier') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD PhysicalIdentifier NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'PerEvent') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD PerEvent BIT NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'model_name') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD model_name NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'hub_model_name') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD hub_model_name NVARCHAR(255) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.dimSidonProdDimensions', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.dimSidonProdDimensions', N'hub_name') IS NULL
+    BEGIN
+        ALTER TABLE stg.dimSidonProdDimensions
+        ADD hub_name NVARCHAR(255) NULL;
     END;
 GO
 
