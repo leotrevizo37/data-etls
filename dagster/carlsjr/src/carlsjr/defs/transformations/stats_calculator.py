@@ -18,11 +18,10 @@ def stats_calculator(
         max_expected_value: Optional[float] = None
 ) -> Optional[DataFrame]:
 
-    base = (
-        base
-        .filter((col("sensor_type") == sensor_type))
-        .withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
-    )
+    if sensor_type is not None:
+        base = base.filter((col("sensor_type") == sensor_type))
+
+    base = base.withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
 
     agg_exprs = [
         avg("Value").alias("Val_dummy"),
