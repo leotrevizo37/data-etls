@@ -24,8 +24,7 @@ from pyspark.sql.functions import (
 from pyspark.sql.window import Window
 
 
-PRESENCE_DEVICE_PATTERN = r"(?iu)(mostrador|monitoreo)"
-PRESENCE_SENSOR_TYPE = "Camara de presencia"
+PRESENCE_SENSOR_PATTERN = r"(?iu)presencia"
 PRESENCE_VALUE = 1
 ABSENCE_VALUE = 0
 COMMUNICATION_THRESHOLD_MINUTES = 60
@@ -46,8 +45,7 @@ def sensor_events(
     previous_completed_events_df: Optional[DataFrame] = None,
 ) -> DataFrame:
     base = factlecturas_extended_df.filter(
-        (col("device_type").rlike(PRESENCE_DEVICE_PATTERN))
-        & (col("sensor_type") == PRESENCE_SENSOR_TYPE)
+        col("sensor_type").rlike(PRESENCE_SENSOR_PATTERN)
     )
 
     reading_window = Window.partitionBy("SensorId", "TimeSpan")

@@ -1019,9 +1019,9 @@ class SparkResource:
             "DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
             "TimeSpan) AS PreviousEndTime "
             "FROM dwh.factSensorEvents "
-            "WHERE SensorType = '"
+            "WHERE LOWER(SensorType) LIKE LOWER('"
             + sensor_type
-            + "' AND IsEventCompleted = 1 "
+            + "') AND IsEventCompleted = 1 "
             "AND TimeSpan < '"
             + to_text
             + "' AND DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
