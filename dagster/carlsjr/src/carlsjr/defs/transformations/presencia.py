@@ -7,8 +7,7 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-PATRON_DEVICE = r"(?iu)(mostrador|monitoreo)"
-PATRON_SENSOR = r"(?iu)(presencia|encendido|estado)"
+PATRON_SENSOR = r"(?iu)presencia"
 
 def presencia(
     factlecturas_extended_df: DataFrame,
@@ -17,16 +16,12 @@ def presencia(
     max_hour: str) -> Optional[DataFrame]:
     base = (
         factlecturas_extended_df
-        .filter(col("device_type").rlike(PATRON_DEVICE))
+        .filter(col("sensor_type").rlike(PATRON_SENSOR))
     )
 
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (
-                col("device_type").rlike(PATRON_DEVICE)
-            ) & (
-                col("sensor_type").rlike(PATRON_SENSOR)
-            )
+            col("sensor_type").rlike(PATRON_SENSOR)
         ),
         min_hour,
         max_hour
@@ -57,7 +52,7 @@ def presencia(
     states_stats_df = (
         stats_calculator(
             base,
-            "Camara de presencia",
+            None,
             None,
             None
         )
