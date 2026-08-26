@@ -75,19 +75,20 @@ class SensorEventsTransformationTests(unittest.TestCase):
             "Value": value,
         }
 
-    def test_detects_state_changes_for_presence_camera(self) -> None:
+    def test_detects_state_changes_for_renamed_presence_sensors(self) -> None:
         df = self._readings_df(
             [
-                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 0.0),
-                self._row("r2", "s1", datetime(2026, 3, 29, 10, 5), 0.0),
-                self._row("r3", "s1", datetime(2026, 3, 29, 10, 10), 1.0),
-                self._row("r4", "s1", datetime(2026, 3, 29, 10, 20), 0.0),
+                self._row("r1", "s1", datetime(2026, 3, 29, 10, 0), 0.0, sensor_type="Sensor PRESENCIA 1"),
+                self._row("r2", "s1", datetime(2026, 3, 29, 10, 5), 0.0, sensor_type="Sensor PRESENCIA 1"),
+                self._row("r3", "s1", datetime(2026, 3, 29, 10, 10), 1.0, sensor_type="Sensor PRESENCIA 1"),
+                self._row("r4", "s1", datetime(2026, 3, 29, 10, 20), 0.0, sensor_type="Sensor PRESENCIA 1"),
+                self._row("r5", "s2", datetime(2026, 3, 29, 10, 0), 1.0, device_type="Otro", sensor_type="presencia secundaria"),
             ]
         )
 
         result = sensor_events(df, "2026-03-29 11:00:00")
 
-        rows = result.orderBy("LocalTimeSpan").collect()
+        rows = result.filter("SensorId = 's1'").orderBy("LocalTimeSpan").collect()
         self.assertEqual(
             [row["TimeSpan"] for row in rows],
             [
@@ -101,6 +102,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
         self.assertAlmostEqual(rows[1]["EventMinutes"], 10.0)
         self.assertAlmostEqual(rows[2]["EventMinutes"], 40.0)
         self.assertFalse(rows[2]["IsEventCompleted"])
+        self.assertEqual(result.filter("SensorId = 's2'").count(), 1)
 
     def test_reprocess_start_uses_open_event_when_older_than_control(self) -> None:
         control_from = datetime(2026, 3, 29, 11, 0)
@@ -133,7 +135,7 @@ class SensorEventsTransformationTests(unittest.TestCase):
                     "s2",
                     datetime(2026, 3, 29, 10, 10),
                     1.0,
-                    device_type="Camara fria",
+                    sensor_type="Movimiento",
                 ),
                 self._row("noise-value", "s1", datetime(2026, 3, 29, 10, 15), 2.0),
                 self._row("r2", "s1", datetime(2026, 3, 29, 10, 30), 0.0),

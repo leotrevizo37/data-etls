@@ -1309,7 +1309,7 @@ class SqlServerResource:
                             "SELECT MIN(COALESCE(TimeSpan, LocalTimeSpan)) AS OpenEventFrom "
                             "FROM dwh.factSensorEvents "
                             "WHERE IsEventCompleted = 0 "
-                            "AND SensorType = ?",
+                            "AND LOWER(SensorType) LIKE LOWER(?)",
                             sensor_type,
                         )
                     row = cursor.fetchone()
