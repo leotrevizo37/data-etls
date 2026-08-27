@@ -13,6 +13,12 @@ defaults:
     stale_detection: false
     default_expected_interval_minutes: 720
 
+  asset_row_count_trends:
+    enabled: true
+    metadata_key: row_count
+    backfill_days: 28
+    batch_size: 500
+
   reminder_interval_minutes:
     connection_lost: 80
     late_readings: 480
