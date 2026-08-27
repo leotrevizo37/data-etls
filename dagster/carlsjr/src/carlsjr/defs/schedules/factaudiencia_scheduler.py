@@ -22,7 +22,11 @@ fact_audiencia_sched_every_1h = ScheduleDefinition(
 fact_audiencia_sched_every_w = ScheduleDefinition(
     name="014_sense_audiencia_ingestion_every_w",
     job=fact_audiencia_ingestion_job,
-    cron_schedule="0 21 * * *",
+    cron_schedule=[
+        "0 7-17/2 * * 1-5",
+        "0 23 * * 1-5",
+        "0 11,23 * * 0,6",
+    ],
     execution_timezone="America/Ciudad_Juarez",
     default_status=DefaultScheduleStatus.RUNNING,
 )
