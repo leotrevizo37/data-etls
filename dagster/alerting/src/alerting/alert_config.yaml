@@ -18,6 +18,11 @@ defaults:
     metadata_key: row_count
     backfill_days: 28
     batch_size: 500
+    notifications_enabled: true
+    warning_drop_pct: 20
+    critical_drop_pct: 40
+    minimum_observed_days_7d: 3
+    minimum_observed_days_28d: 7
 
   reminder_interval_minutes:
     connection_lost: 80
@@ -25,6 +30,7 @@ defaults:
     pipeline_failure: 15
     pipeline_stale: 240
     dagster_run_failure: 120
+    asset_row_count_trend: 1440
 
   quiet_hours:
     enabled: true

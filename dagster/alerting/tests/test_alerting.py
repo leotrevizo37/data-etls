@@ -419,6 +419,37 @@ def test_quiet_hours_suppress_only_reminder_email():
     state.upsert_alert.assert_not_called()
 
 
+def test_operational_sensor_does_not_resolve_row_count_trend_alert():
+    key = "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas"
+    state = MagicMock()
+    state.get_active_alerts.return_value = {
+        key: AlertRecord(
+            alert_key=key,
+            user_code="carlsjr",
+            alert_type="asset_row_count_trend",
+            entity_id="carlsjr/dwh_factlecturas",
+            state="OPEN",
+            details=None,
+            first_detected_at=datetime.now(timezone.utc),
+            last_notified_at=datetime.now(timezone.utc),
+            resolved_at=None,
+            notification_count=1,
+        )
+    }
+    email = MagicMock()
+
+    with patch.object(
+        sensor_module, "_load_config", return_value=_make_base_config()
+    ):
+        context = build_sensor_context(
+            resources=_make_resources(state=state, email=email)
+        )
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+
+    email.send_consolidated.assert_not_called()
+    state.mark_resolved.assert_not_called()
+
+
 # ── New tests ─────────────────────────────────────────────────────
 
 def test_consolidated_email_groups_by_user_code():

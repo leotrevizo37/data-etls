@@ -195,6 +195,19 @@ WHERE code_location = %s
   AND observation_date >= %s;
 """
 
+_GET_LATEST_ROW_COUNT_TRENDS_SQL = """
+SELECT DISTINCT ON (code_location, asset_key, metadata_key)
+       observation_date, code_location, asset_key, metadata_key,
+       daily_materialization_count, daily_row_count_sum,
+       average_1d, average_7d, average_28d,
+       observed_days_7d, observed_days_28d,
+       change_vs_1d_pct, change_vs_7d_pct, change_vs_28d_pct,
+       latest_run_id, latest_materialized_at
+FROM alerting.asset_row_count_daily
+WHERE observation_date < (NOW() AT TIME ZONE 'UTC')::DATE
+ORDER BY code_location, asset_key, metadata_key, observation_date DESC;
+"""
+
 
 @dataclass
 class AlertRecord:
@@ -221,6 +234,26 @@ class AssetRowCountObservation:
     event_storage_id: int
     run_id: Optional[str]
     materialized_at: datetime
+
+
+@dataclass(frozen=True)
+class AssetRowCountTrend:
+    observation_date: date
+    code_location: str
+    asset_key: str
+    metadata_key: str
+    daily_materialization_count: int
+    daily_row_count: int
+    average_1d: Optional[float]
+    average_7d: Optional[float]
+    average_28d: Optional[float]
+    observed_days_7d: int
+    observed_days_28d: int
+    change_vs_1d_pct: Optional[float]
+    change_vs_7d_pct: Optional[float]
+    change_vs_28d_pct: Optional[float]
+    latest_run_id: Optional[str]
+    latest_materialized_at: datetime
 
 
 class AlertStateStoreResource:
@@ -302,6 +335,38 @@ class AlertStateStoreResource:
                     cur.execute(_REFRESH_ROW_COUNT_CHANGES_SQL, parameters)
             conn.commit()
         return recorded
+
+    def get_latest_asset_row_count_trends(self) -> Sequence[AssetRowCountTrend]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_GET_LATEST_ROW_COUNT_TRENDS_SQL)
+                return [
+                    AssetRowCountTrend(
+                        observation_date=row[0],
+                        code_location=row[1],
+                        asset_key=row[2],
+                        metadata_key=row[3],
+                        daily_materialization_count=row[4],
+                        daily_row_count=row[5],
+                        average_1d=float(row[6]) if row[6] is not None else None,
+                        average_7d=float(row[7]) if row[7] is not None else None,
+                        average_28d=float(row[8]) if row[8] is not None else None,
+                        observed_days_7d=row[9],
+                        observed_days_28d=row[10],
+                        change_vs_1d_pct=(
+                            float(row[11]) if row[11] is not None else None
+                        ),
+                        change_vs_7d_pct=(
+                            float(row[12]) if row[12] is not None else None
+                        ),
+                        change_vs_28d_pct=(
+                            float(row[13]) if row[13] is not None else None
+                        ),
+                        latest_run_id=row[14],
+                        latest_materialized_at=row[15],
+                    )
+                    for row in cur.fetchall()
+                ]
 
     def get_active_alerts(self) -> Dict[str, AlertRecord]:
         """Return all alerts with state OPEN or REMINDER, keyed by alert_key."""

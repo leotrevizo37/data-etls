@@ -51,6 +51,11 @@ _ALERT_CONFIG_PATH = (
 )
 
 _SENSOR_ALERT_TYPES = frozenset({"connection_lost", "late_readings"})
+_OPERATIONAL_ALERT_TYPES = _SENSOR_ALERT_TYPES | frozenset({
+    "pipeline_failure",
+    "pipeline_stale",
+    "dagster_run_failure",
+})
 
 
 def _load_config() -> Dict[str, Any]:
@@ -298,7 +303,11 @@ def operational_alerts_sensor(
             }
 
     # ── 3. Reconcile: determine pending actions (deferred) ────────
-    existing_alerts = state_store.get_active_alerts()
+    existing_alerts = {
+        key: alert
+        for key, alert in state_store.get_active_alerts().items()
+        if alert.alert_type in _OPERATIONAL_ALERT_TYPES
+    }
     connection_recoveries = {}
     for uc_name, database in uc_databases.items():
         sensor_ids = [

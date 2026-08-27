@@ -42,6 +42,7 @@ class ConsolidatedPayload:
     user_code: str
     active_alerts: List[AlertPayload] = field(default_factory=list)
     resolved_alerts: List[AlertPayload] = field(default_factory=list)
+    recipient_alert_type: Optional[str] = None
 
 
 _TYPE_LABELS = {
@@ -50,6 +51,7 @@ _TYPE_LABELS = {
     "pipeline_failure": "Pipeline Fallido",
     "pipeline_stale": "Pipeline Atrasado",
     "dagster_run_failure": "Run de Dagster Fallido",
+    "asset_row_count_trend": "Caída de Volumen de Lecturas",
 }
 
 _TYPE_ICONS = {
@@ -58,6 +60,7 @@ _TYPE_ICONS = {
     "pipeline_failure": "&#x274C;",   # ❌
     "pipeline_stale": "&#x1F40C;",    # 🐌
     "dagster_run_failure": "&#x26A0;", # ⚠
+    "asset_row_count_trend": "&#x1F4C9;",
 }
 
 _STATE_LABELS = {
@@ -394,6 +397,7 @@ def _build_consolidated_html(payload: ConsolidatedPayload) -> str:
         "pipeline_failure",
         "pipeline_stale",
         "dagster_run_failure",
+        "asset_row_count_trend",
     ]
 
     active_sections = ""
@@ -605,7 +609,9 @@ class EmailNotifierResource:
         if not payload.active_alerts and not payload.resolved_alerts:
             return False
 
-        to_addrs = self._resolve_recipients(payload.user_code)
+        to_addrs = self._resolve_recipients(
+            payload.user_code, payload.recipient_alert_type
+        )
         if not to_addrs:
             logger.warning(
                 "No recipients configured for user_code: %s",
