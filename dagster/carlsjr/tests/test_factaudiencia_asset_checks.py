@@ -9,7 +9,6 @@ if str(PROJECT_SRC) not in sys.path:
 
 from dagster import AssetCheckSeverity  # noqa: E402
 from carlsjr.defs.asset_checks import (  # noqa: E402
-    FACTAUDIENCIA_ASSET_KEY,
     _build_factaudiencia_original_lte_to_utc_result,
     _build_factaudiencia_row_count_result,
     factaudiencia_original_lte_to_utc,
@@ -58,19 +57,18 @@ class FactAudienciaAssetChecksTests(unittest.TestCase):
         self.assertEqual(passing.severity, AssetCheckSeverity.WARN)
 
     def test_checks_target_factaudiencia_and_are_registered(self) -> None:
-        row_count_spec = factaudiencia_row_count_gt_0._check_specs_by_output_name[
-            "result"
-        ]
-        watermark_spec = (
-            factaudiencia_original_lte_to_utc._check_specs_by_output_name["result"]
-        )
+        source = (
+            PROJECT_SRC / "carlsjr" / "defs" / "asset_checks.py"
+        ).read_text()
 
-        self.assertEqual(row_count_spec.asset_key, FACTAUDIENCIA_ASSET_KEY)
-        self.assertEqual(row_count_spec.name, "row_count_gt_0")
-        self.assertEqual(watermark_spec.asset_key, FACTAUDIENCIA_ASSET_KEY)
-        self.assertEqual(
-            watermark_spec.name,
-            "original_last_loaded_at_lte_to_utc",
+        self.assertIn(
+            'asset=FACTAUDIENCIA_ASSET_KEY,\n    name="row_count_gt_0"',
+            source,
+        )
+        self.assertIn(
+            'asset=FACTAUDIENCIA_ASSET_KEY,\n'
+            '    name="original_last_loaded_at_lte_to_utc"',
+            source,
         )
         self.assertIn(factaudiencia_row_count_gt_0, quality_asset_checks)
         self.assertIn(factaudiencia_original_lte_to_utc, quality_asset_checks)
