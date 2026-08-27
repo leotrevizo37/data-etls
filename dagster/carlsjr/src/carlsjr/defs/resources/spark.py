@@ -12,7 +12,9 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, lit, max as spark_max, upper
 from pyspark.sql.types import (
     BinaryType,
+    BooleanType,
     DoubleType,
+    IntegerType,
     StringType,
     StructField,
     StructType,
@@ -294,6 +296,23 @@ LECTURAS_SCHEMA = StructType(
         StructField("LocalTimeSpan", TimestampType(), True),
         StructField("Value", DoubleType(), True),
         StructField("SensorId", StringType(), True),
+    ]
+)
+
+AUDIENCIA_SCHEMA = StructType(
+    [
+        StructField("EventId", StringType(), True),
+        StructField("SensorId", StringType(), True),
+        StructField("PhysicalIdentifier", StringType(), True),
+        StructField("TimeSpan", TimestampType(), False),
+        StructField("LocalTimeSpan", TimestampType(), False),
+        StructField("Age", IntegerType(), False),
+        StructField("AgeGroup", StringType(), True),
+        StructField("IsKid", BooleanType(), False),
+        StructField("Gender", StringType(), True),
+        StructField("EmotionRaw", StringType(), True),
+        StructField("Emotion", StringType(), True),
+        StructField("Sentiment", StringType(), True),
     ]
 )
 
@@ -624,14 +643,14 @@ class SparkResource:
                 pass
             self._spark = None
 
-    def _build_adls_path(self) -> str:
+    def _build_adls_path(self, base_path: Optional[str] = None) -> str:
         return (
             "abfss://"
             + self.adls_container_name
             + "@"
             + self.adls_account_name
             + ".dfs.core.windows.net/"
-            + self.adls_base_path
+            + (base_path or self.adls_base_path)
         )
 
     def _build_wh_path(self) -> Dict[str, Any]:
@@ -779,6 +798,53 @@ class SparkResource:
             (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
         )
 
+    def read_audiencia_range(self, from_utc: datetime, to_utc: datetime) -> DataFrame:
+        spark = self.get_spark()
+        base = self._build_adls_path("audience")
+
+        days = _daterange_days(from_utc, to_utc)
+        paths = []
+        for d in days:
+            year_str = str(d.year).zfill(4)
+            month_str = str(d.month)
+            day_str = str(d.day)
+            path = (
+                    base
+                    + "/"
+                    + year_str
+                    + "/"
+                    + month_str
+                    + "/"
+                    + day_str
+                    + "//"
+            )
+            paths.append(path)
+
+        if not paths:
+            return spark.createDataFrame([], AUDIENCIA_SCHEMA)
+
+        existing_paths = self._existing_readable_paths(paths)
+        if not existing_paths:
+            return spark.createDataFrame([], AUDIENCIA_SCHEMA)
+
+        try:
+            df = (
+                spark.read
+                .option("ignoreCorruptFiles", "true")
+                .parquet(*existing_paths)
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "No valid audiencia parquet files found in path(s) %s: %s",
+                existing_paths,
+                exc,
+            )
+            return spark.createDataFrame([], AUDIENCIA_SCHEMA)
+
+        return df.filter(
+            (col("TimeSpan") >= from_utc) & (col("TimeSpan") <= to_utc)
+        )
+
     def read_lecturas_backfill_range(
         self,
         from_utc: datetime,
@@ -807,6 +873,17 @@ class SparkResource:
             df_dedup,
             table="dwh.factLecturas",
             chunk_column="ReadId",
+        )
+
+    def write_fact_audiencia_to_sql(self, df: DataFrame) -> int:
+        df_dedup = df.dropDuplicates(["EventId"])
+        if len(df_dedup.head(1)) == 0:
+            return 0
+
+        return self._write_jdbc_in_chunks(
+            df_dedup,
+            table="dwh.factAudiencia",
+            chunk_column="EventId",
         )
 
     def write_fact_operations_incremental(self, df: DataFrame) -> int:
