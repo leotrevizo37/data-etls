@@ -23,6 +23,7 @@ from alerting.defs.sensors.asset_row_count_trend_sensor import (
 
 
 def test_coerce_row_count_accepts_non_negative_integers():
+    assert asset_row_count_trend_sensor.minimum_interval_seconds == 21600
     assert _coerce_row_count(MetadataValue.int(12)) == 12
     assert _coerce_row_count("14") == 14
     assert _coerce_row_count(-1) is None

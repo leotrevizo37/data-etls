@@ -62,7 +62,7 @@ def _get_code_location(run: Any, asset_key: Any) -> str:
 
 @sensor(
     name="asset_row_count_trend_sensor",
-    minimum_interval_seconds=300,
+    minimum_interval_seconds=21600,
     required_resource_keys={"alert_state", "email_notifier"},
     default_status=DefaultSensorStatus.RUNNING,
 )
