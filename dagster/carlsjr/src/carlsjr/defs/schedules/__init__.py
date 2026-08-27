@@ -1,6 +1,9 @@
 from .factlecturas_scheduler import (fact_lecturas_sched_every_6h,
                                      fact_lecturas_sched_every_1h,
                                      fact_lecturas_sched_every_w)
+from .factaudiencia_scheduler import (fact_audiencia_sched_every_6h,
+                                      fact_audiencia_sched_every_1h,
+                                      fact_audiencia_sched_every_w)
 from .factoperations_scheduler import (operations_sched_every_6h,
                                        operations_sched_every_1h_w,
                                        operations_sched_every_w)
@@ -20,6 +23,9 @@ __all__ = [
     "fact_lecturas_sched_every_6h",
     "fact_lecturas_sched_every_1h",
     "fact_lecturas_sched_every_w",
+    "fact_audiencia_sched_every_6h",
+    "fact_audiencia_sched_every_1h",
+    "fact_audiencia_sched_every_w",
     "operations_sched_every_6h",
     "operations_sched_every_1h_w",
     "operations_sched_every_w",
