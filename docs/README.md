@@ -34,6 +34,7 @@ El repositorio contiene varios `user_codes` Dagster. Todos comparte el módulo s
 - [OKR SmartAudits AI](okr/2026-07-duma-smartaudits-ai-evidence.md)
 - [OKR disponibilidad y frescura DUMA](okr/2026-07-duma-data-freshness-evidence.md)
 - [OKR ventas fuera de horario Bafar](okr/2026-07-bafar-out-of-hours-sales-evidence.md)
+- [OKR factAudiencia Sense CarlsJr](okr/2026-09-carlsjr-factaudiencia-evidence.md)
 - [ADRs](adr/0001-use-dagster.md)
 
 ## Convenciones

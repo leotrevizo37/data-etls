@@ -7,6 +7,8 @@ Los pipelines se documentan por salida funcional, no por implementacion duplicad
 | Lecturas | `010_sense_lecturas_ingestion` | `dwh.factLecturas` |
 | Cleanup lecturas | `011_sense_lecturas_cleanup` | Retencion de `dwh.factLecturas` |
 | Backfill lecturas | `012_sense_lecturas_backfill_daily`, `013_sense_lecturas_backfill_sensor` | Rango historico de `dwh.factLecturas` |
+| Audiencia | `014_sense_audiencia_ingestion` | `dwh.factAudiencia` |
+| Backfill audiencia | `015_sense_audiencia_backfill_daily` | Rango diario de `dwh.factAudiencia` |
 | Operaciones Sense | `020_sense_operations` | `dwh.factReadingsMeasurement`, `ctl.IngestionControl` |
 | Eventos de sensores | `021_sense_sensor_events` | `dwh.factSensorEvents` |
 | Mantiz tickets | `100_mantiz_tickets` | `dwh.factMantizTicketLifecycle`, `dwh.factMantizTicketTextInsights` |
