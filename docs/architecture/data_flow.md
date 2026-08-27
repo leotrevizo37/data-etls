@@ -6,6 +6,7 @@
 flowchart LR
   adls["ADLS / parquets de lecturas"] --> factLecturas["dwh.factLecturas"]
   adls --> readingsExtended["lecturas extendidas + dimensiones"]
+  audience["ADLS / parquets de audiencia"] --> factAudiencia["dwh.factAudiencia"]
   sqlDims["SQL Server origen de dimensiones"] --> dimSidon["dwh.dimSidonProdDimensions"]
   sqlSchedule["Programacion y valores esperados"] --> expected["dwh.dimSensorExpectedVal"]
 
@@ -28,6 +29,7 @@ flowchart LR
   bafarSchedules["dwh.dimStoreSchedules"] --> outOfHoursSales
 
   control["ctl.IngestionControl"] --> factLecturas
+  control --> factAudiencia
   control --> measurements
   control --> sensorEvents
   control --> smartauditsFact
@@ -38,7 +40,7 @@ flowchart LR
 
 ## Sense
 
-El flujo Sense parte de lecturas crudas en parquet. `dwh.factLecturas` conserva una copia para corroboraciones especificas y consultas ad hoc; ningun asset, job o materializacion depende de esa tabla como entrada. Las mediciones operativas se construyen desde lecturas del data lake enriquecidas con `dwh.dimSidonProdDimensions`.
+El flujo Sense parte de datos crudos en parquet. `dwh.factLecturas` conserva lecturas de sensores para corroboraciones especificas y consultas ad hoc. En CarlsJr, `dwh.factAudiencia` conserva eventos de audiencia provenientes de la raiz `audience`. Las mediciones operativas se construyen desde lecturas del data lake enriquecidas con `dwh.dimSidonProdDimensions`.
 
 ## Eventos de sensores
 
