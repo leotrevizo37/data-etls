@@ -20,6 +20,7 @@ def _build_defs() -> Any:
         dbo_sublocations,
         dbo_sublocation_tys,
         dwh_dimsidonproddimensions,
+        dwh_factaudiencia,
         dwh_factlecturas,
         dwh_factsensorevents,
         observability_factredingsaudits,
@@ -30,6 +31,8 @@ def _build_defs() -> Any:
     )
     from .jobs import (
         cleanup_job,
+        fact_audiencia_backfill_daily_job,
+        fact_audiencia_ingestion_job,
         fact_lecturas_backfill_daily_job,
         fact_lecturas_ingestion_job,
         fact_lecturas_sensor_backfill_job,
@@ -57,6 +60,9 @@ def _build_defs() -> Any:
     )
     from .schedules import (
         cleanup_schedule,
+        fact_audiencia_sched_every_1h,
+        fact_audiencia_sched_every_6h,
+        fact_audiencia_sched_every_w,
         fact_lecturas_sched_every_1h,
         fact_lecturas_sched_every_6h,
         fact_lecturas_sched_every_w,
@@ -78,6 +84,8 @@ def _build_defs() -> Any:
 
     return Definitions(
         jobs=[
+            fact_audiencia_ingestion_job,
+            fact_audiencia_backfill_daily_job,
             fact_lecturas_ingestion_job,
             fact_lecturas_backfill_daily_job,
             fact_lecturas_sensor_backfill_job,
@@ -105,6 +113,9 @@ def _build_defs() -> Any:
             "spark_df_io_manager": spark_df_io_manager,
         },
         schedules=[
+            fact_audiencia_sched_every_6h,
+            fact_audiencia_sched_every_w,
+            fact_audiencia_sched_every_1h,
             fact_lecturas_sched_every_6h,
             fact_lecturas_sched_every_w,
             fact_lecturas_sched_every_1h,
@@ -131,6 +142,7 @@ def _build_defs() -> Any:
             dbo_device_tys,
             dbo_sublocations,
             dbo_sublocation_tys,
+            dwh_factaudiencia,
             dwh_factlecturas,
             dwh_factsensorevents,
             observability_factredingsaudits,

@@ -36,6 +36,30 @@ class FactAudienciaContractTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn("PRIMARY KEY CLUSTERED (EventId)", sql)
 
+    def test_pipeline_uses_audience_root_and_daily_backfill_only(self) -> None:
+        spark = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "resources"
+            / "spark.py"
+        ).read_text()
+        backfill = (
+            PROJECT_ROOT
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "jobs"
+            / "factaudiencia_backfill_job.py"
+        ).read_text()
+
+        self.assertIn('self._build_adls_path("audience")', spark)
+        self.assertIn('dropDuplicates(["EventId"])', spark)
+        self.assertIn('table="dwh.factAudiencia"', spark)
+        self.assertIn('name="015_sense_audiencia_backfill_daily"', backfill)
+        self.assertNotIn("sensor_ids", backfill)
+
 
 if __name__ == "__main__":
     unittest.main()
