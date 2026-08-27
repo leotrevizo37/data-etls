@@ -11,6 +11,7 @@ TARGET_REAL_READINGS_RATIO = 0.66
 FACTREADINGS_ASSET_KEY = AssetKey([PROJECT_NAME, "dwh_factReadingsMeasurement"])
 OPERATIONS_CONTROL_ASSET_KEY = AssetKey([PROJECT_NAME, "ctl_IngestionControl"])
 FACTLECTURAS_ASSET_KEY = AssetKey([PROJECT_NAME, "dwh_factlecturas"])
+FACTAUDIENCIA_ASSET_KEY = AssetKey([PROJECT_NAME, "dwh_factaudiencia"])
 
 
 def _metadata_value(metadata: Mapping[str, Any], key: str) -> Any:
@@ -219,6 +220,35 @@ def _build_factlecturas_original_lte_to_utc_result(
     )
 
 
+def _build_factaudiencia_row_count_result(
+        metadata: Mapping[str, Any]) -> AssetCheckResult:
+    row_count = _coerce_int(_metadata_value(metadata, "row_count")) or 0
+
+    return AssetCheckResult(
+        passed=bool(row_count > 0),
+        severity=AssetCheckSeverity.WARN,
+        metadata={"row_count": row_count},
+    )
+
+
+def _build_factaudiencia_original_lte_to_utc_result(
+        metadata: Mapping[str, Any]) -> AssetCheckResult:
+    original_last_loaded_at = _coerce_datetime(
+        _metadata_value(metadata, "original_last_loaded_at")
+    )
+    to_utc = _coerce_datetime(_metadata_value(metadata, "to_utc"))
+
+    return AssetCheckResult(
+        passed=bool(original_last_loaded_at is not None and to_utc is not None
+                    and original_last_loaded_at <= to_utc),
+        severity=AssetCheckSeverity.WARN,
+        metadata={
+            "original_last_loaded_at": str(original_last_loaded_at),
+            "to_utc": str(to_utc),
+        },
+    )
+
+
 @asset_check(
     asset=FACTREADINGS_ASSET_KEY,
     name="real_readings_ratio_gt_0_6",
@@ -282,6 +312,24 @@ def factlecturas_original_lte_to_utc(context) -> AssetCheckResult:
     return _build_factlecturas_original_lte_to_utc_result(metadata)
 
 
+@asset_check(
+    asset=FACTAUDIENCIA_ASSET_KEY,
+    name="row_count_gt_0",
+)
+def factaudiencia_row_count_gt_0(context) -> AssetCheckResult:
+    metadata = _latest_materialization_metadata(context, FACTAUDIENCIA_ASSET_KEY)
+    return _build_factaudiencia_row_count_result(metadata)
+
+
+@asset_check(
+    asset=FACTAUDIENCIA_ASSET_KEY,
+    name="original_last_loaded_at_lte_to_utc",
+)
+def factaudiencia_original_lte_to_utc(context) -> AssetCheckResult:
+    metadata = _latest_materialization_metadata(context, FACTAUDIENCIA_ASSET_KEY)
+    return _build_factaudiencia_original_lte_to_utc_result(metadata)
+
+
 quality_asset_checks = [
     factreadings_real_readings_ratio_gt_0_6,
     factreadings_to_utc_gt_from_utc,
@@ -290,4 +338,6 @@ quality_asset_checks = [
     operations_control_original_lte_to_utc,
     factlecturas_row_count_gt_0,
     factlecturas_original_lte_to_utc,
+    factaudiencia_row_count_gt_0,
+    factaudiencia_original_lte_to_utc,
 ]
