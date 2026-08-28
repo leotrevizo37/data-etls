@@ -201,13 +201,47 @@ def _build_consolidated_subject(payload: ConsolidatedPayload) -> str:
     n_resolved = len(payload.resolved_alerts)
     now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
     uc = payload.user_code.upper()
+    alert_types = {
+        alert.alert_type
+        for alert in payload.active_alerts + payload.resolved_alerts
+    }
+    scopes = []
+    for alert_type, scope in (
+        ("connection_lost", "SENSORES"),
+        ("late_readings", "SENSORES"),
+        ("pipeline_failure", "INGESTA"),
+        ("pipeline_stale", "PIPELINES"),
+        ("dagster_run_failure", "DAGSTER"),
+        ("asset_row_count_trend", "TENDENCIA"),
+    ):
+        if alert_type in alert_types and scope not in scopes:
+            scopes.append(scope)
+    scope = scopes[0] if len(scopes) == 1 else "DATOS"
+    reminder_only = (
+        bool(payload.active_alerts)
+        and all(alert.state == "REMINDER" for alert in payload.active_alerts)
+    )
+    if reminder_only:
+        count = (
+            f"{n_active} alerta{'s' if n_active != 1 else ''} "
+            f"pendiente{'s' if n_active != 1 else ''}"
+        )
+        return f"[MONITOREO OPERATIVO] {uc} — {count} ({now_str})"
     parts = []
     if n_active:
         parts.append(f"{n_active} activa{'s' if n_active != 1 else ''}")
     if n_resolved:
         parts.append(f"{n_resolved} resuelta{'s' if n_resolved != 1 else ''}")
     counts = ", ".join(parts)
-    return f"[ALERTAS OPERATIVAS] {uc} — {counts} ({now_str})"
+    title = {
+        "SENSORES": "ALERTAS DE SENSORES",
+        "INGESTA": "MONITOREO INGESTA DE DATOS",
+        "PIPELINES": "ALERTAS PIPELINES DE DATOS",
+        "DAGSTER": "ALERTAS DAGSTER",
+        "TENDENCIA": "TENDENCIAS DE LECTURAS",
+        "DATOS": "MONITOREO DE DATOS",
+    }[scope]
+    return f"[{title}] {uc} — {counts} ({now_str})"
 
 
 def _build_alert_card(
@@ -366,6 +400,15 @@ def _build_consolidated_html(payload: ConsolidatedPayload) -> str:
     n_active = len(payload.active_alerts)
     n_resolved = len(payload.resolved_alerts)
     uc_display = payload.user_code.upper().replace("_", " ")
+    reminder_only = (
+        bool(payload.active_alerts)
+        and all(alert.state == "REMINDER" for alert in payload.active_alerts)
+    )
+    heading = (
+        "Recordatorio de sensores y pipelines"
+        if reminder_only
+        else "Alertas de sensores y pipelines"
+    )
 
     # Summary badges
     active_badge = ""
@@ -460,7 +503,7 @@ border-radius:10px 10px 0 0;">
 <span style="color:#ccfbf1;font-size:12px;font-weight:bold;\
 text-transform:uppercase;letter-spacing:1.5px;">{_esc(uc_display)}</span><br/>
 <span style="color:#ffffff;font-size:20px;font-weight:bold;\
-line-height:31px;">Alertas Operativas</span><br/>
+line-height:31px;">{heading}</span><br/>
 <span style="color:#99f6e4;font-size:13px;">{now_str}</span>
 </td></tr>
 
@@ -482,7 +525,7 @@ border-left:1px solid {_CLR_BORDER};border-right:1px solid {_CLR_BORDER};\
 border-bottom:1px solid {_CLR_BORDER};border-radius:0 0 10px 10px;">
 <div style="border-top:1px solid {_CLR_BORDER};padding-top:14px;">
 <span style="color:{_CLR_FOOTER_TEXT};font-size:11.5px;">\
-Generado autom&aacute;ticamente por el sistema de monitoreo operativo. \
+Generado autom&aacute;ticamente por el sistema de alertas de sensores y pipelines. \
 Los datos provienen de las bases de datos de cada tenant en tiempo real.\
 </span><br/>
 <span style="color:{_CLR_FOOTER_TEXT};font-size:10px;">\

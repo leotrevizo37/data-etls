@@ -21,16 +21,13 @@ defaults:
     notifications_enabled: true
     warning_drop_pct: 20
     critical_drop_pct: 40
-    minimum_observed_days_7d: 3
-    minimum_observed_days_28d: 7
+    minimum_observed_days_7d: 7
+    minimum_observed_days_28d: 28
 
-  reminder_interval_minutes:
-    connection_lost: 80
-    late_readings: 480
-    pipeline_failure: 15
-    pipeline_stale: 240
-    dagster_run_failure: 120
-    asset_row_count_trend: 1440
+  daily_reminders:
+    enabled: true
+    time: "07:30"
+    timezone: America/Mexico_City
 
   quiet_hours:
     enabled: true

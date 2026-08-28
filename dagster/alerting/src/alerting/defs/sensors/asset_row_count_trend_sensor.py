@@ -1,7 +1,6 @@
-from collections import defaultdict
+import uuid
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional
-from zoneinfo import ZoneInfo
+from typing import Any, Dict, Optional
 
 from dagster import (
     DagsterEventType,
@@ -14,17 +13,10 @@ from dagster import (
 
 from ..resources.alert_state_store import (
     ALERT_STATE_OPEN,
-    ALERT_STATE_REMINDER,
     AlertStateStoreResource,
     AssetRowCountObservation,
 )
-from ..resources.email_notifier import (
-    AlertPayload,
-    ConsolidatedPayload,
-    EmailNotifierResource,
-)
 from .operational_alerts_sensor import (
-    _PendingAction,
     _build_alert_key,
     _load_config,
 )
@@ -63,7 +55,7 @@ def _get_code_location(run: Any, asset_key: Any) -> str:
 @sensor(
     name="asset_row_count_trend_sensor",
     minimum_interval_seconds=21600,
-    required_resource_keys={"alert_state", "email_notifier"},
+    required_resource_keys={"alert_state"},
     default_status=DefaultSensorStatus.RUNNING,
 )
 def asset_row_count_trend_sensor(
@@ -76,7 +68,6 @@ def asset_row_count_trend_sensor(
         return SkipReason("Asset row count trends are disabled")
 
     state_store: AlertStateStoreResource = context.resources.alert_state
-    email: EmailNotifierResource = context.resources.email_notifier
     metadata_key = trend_defaults.get("metadata_key", "row_count")
     batch_size = max(
         1, min(int(trend_defaults.get("batch_size", 500)), 1000)
@@ -190,9 +181,9 @@ def asset_row_count_trend_sensor(
             or trend.change_vs_7d_pct is None
             or trend.change_vs_28d_pct is None
             or trend.observed_days_7d
-            < int(trend_cfg.get("minimum_observed_days_7d", 3))
+            < int(trend_cfg.get("minimum_observed_days_7d", 7))
             or trend.observed_days_28d
-            < int(trend_cfg.get("minimum_observed_days_28d", 7))
+            < int(trend_cfg.get("minimum_observed_days_28d", 28))
             or trend.change_vs_7d_pct > -warning_drop
             or trend.change_vs_28d_pct > -warning_drop
         ):
@@ -248,140 +239,33 @@ def asset_row_count_trend_sensor(
             "notifications_enabled", True
         ):
             existing_alerts[key] = alert
-    reminder_minutes = defaults.get("reminder_interval_minutes", {}).get(
-        _ALERT_TYPE, 120
-    )
-    quiet_cfg = defaults.get("quiet_hours", {})
-    reminders_silenced = False
-    if quiet_cfg.get("enabled", False):
-        quiet_start = time.fromisoformat(quiet_cfg["start"])
-        quiet_end = time.fromisoformat(quiet_cfg["end"])
-        current_time = datetime.now(
-            ZoneInfo(quiet_cfg.get("timezone", "America/Mexico_City"))
-        ).time().replace(tzinfo=None)
-        if quiet_start < quiet_end:
-            reminders_silenced = quiet_start <= current_time < quiet_end
-        elif quiet_start > quiet_end:
-            reminders_silenced = (
-                current_time >= quiet_start or current_time < quiet_end
-            )
-
-    pending: List[_PendingAction] = []
-    suppressed = 0
+    opened = 0
     for key, condition in active_conditions.items():
         if key not in existing_alerts:
-            pending.append(_PendingAction(
-                action="open",
-                key=key,
+            occurrence_key = f"{key}::{uuid.uuid4()}"
+            state_store.upsert_alert(
+                alert_key=occurrence_key,
                 user_code=condition["user_code"],
                 alert_type=_ALERT_TYPE,
                 entity_id=condition["entity_id"],
                 details=condition["details"],
-                payload=AlertPayload(
-                    alert_key=key,
-                    user_code=condition["user_code"],
-                    alert_type=_ALERT_TYPE,
-                    entity_id=condition["entity_id"],
-                    state="OPEN",
-                    details=condition["details"],
-                    notification_count=1,
-                    first_detected_at=datetime.now(timezone.utc),
-                ),
-            ))
-        elif state_store.should_send_reminder(
-            key, reminder_minutes, existing_alerts
-        ):
-            if reminders_silenced:
-                suppressed += 1
-            else:
-                existing = existing_alerts[key]
-                pending.append(_PendingAction(
-                    action="reminder",
-                    key=key,
-                    user_code=condition["user_code"],
-                    alert_type=_ALERT_TYPE,
-                    entity_id=condition["entity_id"],
-                    details=condition["details"],
-                    payload=AlertPayload(
-                        alert_key=key,
-                        user_code=condition["user_code"],
-                        alert_type=_ALERT_TYPE,
-                        entity_id=condition["entity_id"],
-                        state="REMINDER",
-                        details=condition["details"],
-                        notification_count=existing.notification_count + 1,
-                        first_detected_at=existing.first_detected_at,
-                    ),
-                ))
+                state=ALERT_STATE_OPEN,
+                notification_count=0,
+            )
+            opened += 1
 
+    resolved = 0
     for key, alert in existing_alerts.items():
         if key in active_conditions:
             continue
-        pending.append(_PendingAction(
-            action="resolve",
-            key=key,
-            user_code=alert.user_code,
-            alert_type=_ALERT_TYPE,
-            entity_id=alert.entity_id,
-            details=alert.details,
-            payload=AlertPayload(
-                alert_key=key,
-                user_code=alert.user_code,
-                alert_type=_ALERT_TYPE,
-                entity_id=alert.entity_id,
-                state="RESOLVED",
-                details=alert.details,
-                notification_count=alert.notification_count,
-                first_detected_at=alert.first_detected_at,
-            ),
-        ))
-
-    groups: Dict[str, Dict[str, List[_PendingAction]]] = defaultdict(
-        lambda: {"active": [], "resolved": []}
-    )
-    for action in pending:
-        bucket = "resolved" if action.action == "resolve" else "active"
-        groups[action.user_code][bucket].append(action)
-
-    opened = 0
-    reminded = 0
-    resolved = 0
-    for user_code, group in groups.items():
-        sent = email.send_consolidated(ConsolidatedPayload(
-            user_code=user_code,
-            active_alerts=[a.payload for a in group["active"]],
-            resolved_alerts=[a.payload for a in group["resolved"]],
-            recipient_alert_type=_ALERT_TYPE,
-        ))
-        if not sent:
-            continue
-        for action in group["active"]:
-            state_store.upsert_alert(
-                alert_key=action.key,
-                user_code=action.user_code,
-                alert_type=_ALERT_TYPE,
-                entity_id=action.entity_id,
-                details=action.details,
-                state=(
-                    ALERT_STATE_OPEN
-                    if action.action == "open"
-                    else ALERT_STATE_REMINDER
-                ),
-            )
-            if action.action == "open":
-                opened += 1
-            else:
-                reminded += 1
-        for action in group["resolved"]:
-            state_store.mark_resolved(action.key)
-            resolved += 1
+        state_store.mark_resolved(alert.alert_key, alert.details)
+        resolved += 1
 
     summary = (
         f"Scanned {len(records)} materializations, "
         f"recorded {recorded} row count observations, "
         f"{len(active_conditions)} active conditions, "
-        f"{opened} opened, {reminded} reminded, {resolved} resolved, "
-        f"{suppressed} reminders suppressed"
+        f"{opened} opened, {resolved} resolved"
     )
     context.log.info(summary)
     return SkipReason(summary)

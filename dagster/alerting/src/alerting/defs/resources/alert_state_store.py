@@ -16,6 +16,7 @@ from dagster import InitResourceContext, resource
 
 ALERT_STATE_OPEN = "OPEN"
 ALERT_STATE_REMINDER = "REMINDER"
+ALERT_STATE_RESOLVED_PENDING = "RESOLVED_PENDING"
 ALERT_STATE_RESOLVED = "RESOLVED"
 
 _ENSURE_SCHEMA_SQL = "CREATE SCHEMA IF NOT EXISTS alerting;"
@@ -40,6 +41,12 @@ CREATE TABLE IF NOT EXISTS alerting.alert_delivery_state (
 _ENSURE_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS ix_alert_state_active
     ON alerting.alert_delivery_state (state)
+    WHERE state IN ('OPEN', 'REMINDER');
+"""
+
+_ENSURE_ACTIVE_CONDITION_INDEX_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS ux_alert_state_active_condition
+    ON alerting.alert_delivery_state (user_code, alert_type, entity_id)
     WHERE state IN ('OPEN', 'REMINDER');
 """
 
@@ -285,6 +292,7 @@ class AlertStateStoreResource:
                 cur.execute(_ENSURE_SCHEMA_SQL)
                 cur.execute(_ENSURE_TABLE_SQL)
                 cur.execute(_ENSURE_INDEX_SQL)
+                cur.execute(_ENSURE_ACTIVE_CONDITION_INDEX_SQL)
                 cur.execute(_ENSURE_ROW_COUNT_TABLE_SQL)
                 cur.execute(_ENSURE_ROW_COUNT_INDEX_SQL)
             conn.commit()
@@ -369,7 +377,7 @@ class AlertStateStoreResource:
                 ]
 
     def get_active_alerts(self) -> Dict[str, AlertRecord]:
-        """Return all alerts with state OPEN or REMINDER, keyed by alert_key."""
+        """Return active alerts keyed by their condition identity."""
         query = """
             SELECT alert_key, user_code, alert_type, entity_id, state,
                    details, first_detected_at, last_notified_at,
@@ -394,7 +402,9 @@ class AlertStateStoreResource:
                         resolved_at=row[8],
                         notification_count=row[9],
                     )
-                    result[rec.alert_key] = rec
+                    result[
+                        f"{rec.user_code}::{rec.alert_type}::{rec.entity_id}"
+                    ] = rec
         return result
 
     def upsert_alert(
@@ -405,6 +415,7 @@ class AlertStateStoreResource:
         entity_id: str,
         details: Optional[str] = None,
         state: str = ALERT_STATE_OPEN,
+        notification_count: int = 1,
     ) -> None:
         """Insert a new alert or update an existing one (bump notification count)."""
         query = """
@@ -412,7 +423,7 @@ class AlertStateStoreResource:
                 (alert_key, user_code, alert_type, entity_id, state, details,
                  first_detected_at, last_notified_at, notification_count,
                  created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), 1, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, NOW(), NOW())
             ON CONFLICT (alert_key) DO UPDATE SET
                 state = EXCLUDED.state,
                 details = EXCLUDED.details,
@@ -425,15 +436,28 @@ class AlertStateStoreResource:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (alert_key, user_code, alert_type, entity_id, state, details),
+                    (
+                        alert_key,
+                        user_code,
+                        alert_type,
+                        entity_id,
+                        state,
+                        details,
+                        notification_count,
+                    ),
                 )
             conn.commit()
 
-    def mark_resolved(self, alert_key: str) -> None:
-        """Transition an alert to RESOLVED and set resolved_at."""
+    def mark_resolved(
+        self,
+        alert_key: str,
+        details: Optional[str] = None,
+    ) -> None:
+        """Queue an alert resolution for a grouped notification."""
         query = """
             UPDATE alerting.alert_delivery_state
             SET state = %s,
+                details = COALESCE(%s, details),
                 resolved_at = NOW(),
                 updated_at = NOW()
             WHERE alert_key = %s
@@ -444,10 +468,61 @@ class AlertStateStoreResource:
                 cur.execute(
                     query,
                     (
-                        ALERT_STATE_RESOLVED,
+                        ALERT_STATE_RESOLVED_PENDING,
+                        details,
                         alert_key,
                         ALERT_STATE_OPEN,
                         ALERT_STATE_REMINDER,
+                    ),
+                )
+            conn.commit()
+
+    def get_pending_resolved_alerts(self) -> Dict[str, AlertRecord]:
+        query = """
+            SELECT alert_key, user_code, alert_type, entity_id, state,
+                   details, first_detected_at, last_notified_at,
+                   resolved_at, notification_count
+            FROM alerting.alert_delivery_state
+            WHERE state = %s
+        """
+        result: Dict[str, AlertRecord] = {}
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (ALERT_STATE_RESOLVED_PENDING,))
+                for row in cur.fetchall():
+                    rec = AlertRecord(
+                        alert_key=row[0],
+                        user_code=row[1],
+                        alert_type=row[2],
+                        entity_id=row[3],
+                        state=row[4],
+                        details=row[5],
+                        first_detected_at=row[6],
+                        last_notified_at=row[7],
+                        resolved_at=row[8],
+                        notification_count=row[9],
+                    )
+                    result[rec.alert_key] = rec
+        return result
+
+    def mark_resolution_notified(self, alert_key: str) -> None:
+        query = """
+            UPDATE alerting.alert_delivery_state
+            SET state = %s,
+                last_notified_at = NOW(),
+                notification_count = notification_count + 1,
+                updated_at = NOW()
+            WHERE alert_key = %s
+              AND state = %s
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    (
+                        ALERT_STATE_RESOLVED,
+                        alert_key,
+                        ALERT_STATE_RESOLVED_PENDING,
                     ),
                 )
             conn.commit()

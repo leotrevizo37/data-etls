@@ -17,6 +17,7 @@ Every 5 minutes this sensor:
 
 import json
 import os
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
@@ -56,6 +57,7 @@ _OPERATIONAL_ALERT_TYPES = _SENSOR_ALERT_TYPES | frozenset({
     "pipeline_stale",
     "dagster_run_failure",
 })
+_TREND_ALERT_TYPE = "asset_row_count_trend"
 
 
 def _load_config() -> Dict[str, Any]:
@@ -169,9 +171,17 @@ def operational_alerts_sensor(
     defaults = config.get("defaults", {})
     sensor_defaults = defaults.get("sensor_alerts", {})
     pipeline_defaults = defaults.get("pipeline_alerts", {})
-    reminder_cfg = defaults.get("reminder_interval_minutes", {})
+    reminder_cfg = defaults.get("daily_reminders", {})
     quiet_cfg = defaults.get("quiet_hours", {})
     user_codes_cfg = config.get("user_codes", {})
+
+    reminder_timezone = ZoneInfo(
+        reminder_cfg.get(
+            "timezone",
+            quiet_cfg.get("timezone", "America/Mexico_City"),
+        )
+    )
+    reminder_now = datetime.now(reminder_timezone)
 
     reminders_silenced = False
     if quiet_cfg.get("enabled", False):
@@ -303,9 +313,11 @@ def operational_alerts_sensor(
             }
 
     # ── 3. Reconcile: determine pending actions (deferred) ────────
+    all_existing_alerts = state_store.get_active_alerts()
+    pending_resolved_alerts = state_store.get_pending_resolved_alerts()
     existing_alerts = {
         key: alert
-        for key, alert in state_store.get_active_alerts().items()
+        for key, alert in all_existing_alerts.items()
         if alert.alert_type in _OPERATIONAL_ALERT_TYPES
     }
     connection_recoveries = {}
@@ -340,10 +352,10 @@ def operational_alerts_sensor(
     # New or ongoing conditions
     for key, cond in active_conditions.items():
         alert_type = cond["alert_type"]
-        reminder_minutes = reminder_cfg.get(alert_type, 120)
 
         if key not in existing_alerts:
             # New alert → OPEN
+            occurrence_key = f"{key}::{uuid.uuid4()}"
             pending.append(_PendingAction(
                 action="open",
                 key=key,
@@ -352,7 +364,7 @@ def operational_alerts_sensor(
                 entity_id=cond["entity_id"],
                 details=cond.get("details"),
                 payload=AlertPayload(
-                    alert_key=key,
+                    alert_key=occurrence_key,
                     user_code=cond["user_code"],
                     alert_type=alert_type,
                     entity_id=cond["entity_id"],
@@ -362,31 +374,6 @@ def operational_alerts_sensor(
                     first_detected_at=datetime.now(timezone.utc),
                 ),
             ))
-        elif state_store.should_send_reminder(
-            key, reminder_minutes, existing_alerts
-        ):
-            if reminders_silenced:
-                suppressed += 1
-            else:
-                existing = existing_alerts[key]
-                pending.append(_PendingAction(
-                    action="reminder",
-                    key=key,
-                    user_code=cond["user_code"],
-                    alert_type=alert_type,
-                    entity_id=cond["entity_id"],
-                    details=cond.get("details"),
-                    payload=AlertPayload(
-                        alert_key=key,
-                        user_code=cond["user_code"],
-                        alert_type=alert_type,
-                        entity_id=cond["entity_id"],
-                        state="REMINDER",
-                        details=cond.get("details"),
-                        notification_count=existing.notification_count + 1,
-                        first_detected_at=existing.first_detected_at,
-                    ),
-                ))
 
     # Cleared conditions → RESOLVED
     for key, alert in existing_alerts.items():
@@ -410,7 +397,7 @@ def operational_alerts_sensor(
                 entity_id=alert.entity_id,
                 details=details,
                 payload=AlertPayload(
-                    alert_key=key,
+                    alert_key=alert.alert_key,
                     user_code=alert.user_code,
                     alert_type=alert.alert_type,
                     entity_id=alert.entity_id,
@@ -421,6 +408,90 @@ def operational_alerts_sensor(
                 ),
             ))
 
+    resolution_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
+    for alert in pending_resolved_alerts.values():
+        resolution_groups[alert.user_code].append(_PendingAction(
+            action="resolve",
+            key=_build_alert_key(
+                alert.user_code, alert.alert_type, alert.entity_id
+            ),
+            user_code=alert.user_code,
+            alert_type=alert.alert_type,
+            entity_id=alert.entity_id,
+            details=alert.details,
+            payload=AlertPayload(
+                alert_key=alert.alert_key,
+                user_code=alert.user_code,
+                alert_type=alert.alert_type,
+                entity_id=alert.entity_id,
+                state="RESOLVED",
+                details=alert.details,
+                notification_count=alert.notification_count,
+                first_detected_at=alert.first_detected_at,
+            ),
+        ))
+    for action in pending:
+        if action.action != "resolve":
+            continue
+        state_store.mark_resolved(action.payload.alert_key, action.details)
+        resolution_groups[action.user_code].append(action)
+
+    reminder_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
+    trend_reminder_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
+    reminder_time = time.fromisoformat(reminder_cfg.get("time", "08:00"))
+    if reminder_cfg.get("enabled", True) and reminder_now.time() >= reminder_time:
+        resolving_keys = {
+            action.key for action in pending if action.action == "resolve"
+        }
+        for key, alert in all_existing_alerts.items():
+            if alert.user_code not in user_codes_cfg or key in resolving_keys:
+                continue
+            if alert.alert_type != _TREND_ALERT_TYPE:
+                last_notified_at = alert.last_notified_at
+                if last_notified_at.tzinfo is None:
+                    last_notified_at = last_notified_at.replace(
+                        tzinfo=timezone.utc
+                    )
+                if (
+                    last_notified_at.astimezone(reminder_timezone).date()
+                    >= reminder_now.date()
+                ):
+                    continue
+            details = active_conditions.get(key, {}).get(
+                "details", alert.details
+            )
+            action = _PendingAction(
+                action="reminder",
+                key=key,
+                user_code=alert.user_code,
+                alert_type=alert.alert_type,
+                entity_id=alert.entity_id,
+                details=details,
+                payload=AlertPayload(
+                    alert_key=alert.alert_key,
+                    user_code=alert.user_code,
+                    alert_type=alert.alert_type,
+                    entity_id=alert.entity_id,
+                    state="REMINDER",
+                    details=details,
+                    notification_count=alert.notification_count + 1,
+                    first_detected_at=alert.first_detected_at,
+                ),
+            )
+            if alert.alert_type == _TREND_ALERT_TYPE:
+                trend_reminder_groups[alert.user_code].append(action)
+            else:
+                reminder_groups[alert.user_code].append(action)
+
+        for user_code in list(reminder_groups):
+            reminder_groups[user_code].extend(
+                trend_reminder_groups[user_code]
+            )
+
+    if reminders_silenced:
+        suppressed = sum(len(actions) for actions in reminder_groups.values())
+        reminder_groups.clear()
+
     # ── 4. Group by user_code ─────────────────────────────────────
     groups: Dict[str, Dict[str, List[_PendingAction]]] = defaultdict(
         lambda: {"active": [], "resolved": []}
@@ -430,8 +501,23 @@ def operational_alerts_sensor(
         groups[pa.user_code][bucket].append(pa)
 
     # ── 5. Enrich sensor alerts with dimensional context ──────────
+    enrichment_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
+    opening_tenants = {
+        user_code
+        for user_code, group in groups.items()
+        if group["active"]
+    }
     for uc_name, group in groups.items():
-        all_actions = group["active"] + group["resolved"]
+        if group["active"]:
+            enrichment_groups[uc_name].extend(
+                group["active"] + resolution_groups[uc_name]
+            )
+    for uc_name, actions in reminder_groups.items():
+        enrichment_groups[uc_name].extend(actions)
+        if uc_name not in opening_tenants:
+            enrichment_groups[uc_name].extend(resolution_groups[uc_name])
+
+    for uc_name, all_actions in enrichment_groups.items():
         sensor_ids = [
             pa.entity_id
             for pa in all_actions
@@ -466,9 +552,10 @@ def operational_alerts_sensor(
 
     for uc_name, group in groups.items():
         active_payloads = [pa.payload for pa in group["active"]]
-        resolved_payloads = [pa.payload for pa in group["resolved"]]
+        resolution_actions = resolution_groups[uc_name]
+        resolved_payloads = [pa.payload for pa in resolution_actions]
 
-        if not active_payloads and not resolved_payloads:
+        if not active_payloads:
             continue
 
         sent = email.send_consolidated(ConsolidatedPayload(
@@ -481,7 +568,7 @@ def operational_alerts_sensor(
             for pa in group["active"]:
                 if pa.action == "open":
                     state_store.upsert_alert(
-                        alert_key=pa.key,
+                        alert_key=pa.payload.alert_key,
                         user_code=pa.user_code,
                         alert_type=pa.alert_type,
                         entity_id=pa.entity_id,
@@ -489,18 +576,34 @@ def operational_alerts_sensor(
                         state=ALERT_STATE_OPEN,
                     )
                     opened += 1
-                elif pa.action == "reminder":
-                    state_store.upsert_alert(
-                        alert_key=pa.key,
-                        user_code=pa.user_code,
-                        alert_type=pa.alert_type,
-                        entity_id=pa.entity_id,
-                        details=pa.details,
-                        state=ALERT_STATE_REMINDER,
-                    )
-                    reminded += 1
-            for pa in group["resolved"]:
-                state_store.mark_resolved(pa.key)
+            for pa in resolution_actions:
+                state_store.mark_resolution_notified(pa.payload.alert_key)
+                resolved += 1
+
+    for uc_name, actions in reminder_groups.items():
+        resolution_actions = (
+            [] if uc_name in opening_tenants else resolution_groups[uc_name]
+        )
+        sent = email.send_consolidated(ConsolidatedPayload(
+            user_code=uc_name,
+            active_alerts=[action.payload for action in actions],
+            resolved_alerts=[action.payload for action in resolution_actions],
+        ))
+        if sent:
+            for action in actions:
+                state_store.upsert_alert(
+                    alert_key=action.payload.alert_key,
+                    user_code=action.user_code,
+                    alert_type=action.alert_type,
+                    entity_id=action.entity_id,
+                    details=action.details,
+                    state=ALERT_STATE_REMINDER,
+                )
+                reminded += 1
+            for action in resolution_actions:
+                state_store.mark_resolution_notified(
+                    action.payload.alert_key
+                )
                 resolved += 1
 
     summary = (

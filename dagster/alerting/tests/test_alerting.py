@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import yaml
@@ -234,13 +234,13 @@ def test_failed_email_is_not_recorded(monkeypatch):
     state.upsert_alert.assert_not_called()
 
 
-def test_alert_lifecycle_sends_open_reminder_and_resolved(monkeypatch):
+def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
     config = _make_base_config(
-        reminder_interval_minutes={"connection_lost": 60},
+        daily_reminders={"enabled": False},
     )
     key = "carlsjr::connection_lost::sensor-1"
     alert = AlertRecord(
-        alert_key=key,
+        alert_key=f"{key}::incident-1",
         user_code="carlsjr",
         alert_type="connection_lost",
         entity_id="sensor-1",
@@ -251,9 +251,28 @@ def test_alert_lifecycle_sends_open_reminder_and_resolved(monkeypatch):
         resolved_at=None,
         notification_count=1,
     )
+    resolved_alert = AlertRecord(
+        alert_key=f"{key}::incident-1",
+        user_code="carlsjr",
+        alert_type="connection_lost",
+        entity_id="sensor-1",
+        state="RESOLVED_PENDING",
+        details=(
+            "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
+            "LastReadingAt: 2026-08-21 22:01:30 UTC"
+        ),
+        first_detected_at=alert.first_detected_at,
+        last_notified_at=alert.last_notified_at,
+        resolved_at=datetime.now(timezone.utc),
+        notification_count=1,
+    )
     state = MagicMock()
-    state.get_active_alerts.side_effect = [{}, {key: alert}, {key: alert}]
-    state.should_send_reminder.return_value = True
+    state.get_active_alerts.side_effect = [
+        {}, {key: alert}, {key: alert}, {},
+    ]
+    state.get_pending_resolved_alerts.side_effect = [
+        {}, {}, {}, {resolved_alert.alert_key: resolved_alert},
+    ]
     email = MagicMock()
     email.send_consolidated.return_value = True
     mssql = MagicMock()
@@ -261,6 +280,7 @@ def test_alert_lifecycle_sends_open_reminder_and_resolved(monkeypatch):
         [SensorAlert(sensor_id="sensor-1", minutes_without_readings=90)],
         [SensorAlert(sensor_id="sensor-1", minutes_without_readings=90)],
         [],
+        [SensorAlert(sensor_id="sensor-1", minutes_without_readings=90)],
     ]
     mssql.get_sensor_recoveries.return_value = {
         "sensor-1": SensorRecovery(
@@ -273,45 +293,134 @@ def test_alert_lifecycle_sends_open_reminder_and_resolved(monkeypatch):
     mssql.get_failed_ingestions.return_value = []
     mssql.get_stale_ingestions.return_value = []
     mssql.get_sensor_dimensions.return_value = {}
+    uuid_module = MagicMock()
+    uuid_module.uuid4.side_effect = ["incident-1", "incident-2"]
+
+    with (
+        patch.object(sensor_module, "_load_config", return_value=config),
+        patch.object(sensor_module, "uuid", uuid_module),
+    ):
+        context = build_sensor_context(
+            resources=_make_resources(mssql=mssql, state=state, email=email)
+        )
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+
+    assert email.send_consolidated.call_count == 2
+    calls = email.send_consolidated.call_args_list
+    first_open = calls[0].args[0].active_alerts[0]
+    resolved = calls[1].args[0].resolved_alerts[0]
+    second_open = calls[1].args[0].active_alerts[0]
+
+    assert first_open.state == "OPEN"
+    assert first_open.alert_key == f"{key}::incident-1"
+    assert resolved.state == "RESOLVED"
+    assert resolved.alert_key == f"{key}::incident-1"
+    assert resolved.details == (
+        "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
+        "LastReadingAt: 2026-08-21 22:01:30 UTC"
+    )
+    assert second_open.state == "OPEN"
+    assert second_open.alert_key == f"{key}::incident-2"
+
+    assert state.upsert_alert.call_count == 2
+    state.mark_resolved.assert_called_once_with(
+        f"{key}::incident-1",
+        resolved.details,
+    )
+    state.mark_resolution_notified.assert_called_once_with(
+        f"{key}::incident-1"
+    )
+
+
+def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
+    config = _make_base_config(
+        daily_reminders={
+            "enabled": True,
+            "time": "00:00",
+            "timezone": "UTC",
+        },
+        quiet_hours={"enabled": False},
+    )
+    sensor_key = "carlsjr::connection_lost::sensor-1"
+    trend_key = "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas"
+    resolved_key = "carlsjr::pipeline_failure::FactLecturas::incident-3"
+    last_notified_at = datetime.now(timezone.utc) - timedelta(days=1)
+    state = MagicMock()
+    state.get_active_alerts.return_value = {
+        sensor_key: AlertRecord(
+            alert_key=f"{sensor_key}::incident-1",
+            user_code="carlsjr",
+            alert_type="connection_lost",
+            entity_id="sensor-1",
+            state="OPEN",
+            details="Sensor details",
+            first_detected_at=last_notified_at,
+            last_notified_at=last_notified_at,
+            resolved_at=None,
+            notification_count=1,
+        ),
+        trend_key: AlertRecord(
+            alert_key=f"{trend_key}::incident-2",
+            user_code="carlsjr",
+            alert_type="asset_row_count_trend",
+            entity_id="carlsjr/dwh_factlecturas",
+            state="OPEN",
+            details="Trend details",
+            first_detected_at=last_notified_at,
+            last_notified_at=datetime.now(timezone.utc),
+            resolved_at=None,
+            notification_count=0,
+        ),
+    }
+    state.get_pending_resolved_alerts.return_value = {
+        resolved_key: AlertRecord(
+            alert_key=resolved_key,
+            user_code="carlsjr",
+            alert_type="pipeline_failure",
+            entity_id="FactLecturas",
+            state="RESOLVED_PENDING",
+            details="Resolved details",
+            first_detected_at=last_notified_at,
+            last_notified_at=last_notified_at,
+            resolved_at=datetime.now(timezone.utc),
+            notification_count=1,
+        )
+    }
+    email = MagicMock()
+    email.send_consolidated.return_value = True
+    mssql = MagicMock()
+    mssql.get_connection_lost_sensors.return_value = [
+        SensorAlert(sensor_id="sensor-1", minutes_without_readings=90)
+    ]
+    mssql.get_sensor_recoveries.return_value = {}
+    mssql.get_late_reading_sensors.return_value = []
+    mssql.get_failed_ingestions.return_value = []
+    mssql.get_stale_ingestions.return_value = []
+    mssql.get_sensor_dimensions.return_value = {}
 
     with patch.object(sensor_module, "_load_config", return_value=config):
         context = build_sensor_context(
             resources=_make_resources(mssql=mssql, state=state, email=email)
         )
-        # Tick 1: OPEN
-        sensor_module.operational_alerts_sensor.evaluate_tick(context)
-        # Tick 2: REMINDER
-        sensor_module.operational_alerts_sensor.evaluate_tick(context)
-        # Tick 3: RESOLVED
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    # Each tick produces one consolidated email
-    assert email.send_consolidated.call_count == 3
-
-    # Verify the states across the 3 ticks
-    calls = email.send_consolidated.call_args_list
-    tick1_payload = calls[0].args[0]
-    tick2_payload = calls[1].args[0]
-    tick3_payload = calls[2].args[0]
-
-    assert len(tick1_payload.active_alerts) == 1
-    assert tick1_payload.active_alerts[0].state == "OPEN"
-    assert len(tick1_payload.resolved_alerts) == 0
-
-    assert len(tick2_payload.active_alerts) == 1
-    assert tick2_payload.active_alerts[0].state == "REMINDER"
-    assert len(tick2_payload.resolved_alerts) == 0
-
-    assert len(tick3_payload.active_alerts) == 0
-    assert len(tick3_payload.resolved_alerts) == 1
-    assert tick3_payload.resolved_alerts[0].state == "RESOLVED"
-    assert tick3_payload.resolved_alerts[0].details == (
-        "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
-        "LastReadingAt: 2026-08-21 22:01:30 UTC"
-    )
-
+    email.send_consolidated.assert_called_once()
+    payload = email.send_consolidated.call_args.args[0]
+    assert payload.user_code == "carlsjr"
+    assert payload.recipient_alert_type is None
+    assert {alert.alert_type for alert in payload.active_alerts} == {
+        "connection_lost",
+        "asset_row_count_trend",
+    }
+    assert {alert.state for alert in payload.active_alerts} == {"REMINDER"}
+    assert [alert.alert_key for alert in payload.resolved_alerts] == [
+        resolved_key
+    ]
     assert state.upsert_alert.call_count == 2
-    state.mark_resolved.assert_called_once_with(key)
+    state.mark_resolution_notified.assert_called_once_with(resolved_key)
 
 
 def test_connection_lost_is_not_resolved_without_recovery_evidence():
@@ -332,7 +441,6 @@ def test_connection_lost_is_not_resolved_without_recovery_evidence():
             notification_count=1,
         )
     }
-    state.should_send_reminder.return_value = False
     resources = _make_resources(state=state)
 
     with patch.object(sensor_module, "_load_config", return_value=config):
@@ -360,6 +468,12 @@ def test_alert_config_covers_active_user_codes():
         "emerson",
         "bafar",
     }
+    assert config["defaults"]["asset_row_count_trends"][
+        "minimum_observed_days_7d"
+    ] == 7
+    assert config["defaults"]["asset_row_count_trends"][
+        "minimum_observed_days_28d"
+    ] == 28
 
 
 def test_quiet_hours_suppress_only_reminder_email():
@@ -374,10 +488,15 @@ def test_quiet_hours_suppress_only_reminder_email():
                 "dagster_run_failure": False,
                 "stale_detection": False,
             },
+            "daily_reminders": {
+                "enabled": True,
+                "time": "00:00",
+                "timezone": "UTC",
+            },
             "quiet_hours": {
                 "enabled": True,
                 "start": "00:00",
-                "end": "23:59",
+                "end": "23:59:59.999999",
                 "timezone": "UTC",
             },
         },
@@ -387,19 +506,18 @@ def test_quiet_hours_suppress_only_reminder_email():
     state = MagicMock()
     state.get_active_alerts.return_value = {
         key: AlertRecord(
-            alert_key=key,
+            alert_key=f"{key}::incident-1",
             user_code="carlsjr",
             alert_type="connection_lost",
             entity_id="sensor-1",
             state="OPEN",
             details=None,
             first_detected_at=datetime.now(timezone.utc),
-            last_notified_at=datetime.now(timezone.utc),
+            last_notified_at=datetime.now(timezone.utc) - timedelta(days=1),
             resolved_at=None,
             notification_count=1,
         )
     }
-    state.should_send_reminder.return_value = True
     email = MagicMock()
     mssql = MagicMock()
     mssql.get_connection_lost_sensors.return_value = [
@@ -419,28 +537,35 @@ def test_quiet_hours_suppress_only_reminder_email():
     state.upsert_alert.assert_not_called()
 
 
-def test_operational_sensor_does_not_resolve_row_count_trend_alert():
+def test_trend_alert_does_not_create_daily_monitoring_email():
     key = "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas"
     state = MagicMock()
     state.get_active_alerts.return_value = {
         key: AlertRecord(
-            alert_key=key,
+            alert_key=f"{key}::incident-1",
             user_code="carlsjr",
             alert_type="asset_row_count_trend",
             entity_id="carlsjr/dwh_factlecturas",
             state="OPEN",
             details=None,
             first_detected_at=datetime.now(timezone.utc),
-            last_notified_at=datetime.now(timezone.utc),
+            last_notified_at=datetime.now(timezone.utc) - timedelta(days=1),
             resolved_at=None,
             notification_count=1,
         )
     }
     email = MagicMock()
 
-    with patch.object(
-        sensor_module, "_load_config", return_value=_make_base_config()
-    ):
+    config = _make_base_config(
+        daily_reminders={
+            "enabled": True,
+            "time": "00:00",
+            "timezone": "UTC",
+        },
+        quiet_hours={"enabled": False},
+    )
+
+    with patch.object(sensor_module, "_load_config", return_value=config):
         context = build_sensor_context(
             resources=_make_resources(state=state, email=email)
         )
@@ -593,22 +718,94 @@ def test_consolidated_subject_format():
                 alert_type="connection_lost", entity_id="s1", state="OPEN",
             ),
             AlertPayload(
-                alert_key="k2", user_code="carlsjr",
-                alert_type="connection_lost", entity_id="s2", state="OPEN",
+                alert_key="k2",
+                user_code="carlsjr",
+                alert_type="pipeline_failure",
+                entity_id="ingestion",
+                state="OPEN",
             ),
         ],
         resolved_alerts=[
             AlertPayload(
-                alert_key="k3", user_code="carlsjr",
-                alert_type="connection_lost", entity_id="s3",
+                alert_key="k3",
+                user_code="carlsjr",
+                alert_type="dagster_run_failure",
+                entity_id="run-1",
                 state="RESOLVED",
             ),
         ],
     )
     subject = _build_consolidated_subject(payload)
-    assert subject.startswith("[ALERTAS OPERATIVAS] CARLSJR")
+    assert subject.startswith("[MONITOREO DE DATOS] CARLSJR")
     assert "2 activas" in subject
     assert "1 resuelta" in subject
+
+
+def test_consolidated_subject_uses_alert_type_title():
+    titles = {
+        "connection_lost": "ALERTAS DE SENSORES",
+        "late_readings": "ALERTAS DE SENSORES",
+        "pipeline_failure": "MONITOREO INGESTA DE DATOS",
+        "pipeline_stale": "ALERTAS PIPELINES DE DATOS",
+        "dagster_run_failure": "ALERTAS DAGSTER",
+        "asset_row_count_trend": "TENDENCIAS DE LECTURAS",
+    }
+
+    for alert_type, title in titles.items():
+        payload = ConsolidatedPayload(
+            user_code="carlsjr",
+            active_alerts=[
+                AlertPayload(
+                    alert_key="k1",
+                    user_code="carlsjr",
+                    alert_type=alert_type,
+                    entity_id="entity",
+                    state="OPEN",
+                )
+            ],
+        )
+
+        assert _build_consolidated_subject(payload).startswith(
+            f"[{title}] CARLSJR"
+        )
+
+
+def test_daily_reminder_subject_and_heading():
+    payload = ConsolidatedPayload(
+        user_code="carlsjr",
+        active_alerts=[
+            AlertPayload(
+                alert_key="k1",
+                user_code="carlsjr",
+                alert_type="connection_lost",
+                entity_id="s1",
+                state="REMINDER",
+            ),
+            AlertPayload(
+                alert_key="k2",
+                user_code="carlsjr",
+                alert_type="asset_row_count_trend",
+                entity_id="asset",
+                state="REMINDER",
+            ),
+        ],
+        resolved_alerts=[
+            AlertPayload(
+                alert_key="k3",
+                user_code="carlsjr",
+                alert_type="pipeline_failure",
+                entity_id="ingestion",
+                state="RESOLVED",
+            )
+        ],
+    )
+
+    subject = _build_consolidated_subject(payload)
+    html = _build_consolidated_html(payload)
+
+    assert subject.startswith("[MONITOREO OPERATIVO] CARLSJR")
+    assert "2 alertas pendientes" in subject
+    assert "Recordatorio de sensores y pipelines" in html
 
 
 def test_consolidated_html_contains_all_sections():
@@ -639,7 +836,7 @@ def test_consolidated_html_contains_all_sections():
     html = _build_consolidated_html(payload)
     # Header
     assert "CARLSJR" in html
-    assert "Alertas Operativas" in html
+    assert "Alertas de sensores y pipelines" in html
     # Sensor section
     assert "Sensor Desconectado" in html
     assert "Sucursal Norte" in html
@@ -650,7 +847,7 @@ def test_consolidated_html_contains_all_sections():
     # Resolved section
     assert "Alertas Resueltas" in html
     # Footer
-    assert "monitoreo operativo" in html
+    assert "sistema de alertas de sensores y pipelines" in html
     assert "background-color:transparent" in html
     assert 'bgcolor="#0f766e"' in html
     assert "Evidencia medida" in html
