@@ -28,6 +28,8 @@ flowchart LR
   bafarSales["SQL Server Bafar: ventas"] --> outOfHoursSales["dwh.factOutOfHoursSales"]
   bafarSchedules["dwh.dimStoreSchedules"] --> outOfHoursSales
 
+  managerAccessApi["API Bafar: ultimo acceso de gerentes"] --> managerAccess["dwh.factManagerAccessDaily"]
+
   control["ctl.IngestionControl"] --> factLecturas
   control --> factAudiencia
   control --> measurements
@@ -36,6 +38,7 @@ flowchart LR
   control --> mantizLifecycle
   control --> mantizInsights
   control --> outOfHoursSales
+  control --> managerAccess
 ```
 
 ## Sense
@@ -57,3 +60,7 @@ Mantiz tiene dos salidas principales. `dwh.factMantizTicketLifecycle` modela el 
 ## Ventas fuera de horario Bafar
 
 El flujo Bafar lee ventas incrementales, las compara contra `dwh.dimStoreSchedules` y conserva en `dwh.factOutOfHoursSales` las ventas antes de apertura, durante comida, despues de cierre o sin horario aplicable. El watermark `FactOutOfHoursSales` solo se actualiza al completar la corrida.
+
+## Acceso de gerentes Bafar
+
+El flujo consulta diariamente la API de ultimo acceso con una fecha y hora de corte explicitas, valida el contrato completo y consolida la snapshot en `dwh.factManagerAccessDaily`. El watermark `FactManagerAccessDaily` solo avanza al completar la carga; los backfills diarios aplican el mismo upsert sin modificarlo.
