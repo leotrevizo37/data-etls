@@ -9,7 +9,7 @@ from ..assets.dwh_factManagerAccessDaily import (
 from ..resources import ManagerAccessApiResource, SqlServerResource
 
 
-FACT_MANAGER_ACCESS_BACKFILL_START_DATE = datetime(2026, 8, 27)
+FACT_MANAGER_ACCESS_BACKFILL_START_DATE = datetime(2026, 1, 1)
 FACT_MANAGER_ACCESS_BACKFILL_TIMEZONE = "America/Ciudad_Juarez"
 FACT_MANAGER_ACCESS_BACKFILL_RETRY_POLICY = RetryPolicy(max_retries=3, delay=60)
 
