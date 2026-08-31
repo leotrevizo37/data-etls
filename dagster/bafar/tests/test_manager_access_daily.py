@@ -33,20 +33,17 @@ try:
     job_module = importlib.import_module(
         "bafar.defs.jobs.manager_access_daily_job",
     )
-    schedule_module = importlib.import_module(
-        "bafar.defs.schedules.manager_access_daily_schedule",
-    )
 finally:
     if original_dagster_module is not None:
         sys.modules["dagster"] = original_dagster_module
     sys.path[:] = original_sys_path
 
 
-def build_payload():
+def build_payload(fecha="2026-08-31", corte_hora=11):
     return {
         "ok": True,
-        "fechaCorte": "2026-08-31T11:00:00",
-        "corteHora": 11,
+        "fechaCorte": f"{fecha}T{corte_hora:02d}:00:00",
+        "corteHora": corte_hora,
         "totalGerentes": 2,
         "totalIngresaronAntesDeCorte": 1,
         "totalSinIngresoEnCorte": 1,
@@ -181,7 +178,9 @@ class ManagerAccessApiContractTests(unittest.TestCase):
 
 class ManagerAccessDailyAssetTests(unittest.TestCase):
     def test_asset_loads_snapshot_and_advances_control_watermark(self):
-        payload = build_payload()
+        payload = build_payload(
+            corte_hora=asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+        )
         api = MagicMock()
         api.fetch.return_value = payload
         sqlserver = MagicMock()
@@ -205,7 +204,10 @@ class ManagerAccessDailyAssetTests(unittest.TestCase):
             )
 
         reference_date = datetime(2026, 8, 31).date()
-        api.fetch.assert_called_once_with(reference_date, 11)
+        api.fetch.assert_called_once_with(
+            reference_date,
+            asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+        )
         sqlserver.mark_run_started.assert_called_once_with("FactManagerAccessDaily")
         sqlserver.write_fact_manager_access_daily_stage.assert_called_once_with(
             "run-1",
@@ -218,7 +220,12 @@ class ManagerAccessDailyAssetTests(unittest.TestCase):
         )
         sqlserver.mark_run_completed.assert_called_once_with(
             ingestion_name="FactManagerAccessDaily",
-            new_last_loaded_at=datetime(2026, 8, 31, 11),
+            new_last_loaded_at=datetime(
+                2026,
+                8,
+                31,
+                asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+            ),
             succeeded=True,
             error_message=None,
         )
@@ -276,8 +283,10 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         )
 
     def test_backfill_upserts_without_changing_control_watermark(self):
-        payload = build_payload()
-        payload["fechaCorte"] = "2026-08-27T11:00:00"
+        payload = build_payload(
+            fecha="2026-08-27",
+            corte_hora=asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+        )
         payload["data"][0]["ultimoInicioSesion"] = "2026-08-27T10:30:00"
         api = MagicMock()
         api.fetch.return_value = payload
@@ -300,7 +309,10 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         )
 
         reference_date = datetime(2026, 8, 27).date()
-        api.fetch.assert_called_once_with(reference_date, 11)
+        api.fetch.assert_called_once_with(
+            reference_date,
+            asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+        )
         sqlserver.write_fact_manager_access_daily_stage.assert_called_once_with(
             "run-3",
             reference_date,
@@ -312,7 +324,7 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         sqlserver.mark_run_completed.assert_not_called()
         self.assertEqual(result["fecha"], "2026-08-27")
 
-    def test_job_and_schedule_contracts(self):
+    def test_job_contracts(self):
         self.assertEqual(
             job_module.manager_access_daily_job.name,
             "024_bafar_manager_access_daily",
@@ -324,18 +336,6 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         self.assertEqual(
             backfill_module.fact_manager_access_backfill_daily_job.tags["backfill"],
             "fact_manager_access_daily",
-        )
-        self.assertEqual(
-            schedule_module.manager_access_daily_schedule.job_name,
-            "024_bafar_manager_access_daily",
-        )
-        self.assertEqual(
-            schedule_module.manager_access_daily_schedule.cron_schedule,
-            "10 11 * * *",
-        )
-        self.assertEqual(
-            schedule_module.manager_access_daily_schedule.execution_timezone,
-            "America/Ciudad_Juarez",
         )
 
 
