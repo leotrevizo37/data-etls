@@ -26,7 +26,6 @@
 
 - targets:
     - dagster-user-code-bafar:4008
-    - http://sidon.mx/
   labels:
     user_code: bafar
 
