@@ -5,6 +5,7 @@ from dagster import RetryPolicy, daily_partitioned_config, job, op
 
 from ..assets.dwh_factManagerAccessDaily import (
     FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+    FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS,
 )
 from ..resources import ManagerAccessApiResource, SqlServerResource
 
@@ -46,6 +47,7 @@ def backfill_fact_manager_access_daily_op(context) -> Dict[str, Any]:
         payload = api.fetch(
             reference_date,
             FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+            FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS,
         )
         sqlserver.clear_fact_manager_access_daily_stage(run_id)
         evaluated_rows = sqlserver.write_fact_manager_access_daily_stage(
@@ -68,8 +70,10 @@ def backfill_fact_manager_access_daily_op(context) -> Dict[str, Any]:
     return {
         "fecha": reference_date.isoformat(),
         "fecha_corte": payload["fechaCorte"],
+        "history_days": payload["diasHistorial"],
         "evaluated_rows": evaluated_rows,
         "affected_rows": affected_rows,
+        "total_records": payload["totalRegistros"],
     }
 
 

@@ -63,4 +63,4 @@ El flujo Bafar lee ventas incrementales, las compara contra `dwh.dimStoreSchedul
 
 ## Acceso de gerentes Bafar
 
-El flujo consulta diariamente la API de ultimo acceso con una fecha y hora de corte explicitas, valida el contrato completo y consolida la snapshot en `dwh.factManagerAccessDaily`. El watermark `FactManagerAccessDaily` solo avanza al completar la carga; los backfills diarios aplican el mismo upsert sin modificarlo.
+El flujo consulta diariamente la API de ultimo acceso con fecha, hora de corte y ventana historica explicitas, valida el contrato completo v1.1 y consolida la snapshot gerente-sucursal en `dwh.factManagerAccessDaily`. El watermark `FactManagerAccessDaily` solo avanza al completar la carga; los backfills diarios aplican el mismo upsert sin modificarlo.
