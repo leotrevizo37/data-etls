@@ -27,9 +27,11 @@ IF OBJECT_ID(N'dwh.factManagerAccessDaily', N'U') IS NULL
             Fecha DATE NOT NULL,
             FechaCorte DATETIME2(0) NOT NULL,
             CorteHora TINYINT NOT NULL,
+            DiasHistorial SMALLINT NOT NULL,
             IdUsuario INT NOT NULL,
             NoEmpleado NVARCHAR(50) NOT NULL,
             NombreGerente NVARCHAR(250) NOT NULL,
+            NombreUsuario NVARCHAR(250) NOT NULL,
             Email NVARCHAR(320) NOT NULL,
             Puesto NVARCHAR(250) NOT NULL,
             Rol NVARCHAR(250) NOT NULL,
@@ -51,6 +53,20 @@ IF OBJECT_ID(N'dwh.factManagerAccessDaily', N'U') IS NULL
     END;
 GO
 
+IF COL_LENGTH(N'dwh.factManagerAccessDaily', N'DiasHistorial') IS NULL
+    BEGIN
+        ALTER TABLE dwh.factManagerAccessDaily
+            ADD DiasHistorial SMALLINT NULL;
+    END;
+GO
+
+IF COL_LENGTH(N'dwh.factManagerAccessDaily', N'NombreUsuario') IS NULL
+    BEGIN
+        ALTER TABLE dwh.factManagerAccessDaily
+            ADD NombreUsuario NVARCHAR(250) NULL;
+    END;
+GO
+
 IF OBJECT_ID(N'stg.factManagerAccessDaily', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.factManagerAccessDaily
@@ -59,9 +75,11 @@ IF OBJECT_ID(N'stg.factManagerAccessDaily', N'U') IS NULL
             Fecha DATE NOT NULL,
             FechaCorte DATETIME2(0) NOT NULL,
             CorteHora TINYINT NOT NULL,
+            DiasHistorial SMALLINT NOT NULL,
             IdUsuario INT NOT NULL,
             NoEmpleado NVARCHAR(50) NOT NULL,
             NombreGerente NVARCHAR(250) NOT NULL,
+            NombreUsuario NVARCHAR(250) NOT NULL,
             Email NVARCHAR(320) NOT NULL,
             Puesto NVARCHAR(250) NOT NULL,
             Rol NVARCHAR(250) NOT NULL,
@@ -75,6 +93,20 @@ IF OBJECT_ID(N'stg.factManagerAccessDaily', N'U') IS NULL
             DiasSinIngresar INT NULL,
             EstatusCorte NVARCHAR(50) NOT NULL
         );
+    END;
+GO
+
+IF COL_LENGTH(N'stg.factManagerAccessDaily', N'DiasHistorial') IS NULL
+    BEGIN
+        ALTER TABLE stg.factManagerAccessDaily
+            ADD DiasHistorial SMALLINT NULL;
+    END;
+GO
+
+IF COL_LENGTH(N'stg.factManagerAccessDaily', N'NombreUsuario') IS NULL
+    BEGIN
+        ALTER TABLE stg.factManagerAccessDaily
+            ADD NombreUsuario NVARCHAR(250) NULL;
     END;
 GO
 

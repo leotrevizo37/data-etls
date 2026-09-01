@@ -41,13 +41,15 @@ def _load_sql_server_module():
 
 def build_payload():
     return {
-        "fechaCorte": "2026-08-31T11:00:00",
+        "fechaCorte": "2026-08-31T11:00:00.0000000",
         "corteHora": 11,
+        "diasHistorial": 180,
         "data": [
             {
                 "idUsuario": 105,
                 "noEmpleado": "10022421",
                 "nombreGerente": "Gerente Uno",
+                "nombreUsuario": "gerente.uno",
                 "email": "gerente.uno@example.com",
                 "puesto": "Gerente de Sucursal",
                 "rol": "Gestor",
@@ -56,7 +58,7 @@ def build_payload():
                 "claveTienda": "M377",
                 "nombreTienda": "Tienda Uno",
                 "zona": "NORTE",
-                "ultimoInicioSesion": "2026-08-31T10:30:00",
+                "ultimoInicioSesion": "2026-08-31T10:30:00.1234567",
                 "ingresoAntesDelCorte": True,
                 "diasSinIngresar": 0,
                 "estatusCorte": "Ingresó a tiempo",
@@ -65,6 +67,7 @@ def build_payload():
                 "idUsuario": 265,
                 "noEmpleado": "94120",
                 "nombreGerente": "Gerente Dos",
+                "nombreUsuario": "gerente.dos",
                 "email": "gerente.dos@example.com",
                 "puesto": "Gerente tienda",
                 "rol": "Operacion",
@@ -162,6 +165,25 @@ class FactManagerAccessDailySqlTests(unittest.TestCase):
 
         self.assertIn("Fecha DATE NOT NULL", ddl)
         self.assertIn("FechaCorte DATETIME2(0) NOT NULL", ddl)
+        self.assertIn("DiasHistorial SMALLINT NOT NULL", ddl)
+        self.assertIn("NombreUsuario NVARCHAR(250) NOT NULL", ddl)
+        self.assertIn("UltimoInicioSesion DATETIME2(0) NULL", ddl)
+        self.assertIn(
+            "COL_LENGTH(N'dwh.factManagerAccessDaily', N'DiasHistorial')",
+            ddl,
+        )
+        self.assertIn(
+            "COL_LENGTH(N'dwh.factManagerAccessDaily', N'NombreUsuario')",
+            ddl,
+        )
+        self.assertIn(
+            "COL_LENGTH(N'stg.factManagerAccessDaily', N'DiasHistorial')",
+            ddl,
+        )
+        self.assertIn(
+            "COL_LENGTH(N'stg.factManagerAccessDaily', N'NombreUsuario')",
+            ddl,
+        )
         self.assertIn(
             "PRIMARY KEY CLUSTERED (Fecha, IdUsuario, ClaveTienda)",
             ddl,
