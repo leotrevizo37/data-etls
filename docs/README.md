@@ -8,19 +8,18 @@ El repositorio contiene varios `user_codes` Dagster. Todos comparte el módulo s
 
 | User code | Puerto gRPC | Alcance principal |
 |---|---:|---|
-| `mcdonalds` | 4001 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
-| `smartfit` | 4002 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
-| `mcdonalds_cdp` | 4003 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
 | `bafar_poc_gabinete` | 4004 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
 | `valledelencino` | 4005 | Sense, dimensiones, lecturas, operaciones, eventos de sensores y mantenimiento |
 | `carlsjr` | 4006 | Sense, eventos de sensores, SmartAudits, Mantiz y mantenimiento |
 | `bafar` | Configuración externa | Ventas diarias, ventas fuera de horario y acceso de gerentes |
+| `alerting` | 4009 | Sensores de alertamiento, estado de incidencias y correo SMTP |
 
 ## Indice
 
 - [Arquitectura](architecture/overview.md)
 - [Flujo de datos](architecture/data_flow.md)
 - [Infraestructura](architecture/infrastructure.md)
+- [Code location de alerting](architecture/alerting.md)
 - [Modelo Sense](data_model/sense/fact_lecturas.md)
 - [Vista Sense agrupada CARLS](data_model/sense/vw_fact_readings_measurement_device_groups.md)
 - [Modelo SmartAudits](data_model/smartaudits/fact_smartaudits_categories.md)
@@ -39,6 +38,7 @@ El repositorio contiene varios `user_codes` Dagster. Todos comparte el módulo s
 - [OKR acceso diario de gerentes Bafar](okr/2026-09-bafar-manager-access-daily-evidence.md)
 - [OKR factAudiencia Sense CarlsJr](okr/2026-09-carlsjr-factaudiencia-evidence.md)
 - [ADRs](adr/0001-use-dagster.md)
+- [ADR de la code location dedicada para alerting](adr/0006-dedicated-alerting-code-location.md)
 
 ## Convenciones
 
