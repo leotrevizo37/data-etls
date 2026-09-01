@@ -17,4 +17,6 @@ Los pipelines se documentan por salida funcional, no por implementacion duplicad
 | SmartAudits lookup promotion | `112_smartaudits_comment_lookup_promotion` | `ctl.SmartauditsAiCommentLookup` |
 | Ventas fuera de horario Bafar | `020_bafar_out_of_hours_sales` | `dwh.factOutOfHoursSales` |
 | Backfill ventas fuera de horario Bafar | `022_bafar_out_of_hours_sales_backfill_daily` | Rango diario de `dwh.factOutOfHoursSales` |
+| Acceso diario de gerentes Bafar | `024_bafar_manager_access_daily` | `dwh.factManagerAccessDaily` |
+| Backfill acceso de gerentes Bafar | `025_bafar_manager_access_backfill_daily` | Snapshots diarias de `dwh.factManagerAccessDaily` |
 | Mantenimiento | `080_maintenance_cleanup`, `081_maintenance_index`, `089_maintenance_spark_healthcheck` | Salud operativa |
