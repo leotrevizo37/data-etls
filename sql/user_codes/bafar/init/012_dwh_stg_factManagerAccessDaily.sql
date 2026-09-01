@@ -56,14 +56,14 @@ GO
 IF COL_LENGTH(N'dwh.factManagerAccessDaily', N'DiasHistorial') IS NULL
     BEGIN
         ALTER TABLE dwh.factManagerAccessDaily
-            ADD DiasHistorial SMALLINT NULL;
+        ADD DiasHistorial SMALLINT NULL;
     END;
 GO
 
 IF COL_LENGTH(N'dwh.factManagerAccessDaily', N'NombreUsuario') IS NULL
     BEGIN
         ALTER TABLE dwh.factManagerAccessDaily
-            ADD NombreUsuario NVARCHAR(250) NULL;
+        ADD NombreUsuario NVARCHAR(250) NULL;
     END;
 GO
 
@@ -99,14 +99,14 @@ GO
 IF COL_LENGTH(N'stg.factManagerAccessDaily', N'DiasHistorial') IS NULL
     BEGIN
         ALTER TABLE stg.factManagerAccessDaily
-            ADD DiasHistorial SMALLINT NULL;
+        ADD DiasHistorial SMALLINT NULL;
     END;
 GO
 
 IF COL_LENGTH(N'stg.factManagerAccessDaily', N'NombreUsuario') IS NULL
     BEGIN
         ALTER TABLE stg.factManagerAccessDaily
-            ADD NombreUsuario NVARCHAR(250) NULL;
+        ADD NombreUsuario NVARCHAR(250) NULL;
     END;
 GO
 
