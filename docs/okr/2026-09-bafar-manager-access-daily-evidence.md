@@ -28,6 +28,7 @@ Conserva un corte diario consistente del estado de acceso reportado por la API y
 | Job de backfill | `025_bafar_manager_access_backfill_daily` |
 | Schedule | `024_bafar_manager_access_daily_every_1d`, activo a las 21:40 en `America/Ciudad_Juarez` |
 | Corte solicitado | `corteHora=23` |
+| Ventana historica | `diasHistorial=180` |
 | Particiones de backfill | Dias desde `2026-01-01` en `America/Ciudad_Juarez` |
 | Llave historica | `Fecha`, `IdUsuario`, `ClaveTienda` |
 
@@ -47,7 +48,7 @@ Conserva un corte diario consistente del estado de acceso reportado por la API y
 ## Flujo tecnico
 
 1. El asset calcula la fecha local en `America/Ciudad_Juarez` y obtiene el watermark `FactManagerAccessDaily`.
-2. Solicita a la API la snapshot completa con `fecha` y `corteHora=23` explicitos.
+2. Solicita a la API la snapshot completa con `fecha`, `corteHora=23` y `diasHistorial=180` explicitos, sin filtrar `soloSinIngreso`.
 3. Verifica la respuesta HTTP, el tipo `application/json` y el contrato completo antes de escribir datos.
 4. Limpia e inserta la snapshot en `stg.factManagerAccessDaily` con el `RunId` de la corrida.
 5. SQL Server consolida la informacion en `dwh.factManagerAccessDaily` mediante `MERGE` por `Fecha`, `IdUsuario` y `ClaveTienda`.
@@ -68,10 +69,11 @@ Conserva un corte diario consistente del estado de acceso reportado por la API y
 |---|---|
 | Estructura | Campos obligatorios y rechazo de campos desconocidos en encabezado y detalle |
 | Tipos y nulos | Tipos exactos, campos nulables permitidos y longitudes compatibles con SQL Server |
-| Corte | Correspondencia entre `fecha`, `corteHora` y `fechaCorte` en hora local |
-| Consistencia | Totales, porcentaje, estado de corte y ultimo inicio de sesion |
+| Fechas | Formato local ISO con entre uno y siete digitos fraccionarios, compatible con Python 3.10 y escritura tipada a SQL Server |
+| Corte | Correspondencia entre `fecha`, `corteHora`, `diasHistorial` y `fechaCorte` en hora local |
+| Consistencia | Gerentes distintos, `totalRegistros`, porcentaje, tres estados de corte y ultimo inicio de sesion |
 | Identidad | Rechazo de llaves duplicadas por gerente y sucursal dentro de la snapshot |
-| Volumen | Rechazo de snapshots vacias |
+| Volumen | Aceptacion de snapshots vacias cuando los agregados son consistentes |
 
 ## Indices para consulta historica
 
@@ -90,7 +92,7 @@ Conserva un corte diario consistente del estado de acceso reportado por la API y
 | `dagster/bafar/tests/test_manager_access_daily_schedule.py` | Nombre, job, cron, zona horaria y estado del schedule |
 | `dagster/bafar/tests/test_fact_manager_access_daily_merge_sql.py` | Staging, nulabilidad, `MERGE`, llave historica, indices y control de ingesta |
 
-La suite focalizada registra 9 pruebas exitosas. La suite completa del `user_code` Bafar registra 44 pruebas ejecutadas: 43 exitosas y una omitida porque el runtime utilizado no monta el arbol SQL del repositorio. La validacion de definiciones de `bafar.definitions` finalizo correctamente.
+La suite focalizada registra 15 pruebas exitosas. La suite completa del `user_code` Bafar registra 46 pruebas exitosas, incluida la validacion del DDL con el arbol SQL montado. La validacion de definiciones de `bafar.definitions` finalizo correctamente.
 
 ## Evidencia pendiente
 
