@@ -9,6 +9,7 @@ from ..resources import ManagerAccessApiResource, SqlServerResource
 
 FACT_MANAGER_ACCESS_DAILY_TIMEZONE = ZoneInfo("America/Ciudad_Juarez")
 FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR = 23
+FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS = 180
 FACT_MANAGER_ACCESS_DAILY_MAX_RETRIES = 3
 FACT_MANAGER_ACCESS_DAILY_RETRY_DELAY_SECONDS = 60
 FACT_MANAGER_ACCESS_DAILY_RETRY_POLICY = RetryPolicy(
@@ -38,6 +39,7 @@ def ingest_fact_manager_access_daily_op(context):
         payload: Dict[str, Any] = api.fetch(
             reference_date,
             FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+            FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS,
         )
         sqlserver.clear_fact_manager_access_daily_stage(run_id)
         evaluated_rows = sqlserver.write_fact_manager_access_daily_stage(
@@ -47,7 +49,12 @@ def ingest_fact_manager_access_daily_op(context):
         )
         affected_rows = sqlserver.merge_fact_manager_access_daily(run_id)
         sqlserver.clear_fact_manager_access_daily_stage(run_id)
-        cutoff_at = datetime.fromisoformat(payload["fechaCorte"])
+        cutoff_at = datetime.strptime(
+            payload["fechaCorte"][:26],
+            "%Y-%m-%dT%H:%M:%S.%f"
+            if "." in payload["fechaCorte"]
+            else "%Y-%m-%dT%H:%M:%S",
+        )
         new_last_loaded_at = (
             max(last_loaded_at, cutoff_at)
             if last_loaded_at is not None
@@ -85,8 +92,10 @@ def ingest_fact_manager_access_daily_op(context):
         metadata={
             "fecha": reference_date.isoformat(),
             "fecha_corte": payload["fechaCorte"],
+            "history_days": payload["diasHistorial"],
             "evaluated_rows": evaluated_rows,
             "affected_rows": affected_rows,
+            "total_records": payload["totalRegistros"],
             "total_managers": payload["totalGerentes"],
             "entered_before_cutoff": payload["totalIngresaronAntesDeCorte"],
             "without_entry_at_cutoff": payload["totalSinIngresoEnCorte"],

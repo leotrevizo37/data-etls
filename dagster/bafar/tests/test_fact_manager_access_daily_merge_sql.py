@@ -2,7 +2,7 @@ import importlib.util
 import sys
 import types
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -119,23 +119,40 @@ class FactManagerAccessDailySqlTests(unittest.TestCase):
         self.assertIn("target.Fecha = source.Fecha", sql)
         self.assertIn("target.IdUsuario = source.IdUsuario", sql)
         self.assertIn("target.ClaveTienda = source.ClaveTienda", sql)
+        self.assertIn("target.DiasHistorial = source.DiasHistorial", sql)
+        self.assertIn("target.NombreUsuario = source.NombreUsuario", sql)
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
 
     def test_stage_write_preserves_nullable_store_and_access_values(self) -> None:
+        payload = build_payload()
+        payload["data"].reverse()
         written = self.resource.write_fact_manager_access_daily_stage(
             "run-1",
             date(2026, 8, 31),
-            build_payload(),
+            payload,
         )
 
         rows = self.cursor.executemany.call_args.args[1]
         self.assertEqual(written, 2)
         self.assertEqual(rows[0][1], date(2026, 8, 31))
-        self.assertEqual(rows[0][11], 318)
-        self.assertIsNone(rows[1][11])
-        self.assertIsNone(rows[1][15])
-        self.assertIsNone(rows[1][17])
+        self.assertEqual(rows[0][4], 180)
+        self.assertEqual(rows[1][8], "gerente.uno")
+        self.assertIsNone(rows[0][13])
+        self.assertEqual(rows[1][13], 318)
+        self.assertIsNone(rows[0][17])
+        self.assertEqual(rows[1][17], datetime(2026, 8, 31, 10, 30, 0, 123456))
+        self.assertIsNone(rows[0][19])
+        self.assertIsInstance(rows[0][1], date)
+        self.assertIsInstance(rows[0][2], datetime)
+        self.assertIsInstance(rows[0][3], int)
+        self.assertIsInstance(rows[0][12], bool)
+        self.assertIsInstance(rows[1][17], datetime)
+        self.assertIsInstance(rows[0][18], bool)
+        sql = self.cursor.executemany.call_args.args[0]
+        self.assertEqual(sql.count("?"), 21)
+        self.assertTrue(all(len(row) == 21 for row in rows))
+        self.assertIs(self.cursor.fast_executemany, True)
         self.connection.commit.assert_called_once_with()
 
     def test_merge_returns_affected_rows(self) -> None:
