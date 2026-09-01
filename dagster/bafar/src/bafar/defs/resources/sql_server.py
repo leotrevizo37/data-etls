@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, Optional
 
 import os
@@ -274,6 +274,104 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+def build_fact_manager_access_daily_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factManagerAccessDaily AS target
+USING (
+    SELECT
+        Fecha,
+        FechaCorte,
+        CorteHora,
+        IdUsuario,
+        NoEmpleado,
+        NombreGerente,
+        Email,
+        Puesto,
+        Rol,
+        Activo,
+        IdTienda,
+        ClaveTienda,
+        NombreTienda,
+        Zona,
+        UltimoInicioSesion,
+        IngresoAntesDelCorte,
+        DiasSinIngresar,
+        EstatusCorte
+    FROM stg.factManagerAccessDaily
+    WHERE RunId = ?
+) AS source
+    ON target.Fecha = source.Fecha
+    AND target.IdUsuario = source.IdUsuario
+    AND target.ClaveTienda = source.ClaveTienda
+WHEN MATCHED THEN
+    UPDATE SET
+        target.FechaCorte = source.FechaCorte,
+        target.CorteHora = source.CorteHora,
+        target.NoEmpleado = source.NoEmpleado,
+        target.NombreGerente = source.NombreGerente,
+        target.Email = source.Email,
+        target.Puesto = source.Puesto,
+        target.Rol = source.Rol,
+        target.Activo = source.Activo,
+        target.IdTienda = source.IdTienda,
+        target.NombreTienda = source.NombreTienda,
+        target.Zona = source.Zona,
+        target.UltimoInicioSesion = source.UltimoInicioSesion,
+        target.IngresoAntesDelCorte = source.IngresoAntesDelCorte,
+        target.DiasSinIngresar = source.DiasSinIngresar,
+        target.EstatusCorte = source.EstatusCorte,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        Fecha,
+        FechaCorte,
+        CorteHora,
+        IdUsuario,
+        NoEmpleado,
+        NombreGerente,
+        Email,
+        Puesto,
+        Rol,
+        Activo,
+        IdTienda,
+        ClaveTienda,
+        NombreTienda,
+        Zona,
+        UltimoInicioSesion,
+        IngresoAntesDelCorte,
+        DiasSinIngresar,
+        EstatusCorte
+    )
+    VALUES (
+        source.Fecha,
+        source.FechaCorte,
+        source.CorteHora,
+        source.IdUsuario,
+        source.NoEmpleado,
+        source.NombreGerente,
+        source.Email,
+        source.Puesto,
+        source.Rol,
+        source.Activo,
+        source.IdTienda,
+        source.ClaveTienda,
+        source.NombreTienda,
+        source.Zona,
+        source.UltimoInicioSesion,
+        source.IngresoAntesDelCorte,
+        source.DiasSinIngresar,
+        source.EstatusCorte
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 class SqlServerResource:
     def __init__(
         self,
@@ -430,6 +528,95 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_fact_store_sales_daily_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_manager_access_daily_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factManagerAccessDaily WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def write_fact_manager_access_daily_stage(
+        self,
+        run_id: str,
+        reference_date: date,
+        payload: Dict[str, Any],
+    ) -> int:
+        cutoff_at = datetime.fromisoformat(payload["fechaCorte"])
+        rows = [
+            (
+                run_id,
+                reference_date,
+                cutoff_at,
+                payload["corteHora"],
+                row["idUsuario"],
+                row["noEmpleado"],
+                row["nombreGerente"],
+                row["email"],
+                row["puesto"],
+                row["rol"],
+                row["activo"],
+                row["idTienda"],
+                row["claveTienda"],
+                row["nombreTienda"],
+                row["zona"],
+                datetime.fromisoformat(row["ultimoInicioSesion"])
+                if row["ultimoInicioSesion"] is not None
+                else None,
+                row["ingresoAntesDelCorte"],
+                row["diasSinIngresar"],
+                row["estatusCorte"],
+            )
+            for row in payload["data"]
+        ]
+        if not rows:
+            return 0
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.fast_executemany = True
+                cursor.executemany(
+                    """
+INSERT INTO stg.factManagerAccessDaily (
+    RunId,
+    Fecha,
+    FechaCorte,
+    CorteHora,
+    IdUsuario,
+    NoEmpleado,
+    NombreGerente,
+    Email,
+    Puesto,
+    Rol,
+    Activo,
+    IdTienda,
+    ClaveTienda,
+    NombreTienda,
+    Zona,
+    UltimoInicioSesion,
+    IngresoAntesDelCorte,
+    DiasSinIngresar,
+    EstatusCorte
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+""",
+                    rows,
+                )
+                conn.commit()
+                return len(rows)
+
+    def merge_fact_manager_access_daily(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_manager_access_daily_merge_sql(), run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:

@@ -13,6 +13,7 @@ def _build_defs() -> Any:
 
     from .resources import (
         dim_sqlserver_resource,
+        manager_access_api_resource,
         spark_df_io_manager,
         spark_resource,
         sqlserver_resource,
@@ -24,6 +25,7 @@ def _build_defs() -> Any:
             "spark_df_io_manager": spark_df_io_manager,
             "sqlserver": sqlserver_resource,
             "dim_sqlserver": dim_sqlserver_resource,
+            "manager_access_api": manager_access_api_resource,
         },
     )
 
