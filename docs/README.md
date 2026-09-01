@@ -37,6 +37,7 @@ El repositorio contiene varios `user_codes` Dagster. Todos comparte el módulo s
 - [OKR ventas fuera de horario Bafar](okr/2026-07-bafar-out-of-hours-sales-evidence.md)
 - [OKR acceso diario de gerentes Bafar](okr/2026-09-bafar-manager-access-daily-evidence.md)
 - [OKR factAudiencia Sense CarlsJr](okr/2026-09-carlsjr-factaudiencia-evidence.md)
+- [OKR alertamiento centralizado multi-tenant](okr/2026-09-alerting-evidence.md)
 - [ADRs](adr/0001-use-dagster.md)
 - [ADR de la code location dedicada para alerting](adr/0006-dedicated-alerting-code-location.md)
 
