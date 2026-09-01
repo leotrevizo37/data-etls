@@ -1,42 +1,35 @@
 - targets:
-    - http://host.docker.internal:3005/
-  labels:
-    user_code: mcdonalds
-
-- targets:
-    - http://host.docker.internal:3005/
-  labels:
-    user_code: smartfit
-
-- targets:
-    - http://host.docker.internal:3005/
-  labels:
-    user_code: mcdonalds_cdp
-
-- targets:
-    - https://bafar.sidon.mx/
-    - http://172.168.10.80:3005/
     - dagster-user-code-bafar-poc-gabinete:4004
   labels:
     user_code: bafar_poc_gabinete
 
 - targets:
     - https://valledelencino.sidon.mx/
-    - http://172.168.10.80:3005/
+    - http://dagster-web:3000/
     - dagster-user-code-valledelencino:4005
   labels:
     user_code: valledelencino
 
 - targets:
     - https://carlsjr.sidon.mx/
-    - http://172.168.10.80:3005/
+    - http://dagster-web:3000/
     - dagster-user-code-carlsjr:4006
   labels:
     user_code: carlsjr
 
 - targets:
     - https://emerson.sidon.mx/
-    - http://172.168.10.80:3005/
+    - http://dagster-web:3000/
     - dagster-user-code-emerson:4007
   labels:
     user_code: emerson
+
+- targets:
+    - dagster-user-code-bafar:4008
+  labels:
+    user_code: bafar
+
+- targets:
+    - dagster-user-code-alerting:4009
+  labels:
+    user_code: alerting

@@ -5,15 +5,6 @@ services:
   dagster-postgres:
     restart: "no"
 
-  dagster-user-code-mcd:
-    restart: "no"
-
-  dagster-user-code-smft:
-    restart: "no"
-
-  dagster-user-code-mcd-cdp:
-    restart: "no"
-
   dagster-user-code-bafar-poc-gabinete:
     restart: "no"
 
@@ -53,4 +44,10 @@ services:
     profiles: ["disabled"]
 
   spark-data-init:
+    restart: "no"
+
+  alertmanager:
+    restart: "no"
+
+  dagster-user-code-alerting:
     restart: "no"
