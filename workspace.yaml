@@ -1,17 +1,5 @@
 load_from:
   - grpc_server:
-      host: mcdonalds-dagster-user-code
-      port: 4001
-      location_name: mcdonalds
-  - grpc_server:
-      host: smartfit-dagster-user-code
-      port: 4002
-      location_name: smartfit
-  - grpc_server:
-      host: mcdonalds_cdp-dagster-user-code
-      port: 4003
-      location_name: mcdonalds_cdp
-  - grpc_server:
       host: bafar_poc_gabinete-dagster-user-code
       port: 4004
       location_name: bafar_poc_gabinete
@@ -31,3 +19,7 @@ load_from:
       host: bafar-dagster-user-code
       port: 4008
       location_name: bafar
+  - grpc_server:
+      host: alerting-dagster-user-code
+      port: 4009
+      location_name: alerting

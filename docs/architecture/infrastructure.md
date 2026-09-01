@@ -7,7 +7,7 @@ El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.
 | Servicio logico | Referencia |
 |---|---|
 | Dagster webserver | `DAGSTER_WEB_PORT` |
-| User code gRPC | `MCDONALDS_USER_CODE_PORT`, `SMARTFIT_USER_CODE_PORT`, `CDP_USER_CODE_PORT`, `GABINETE_USER_CODE_PORT`, `VALLEDELENCINO_USER_CODE_PORT`, `CARLSJR_USER_CODE_PORT` |
+| User code gRPC | `GABINETE_USER_CODE_PORT`, `VALLEDELENCINO_USER_CODE_PORT`, `CARLSJR_USER_CODE_PORT`, `ALERTING_USER_CODE_PORT` |
 | Spark master | `SPARK_MASTER_URL`, `SPARK_MASTER_STATUS_URL` |
 | Spark workers | `SPARK_WORKER_MEM`, `SPARK_WORKER_CORES` |
 | SQL Server DWH | `MSSQL_HOST`, `MSSQL_PORT` |

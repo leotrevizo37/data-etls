@@ -6,9 +6,7 @@ x-dagster-common: &dagster_common
   working_dir: /opt/dagster/app
   volumes:
     - ../dagster/dagster_home:/opt/dagster/dagster_home
-    - ../dagster/mcdonalds:/opt/dagster/app/mcdonalds
     - ../dagster/smartfit:/opt/dagster/app/smartfit
-    - ../dagster/mcdonalds_cdp:/opt/dagster/app/mcdonalds_cdp
     - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../dagster/carlsjr:/opt/dagster/app/carlsjr
@@ -54,7 +52,7 @@ services:
             sleep 5
           done
 
-          USER_CODE_DBS="$${USER_CODE_DBS:-mcdonalds=mcdonalds smartfit=smartfit mcdonalds_cdp=mcdonaldscdp valledelencino=valledelencino carlsjr=carlsjr emerson=emerson bafar=bafar}"
+          USER_CODE_DBS="$${USER_CODE_DBS:-smartfit=smartfit valledelencino=valledelencino carlsjr=carlsjr emerson=emerson bafar=bafar}"
 
           for db_spec in $$USER_CODE_DBS; do
             case "$$db_spec" in
@@ -154,177 +152,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
-
-  dagster-user-code-mcd:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: mcdonalds-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/mcdonalds
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/mcdonalds/src
-      APP_DB: ${MCDONALDS_DB:-mcdonalds}
-      DIM_DB: ${MCDONALDS_DIM_DB:-mcdonalds}
-      ADLS_CONTAINER_NAME: ${MCDONALDS_ADLS_CONTAINER_NAME:-mcdonalds}
-      FACTREADINGS_OVERLAP_HOURS: ${MCDONALDS_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
-      FACTREDINGSAUDITS_OVERLAP_HOURS: ${MCDONALDS_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${MCDONALDS_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/mcdonalds}
-      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
-      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
-      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
-      SPARK_OBSERVABILITY_DRIVER_PORT: ${MCD_OBSERVABILITY_SPARK_DRIVER_PORT:-37074}
-      SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT: ${MCD_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37075}
-      SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT: ${MCD_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37076}
-      SPARK_DRIVER_PORT: ${MCD_SPARK_DRIVER_PORT}
-      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${MCD_SPARK_BLOCK_MANAGER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}
-      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
-    ports:
-      - "${MCDONALDS_USER_CODE_PORT:-4001}:4001"
-      - "${MCD_OBSERVABILITY_SPARK_DRIVER_PORT:-37074}:${MCD_OBSERVABILITY_SPARK_DRIVER_PORT:-37074}"
-      - "${MCD_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37075}:${MCD_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37075}"
-      - "${MCD_SPARK_DRIVER_PORT}:${MCD_SPARK_DRIVER_PORT}"
-      - "${MCD_SPARK_BLOCK_MANAGER_PORT}:${MCD_SPARK_BLOCK_MANAGER_PORT}"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4001",
-      "-m", "mcdonalds.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4001 -h 127.0.0.1"
-        ]
-      interval: 20s
-      timeout: 25s
-      retries: 10
-      start_period: 20s
-
-  dagster-user-code-smft:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: smartfit-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/smartfit
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/smartfit/src
-      APP_DB: ${SMARTFIT_DB:-smartfit}
-      DIM_DB: ${SMARTFIT_DIM_DB:-smartfit}
-      ADLS_CONTAINER_NAME: ${SMARTFIT_ADLS_CONTAINER_NAME:-smartfit}
-      FACTREADINGS_OVERLAP_HOURS: ${SMARTFIT_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
-      FACTREDINGSAUDITS_OVERLAP_HOURS: ${SMARTFIT_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${SMARTFIT_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/smartfit}
-      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
-      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
-      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
-      SPARK_OBSERVABILITY_DRIVER_PORT: ${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}
-      SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT: ${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}
-      SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT: ${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}
-      SPARK_DRIVER_PORT: ${SMFT_SPARK_DRIVER_PORT}
-      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${SMFT_SPARK_BLOCK_MANAGER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}
-      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
-    ports:
-      - "${SMARTFIT_USER_CODE_PORT:-4002}:4002"
-      - "${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}:${SMFT_OBSERVABILITY_SPARK_DRIVER_PORT:-37084}"
-      - "${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}:${SMFT_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37085}"
-      - "${SMFT_SPARK_DRIVER_PORT}:${SMFT_SPARK_DRIVER_PORT}"
-      - "${SMFT_SPARK_BLOCK_MANAGER_PORT}:${SMFT_SPARK_BLOCK_MANAGER_PORT}"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4002",
-      "-m", "smartfit.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4002 -h 127.0.0.1"
-        ]
-      interval: 10s
-      timeout: 25s
-      retries: 10
-      start_period: 30s
-
-  dagster-user-code-mcd-cdp:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: mcdonalds_cdp-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/mcdonalds_cdp
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/mcdonalds_cdp/src
-      APP_DB: ${CDP_DB:-cdp}
-      DIM_DB: ${CDP_DIM_DB:-cdp}
-      ADLS_CONTAINER_NAME: ${CDP_ADLS_CONTAINER_NAME:-cdp}
-      FACTREADINGS_OVERLAP_HOURS: ${CDP_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
-      FACTREDINGSAUDITS_OVERLAP_HOURS: ${CDP_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${CDP_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/mcdonalds_cdp}
-      SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
-      SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
-      SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
-      SPARK_OBSERVABILITY_DRIVER_PORT: ${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}
-      SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT: ${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}
-      SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT: ${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}
-      SPARK_DRIVER_PORT: ${CDP_SPARK_DRIVER_PORT}
-      SPARK_DRIVER_BLOCK_MANAGER_PORT: ${CDP_SPARK_BLOCK_MANAGER_PORT}
-      SPARK_BLOCK_MANAGER_PORT: ${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}
-      SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
-    ports:
-      - "${CDP_USER_CODE_PORT:-4003}:4003"
-      - "${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}:${CDP_OBSERVABILITY_SPARK_DRIVER_PORT:-37094}"
-      - "${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}:${CDP_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37095}"
-      - "${CDP_SPARK_DRIVER_PORT}:${CDP_SPARK_DRIVER_PORT}"
-      - "${CDP_SPARK_BLOCK_MANAGER_PORT}:${CDP_SPARK_BLOCK_MANAGER_PORT}"
-    command: [
-      "dagster", "api", "grpc",
-      "-h", "0.0.0.0",
-      "-p", "4003",
-      "-m", "mcdonalds_cdp.definitions"
-    ]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "dagster api grpc-health-check -p 4003 -h 127.0.0.1"
-        ]
-      interval: 20s
-      timeout: 25s
-      retries: 10
-      start_period: 40s
 
   dagster-user-code-bafar-poc-gabinete:
     build:
@@ -614,6 +441,10 @@ services:
       DIMSQL_DRIVER: ${BAFAR_DIMSQL_DRIVER:-ODBC Driver 18 for SQL Server}
       DIMSQL_CONNECT_RETRY_COUNT: ${BAFAR_DIMSQL_CONNECT_RETRY_COUNT:-3}
       DIMSQL_CONNECT_RETRY_INTERVAL: ${BAFAR_DIMSQL_CONNECT_RETRY_INTERVAL:-60}
+      BAFAR_MANAGER_ACCESS_API_URL: ${BAFAR_MANAGER_ACCESS_API_URL}
+      BAFAR_MANAGER_ACCESS_API_USER: ${BAFAR_MANAGER_ACCESS_API_USER}
+      BAFAR_MANAGER_ACCESS_API_PASSWORD: ${BAFAR_MANAGER_ACCESS_API_PASSWORD}
+      BAFAR_MANAGER_ACCESS_API_TIMEOUT_SECONDS: ${BAFAR_MANAGER_ACCESS_API_TIMEOUT_SECONDS:-30}
       SPARK_DRIVER_HOST: ${SPARK_DRIVER_HOST}
       SPARK_DRIVER_BIND_ADDRESS: ${SPARK_DRIVER_BIND_ADDRESS}
       SPARK_OBSERVABILITY_DRIVER_PORT: ${BAFAR_OBSERVABILITY_SPARK_DRIVER_PORT:-37144}
@@ -646,6 +477,62 @@ services:
       retries: 10
       start_period: 40s
 
+  dagster-user-code-alerting:
+    build:
+      context: ..
+      dockerfile: dagster/Dockerfile
+    container_name: alerting-dagster-user-code
+    <<: *dagster_common
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      sql-init:
+        condition: service_completed_successfully
+    working_dir: /opt/dagster/app/alerting
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      PYTHONPATH: /opt/dagster/app/alerting/src
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_USER: ${MSSQL_USER}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
+      DAGSTER_PG_HOSTNAME: dagster-postgres
+      DAGSTER_PG_USER: ${DAGSTER_PG_USER}
+      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB}
+      DAGSTER_PG_PORT: 5432
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
+      ALERT_SMTP_TO: ${ALERT_SMTP_TO}
+      ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}
+      ALERT_SMTP_TO_BAFAR_POC_GABINETE_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_BAFAR_POC_GABINETE_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_VALLEDELENCINO_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_VALLEDELENCINO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_CARLSJR_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_CARLSJR_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_EMERSON_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_EMERSON_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_BAFAR_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_BAFAR_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
+    volumes:
+      - ../dagster/dagster_home:/opt/dagster/dagster_home
+      - ../dagster/alerting:/opt/dagster/app/alerting
+      - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
+    ports:
+      - "${ALERTING_USER_CODE_PORT:-4009}:4009"
+    command: [
+      "dagster", "code-server", "start",
+      "-h", "0.0.0.0",
+      "-p", "4009",
+      "-m", "alerting.definitions"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL", "dagster api grpc-health-check -p 4009 -h 127.0.0.1"]
+      interval: 20s
+      timeout: 25s
+      retries: 10
+      start_period: 20s
+
   dagster-web:
     build:
       context: ..
@@ -653,12 +540,6 @@ services:
     container_name: data-dagster-web
     <<: *dagster_common
     depends_on:
-      dagster-user-code-mcd:
-        condition: service_healthy
-      dagster-user-code-smft:
-        condition: service_healthy
-      dagster-user-code-mcd-cdp:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -680,12 +561,6 @@ services:
     container_name: data-dagster-web-admin
     <<: *dagster_common
     depends_on:
-      dagster-user-code-mcd:
-        condition: service_healthy
-      dagster-user-code-smft:
-        condition: service_healthy
-      dagster-user-code-mcd-cdp:
-        condition: service_healthy
       dagster-postgres:
         condition: service_healthy
       sql-init:
@@ -706,12 +581,6 @@ services:
     container_name: data-dagster-daemon
     <<: *dagster_common
     depends_on:
-      dagster-user-code-mcd:
-        condition: service_healthy
-      dagster-user-code-smft:
-        condition: service_healthy
-      dagster-user-code-mcd-cdp:
-        condition: service_healthy
       dagster-user-code-bafar-poc-gabinete:
         condition: service_healthy
       dagster-user-code-valledelencino:
@@ -719,6 +588,8 @@ services:
       dagster-user-code-carlsjr:
         condition: service_healthy
       dagster-user-code-emerson:
+        condition: service_healthy
+      dagster-user-code-alerting:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -767,6 +638,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/targets.yml:/etc/prometheus/targets.yml:ro
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus_data:/prometheus
     networks:
       - data-dagster
@@ -781,6 +653,74 @@ services:
         max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: data-alertmanager
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+          set -eu
+          umask 077
+          printf '%s' "$${ALERT_SMTP_PASSWORD}" > /run/alertmanager/smtp_password
+          sed \
+            -e "s|__ALERT_SMTP_HOST__|$${ALERT_SMTP_HOST}|g" \
+            -e "s|__ALERT_SMTP_PORT__|$${ALERT_SMTP_PORT}|g" \
+            -e "s|__ALERT_SMTP_FROM__|$${ALERT_SMTP_FROM}|g" \
+            -e "s|__ALERT_SMTP_USER__|$${ALERT_SMTP_USER}|g" \
+            -e "s|__ALERT_SMTP_USE_TLS__|$${ALERT_SMTP_USE_TLS}|g" \
+            -e "s|__ALERT_SMTP_TO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE__|$${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE}|g" \
+            -e "s|__ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE}|g" \
+            /etc/alertmanager/alertmanager.template.yml \
+            > /run/alertmanager/alertmanager.yml
+          exec /bin/alertmanager \
+            --config.file=/run/alertmanager/alertmanager.yml \
+            --storage.path=/alertmanager \
+            --web.external-url=http://localhost:$${ALERTMANAGER_PORT}
+    env_file:
+      - ${COMPOSE_ENV_FILE:-.env}
+    environment:
+      ALERTMANAGER_PORT: ${ALERTMANAGER_PORT:-9093}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
+      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
+      ALERT_SMTP_TO_INFRASTRUCTURE: ${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}
+      ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE: ${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE: ${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE: ${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+      ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.template.yml:ro
+      - alertmanager_data:/alertmanager
+    tmpfs:
+      - /run/alertmanager:uid=65534,gid=65534,mode=0700
+    networks:
+      - data-dagster
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/-/healthy"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -846,12 +786,6 @@ services:
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
       - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-10800}"
     ports:
-      - "${MCD_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37076}:${MCD_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37076}"
-      - "${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}:${MCD_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37079}"
-      - "${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}:${SMFT_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37086}"
-      - "${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}:${SMFT_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37089}"
-      - "${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}:${CDP_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37096}"
-      - "${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}:${CDP_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37099}"
       - "${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}:${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}"
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
       - "${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}:${VALLEDELENCINO_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37116}"
@@ -889,6 +823,7 @@ volumes:
   spark-data:
   dagster_postgres_data:
   prometheus_data:
+  alertmanager_data:
 
 networks:
   data-dagster:

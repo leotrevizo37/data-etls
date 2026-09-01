@@ -285,13 +285,7 @@ class UrlAvailabilityDailyTests(unittest.TestCase):
             "dagster-daemon"
         ]["depends_on"]
         for service_name in (
-            "dagster-user-code-mcd",
-            "dagster-user-code-smft",
-            "dagster-user-code-mcd-cdp",
-            "dagster-user-code-bafar-poc-gabinete",
             "dagster-user-code-valledelencino",
-            "dagster-user-code-carlsjr",
-            "dagster-user-code-emerson",
         ):
             self.assertEqual(
                 daemon_dependencies[service_name]["condition"],
