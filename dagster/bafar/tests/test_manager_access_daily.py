@@ -39,20 +39,23 @@ finally:
     sys.path[:] = original_sys_path
 
 
-def build_payload(fecha="2026-08-31", corte_hora=11):
+def build_payload(fecha="2026-08-31", corte_hora=11, dias_historial=180):
     return {
         "ok": True,
-        "fechaCorte": f"{fecha}T{corte_hora:02d}:00:00",
+        "fechaCorte": f"{fecha}T{corte_hora:02d}:00:00.0000000",
         "corteHora": corte_hora,
+        "diasHistorial": dias_historial,
         "totalGerentes": 2,
         "totalIngresaronAntesDeCorte": 1,
         "totalSinIngresoEnCorte": 1,
         "porcentajeCumplimiento": 50.0,
+        "totalRegistros": 3,
         "data": [
             {
                 "idUsuario": 105,
                 "noEmpleado": "10022421",
                 "nombreGerente": "Gerente Uno",
+                "nombreUsuario": "gerente.uno",
                 "email": "gerente.uno@example.com",
                 "puesto": "Gerente de Sucursal",
                 "rol": "Gestor",
@@ -61,7 +64,7 @@ def build_payload(fecha="2026-08-31", corte_hora=11):
                 "claveTienda": "M377",
                 "nombreTienda": "Tienda Uno",
                 "zona": "NORTE",
-                "ultimoInicioSesion": "2026-08-31T10:30:00",
+                "ultimoInicioSesion": f"{fecha}T10:30:00.0715",
                 "ingresoAntesDelCorte": True,
                 "diasSinIngresar": 0,
                 "estatusCorte": "Ingresó a tiempo",
@@ -70,6 +73,7 @@ def build_payload(fecha="2026-08-31", corte_hora=11):
                 "idUsuario": 265,
                 "noEmpleado": "94120",
                 "nombreGerente": "Gerente Dos",
+                "nombreUsuario": "gerente.dos",
                 "email": "gerente.dos@example.com",
                 "puesto": "Gerente tienda",
                 "rol": "Operacion",
@@ -81,7 +85,25 @@ def build_payload(fecha="2026-08-31", corte_hora=11):
                 "ultimoInicioSesion": None,
                 "ingresoAntesDelCorte": False,
                 "diasSinIngresar": None,
-                "estatusCorte": "Sin ingreso hoy",
+                "estatusCorte": f"Sin ingreso en los últimos {dias_historial} días",
+            },
+            {
+                "idUsuario": 105,
+                "noEmpleado": "10022421",
+                "nombreGerente": "Gerente Uno",
+                "nombreUsuario": "gerente.uno",
+                "email": "gerente.uno@example.com",
+                "puesto": "Gerente de Sucursal",
+                "rol": "Gestor",
+                "activo": True,
+                "idTienda": 319,
+                "claveTienda": "M378",
+                "nombreTienda": "Tienda Tres",
+                "zona": "NORTE",
+                "ultimoInicioSesion": f"{fecha}T10:30:00.1234567",
+                "ingresoAntesDelCorte": True,
+                "diasSinIngresar": 0,
+                "estatusCorte": "Ingresó a tiempo",
             },
         ],
     }
@@ -125,10 +147,45 @@ class ManagerAccessApiContractTests(unittest.TestCase):
             payload,
             datetime(2026, 8, 31).date(),
             11,
+            180,
         )
 
         self.assertIs(result, payload)
         self.assertIsNone(result["data"][1]["idTienda"])
+        self.assertEqual(result["totalRegistros"], 3)
+
+    def test_valid_contract_accepts_prior_access_inside_history_window(self):
+        payload = build_payload()
+        payload["data"][1]["ultimoInicioSesion"] = "2026-08-27T16:10:00.7654321"
+        payload["data"][1]["diasSinIngresar"] = 4
+        payload["data"][1]["estatusCorte"] = "Sin ingreso al corte"
+
+        result = self.resource.validate_payload(
+            payload,
+            datetime(2026, 8, 31).date(),
+            11,
+            180,
+        )
+
+        self.assertIs(result, payload)
+
+    def test_empty_snapshot_preserves_the_response_contract(self):
+        payload = build_payload()
+        payload["data"] = []
+        payload["totalGerentes"] = 0
+        payload["totalIngresaronAntesDeCorte"] = 0
+        payload["totalSinIngresoEnCorte"] = 0
+        payload["porcentajeCumplimiento"] = 0
+        payload["totalRegistros"] = 0
+
+        result = self.resource.validate_payload(
+            payload,
+            datetime(2026, 8, 31).date(),
+            11,
+            180,
+        )
+
+        self.assertIs(result, payload)
 
     def test_contract_drift_fails_before_loading(self):
         cases = []
@@ -142,13 +199,17 @@ class ManagerAccessApiContractTests(unittest.TestCase):
         duplicate_key["data"][1]["idUsuario"] = 105
         duplicate_key["data"][1]["claveTienda"] = "M377"
         cases.append(duplicate_key)
-        empty_snapshot = build_payload()
-        empty_snapshot["data"] = []
-        empty_snapshot["totalGerentes"] = 0
-        empty_snapshot["totalIngresaronAntesDeCorte"] = 0
-        empty_snapshot["totalSinIngresoEnCorte"] = 0
-        empty_snapshot["porcentajeCumplimiento"] = 0
-        cases.append(empty_snapshot)
+        invalid_history_type = build_payload()
+        invalid_history_type["diasHistorial"] = "180"
+        cases.append(invalid_history_type)
+        invalid_datetime = build_payload()
+        invalid_datetime["data"][2]["ultimoInicioSesion"] = (
+            "2026-08-31 10:30:00.1234567"
+        )
+        cases.append(invalid_datetime)
+        inconsistent_record_total = build_payload()
+        inconsistent_record_total["totalRegistros"] = 2
+        cases.append(inconsistent_record_total)
 
         for payload in cases:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
@@ -156,6 +217,7 @@ class ManagerAccessApiContractTests(unittest.TestCase):
                     payload,
                     datetime(2026, 8, 31).date(),
                     11,
+                    180,
                 )
 
     def test_fetch_sends_explicit_date_and_cutoff(self):
@@ -166,11 +228,13 @@ class ManagerAccessApiContractTests(unittest.TestCase):
             "urlopen",
             return_value=FakeResponse(payload),
         ) as urlopen:
-            result = self.resource.fetch(datetime(2026, 8, 31).date(), 11)
+            result = self.resource.fetch(datetime(2026, 8, 31).date(), 11, 180)
 
         request = urlopen.call_args.args[0]
         self.assertIn("fecha=2026-08-31", request.full_url)
         self.assertIn("corteHora=11", request.full_url)
+        self.assertIn("diasHistorial=180", request.full_url)
+        self.assertNotIn("soloSinIngreso", request.full_url)
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 30)
         self.assertTrue(request.get_header("Authorization").startswith("Basic "))
         self.assertEqual(result, payload)
@@ -185,8 +249,8 @@ class ManagerAccessDailyAssetTests(unittest.TestCase):
         api.fetch.return_value = payload
         sqlserver = MagicMock()
         sqlserver.get_watermark.return_value = datetime(2026, 8, 30, 11)
-        sqlserver.write_fact_manager_access_daily_stage.return_value = 2
-        sqlserver.merge_fact_manager_access_daily.return_value = 2
+        sqlserver.write_fact_manager_access_daily_stage.return_value = 3
+        sqlserver.merge_fact_manager_access_daily.return_value = 3
         context = SimpleNamespace(
             resources=SimpleNamespace(
                 manager_access_api=api,
@@ -207,6 +271,7 @@ class ManagerAccessDailyAssetTests(unittest.TestCase):
         api.fetch.assert_called_once_with(
             reference_date,
             asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+            asset_module.FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS,
         )
         sqlserver.mark_run_started.assert_called_once_with("FactManagerAccessDaily")
         sqlserver.write_fact_manager_access_daily_stage.assert_called_once_with(
@@ -291,8 +356,8 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         api = MagicMock()
         api.fetch.return_value = payload
         sqlserver = MagicMock()
-        sqlserver.write_fact_manager_access_daily_stage.return_value = 2
-        sqlserver.merge_fact_manager_access_daily.return_value = 2
+        sqlserver.write_fact_manager_access_daily_stage.return_value = 3
+        sqlserver.merge_fact_manager_access_daily.return_value = 3
         context = SimpleNamespace(
             resources=SimpleNamespace(
                 manager_access_api=api,
@@ -312,6 +377,7 @@ class ManagerAccessBackfillTests(unittest.TestCase):
         api.fetch.assert_called_once_with(
             reference_date,
             asset_module.FACT_MANAGER_ACCESS_DAILY_CUTOFF_HOUR,
+            asset_module.FACT_MANAGER_ACCESS_DAILY_HISTORY_DAYS,
         )
         sqlserver.write_fact_manager_access_daily_stage.assert_called_once_with(
             "run-3",

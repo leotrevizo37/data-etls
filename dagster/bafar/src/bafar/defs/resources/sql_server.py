@@ -286,9 +286,11 @@ USING (
         Fecha,
         FechaCorte,
         CorteHora,
+        DiasHistorial,
         IdUsuario,
         NoEmpleado,
         NombreGerente,
+        NombreUsuario,
         Email,
         Puesto,
         Rol,
@@ -311,8 +313,10 @@ WHEN MATCHED THEN
     UPDATE SET
         target.FechaCorte = source.FechaCorte,
         target.CorteHora = source.CorteHora,
+        target.DiasHistorial = source.DiasHistorial,
         target.NoEmpleado = source.NoEmpleado,
         target.NombreGerente = source.NombreGerente,
+        target.NombreUsuario = source.NombreUsuario,
         target.Email = source.Email,
         target.Puesto = source.Puesto,
         target.Rol = source.Rol,
@@ -330,9 +334,11 @@ WHEN NOT MATCHED BY TARGET THEN
         Fecha,
         FechaCorte,
         CorteHora,
+        DiasHistorial,
         IdUsuario,
         NoEmpleado,
         NombreGerente,
+        NombreUsuario,
         Email,
         Puesto,
         Rol,
@@ -350,9 +356,11 @@ WHEN NOT MATCHED BY TARGET THEN
         source.Fecha,
         source.FechaCorte,
         source.CorteHora,
+        source.DiasHistorial,
         source.IdUsuario,
         source.NoEmpleado,
         source.NombreGerente,
+        source.NombreUsuario,
         source.Email,
         source.Puesto,
         source.Rol,
@@ -551,16 +559,23 @@ class SqlServerResource:
         reference_date: date,
         payload: Dict[str, Any],
     ) -> int:
-        cutoff_at = datetime.fromisoformat(payload["fechaCorte"])
+        cutoff_at = datetime.strptime(
+            payload["fechaCorte"][:26],
+            "%Y-%m-%dT%H:%M:%S.%f"
+            if "." in payload["fechaCorte"]
+            else "%Y-%m-%dT%H:%M:%S",
+        )
         rows = [
             (
                 run_id,
                 reference_date,
                 cutoff_at,
                 payload["corteHora"],
+                payload["diasHistorial"],
                 row["idUsuario"],
                 row["noEmpleado"],
                 row["nombreGerente"],
+                row["nombreUsuario"],
                 row["email"],
                 row["puesto"],
                 row["rol"],
@@ -569,7 +584,12 @@ class SqlServerResource:
                 row["claveTienda"],
                 row["nombreTienda"],
                 row["zona"],
-                datetime.fromisoformat(row["ultimoInicioSesion"])
+                datetime.strptime(
+                    row["ultimoInicioSesion"][:26],
+                    "%Y-%m-%dT%H:%M:%S.%f"
+                    if "." in row["ultimoInicioSesion"]
+                    else "%Y-%m-%dT%H:%M:%S",
+                )
                 if row["ultimoInicioSesion"] is not None
                 else None,
                 row["ingresoAntesDelCorte"],
@@ -590,9 +610,11 @@ INSERT INTO stg.factManagerAccessDaily (
     Fecha,
     FechaCorte,
     CorteHora,
+    DiasHistorial,
     IdUsuario,
     NoEmpleado,
     NombreGerente,
+    NombreUsuario,
     Email,
     Puesto,
     Rol,
@@ -606,7 +628,7 @@ INSERT INTO stg.factManagerAccessDaily (
     DiasSinIngresar,
     EstatusCorte
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """,
                     rows,
                 )

@@ -2,6 +2,7 @@ import base64
 import json
 import math
 import os
+import re
 from datetime import date, datetime
 from typing import Any, Dict
 from urllib.error import HTTPError, URLError
@@ -15,16 +16,19 @@ RESPONSE_FIELDS = {
     "ok",
     "fechaCorte",
     "corteHora",
+    "diasHistorial",
     "totalGerentes",
     "totalIngresaronAntesDeCorte",
     "totalSinIngresoEnCorte",
     "porcentajeCumplimiento",
+    "totalRegistros",
     "data",
 }
 ROW_FIELDS = {
     "idUsuario",
     "noEmpleado",
     "nombreGerente",
+    "nombreUsuario",
     "email",
     "puesto",
     "rol",
@@ -42,6 +46,7 @@ ROW_TYPES = {
     "idUsuario": int,
     "noEmpleado": str,
     "nombreGerente": str,
+    "nombreUsuario": str,
     "email": str,
     "puesto": str,
     "rol": str,
@@ -59,6 +64,7 @@ NULLABLE_ROW_FIELDS = {"idTienda", "ultimoInicioSesion", "diasSinIngresar"}
 STRING_LIMITS = {
     "noEmpleado": 50,
     "nombreGerente": 250,
+    "nombreUsuario": 250,
     "email": 320,
     "puesto": 250,
     "rol": 250,
@@ -67,6 +73,9 @@ STRING_LIMITS = {
     "zona": 150,
     "estatusCorte": 50,
 }
+LOCAL_ISO_DATETIME_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?"
+)
 
 
 class ManagerAccessApiResource:
@@ -87,6 +96,7 @@ class ManagerAccessApiResource:
         payload: Any,
         requested_date: date,
         cutoff_hour: int,
+        history_days: int,
     ) -> Dict[str, Any]:
         if type(payload) is not dict:
             raise ValueError("Manager access API response must be a JSON object.")
@@ -96,9 +106,11 @@ class ManagerAccessApiResource:
             raise ValueError("Manager access API returned ok=false.")
         for field in (
             "corteHora",
+            "diasHistorial",
             "totalGerentes",
             "totalIngresaronAntesDeCorte",
             "totalSinIngresoEnCorte",
+            "totalRegistros",
         ):
             if type(payload[field]) is not int:
                 raise ValueError(f"Manager access API field {field} must be an integer.")
@@ -110,11 +122,26 @@ class ManagerAccessApiResource:
             raise ValueError("Manager access API field data must be an array.")
         if payload["corteHora"] != cutoff_hour:
             raise ValueError("Manager access API cutoff hour does not match the request.")
+        if payload["diasHistorial"] != history_days:
+            raise ValueError("Manager access API history days do not match the request.")
         if not 0 <= cutoff_hour <= 23:
             raise ValueError("Manager access API cutoff hour must be between 0 and 23.")
+        if not 1 <= history_days <= 730:
+            raise ValueError("Manager access API history days must be between 1 and 730.")
 
+        if not isinstance(payload["fechaCorte"], str) or not (
+            LOCAL_ISO_DATETIME_PATTERN.fullmatch(payload["fechaCorte"])
+        ):
+            raise ValueError(
+                "Manager access API field fechaCorte must be an ISO datetime."
+            )
         try:
-            cutoff_at = datetime.fromisoformat(payload["fechaCorte"])
+            cutoff_at = datetime.strptime(
+                payload["fechaCorte"][:26],
+                "%Y-%m-%dT%H:%M:%S.%f"
+                if "." in payload["fechaCorte"]
+                else "%Y-%m-%dT%H:%M:%S",
+            )
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 "Manager access API field fechaCorte must be an ISO datetime."
@@ -165,8 +192,20 @@ class ManagerAccessApiResource:
                 )
             last_access = None
             if row["ultimoInicioSesion"] is not None:
+                if not LOCAL_ISO_DATETIME_PATTERN.fullmatch(
+                    row["ultimoInicioSesion"]
+                ):
+                    raise ValueError(
+                        "Manager access API row "
+                        f"{index} field ultimoInicioSesion must be an ISO datetime."
+                    )
                 try:
-                    last_access = datetime.fromisoformat(row["ultimoInicioSesion"])
+                    last_access = datetime.strptime(
+                        row["ultimoInicioSesion"][:26],
+                        "%Y-%m-%dT%H:%M:%S.%f"
+                        if "." in row["ultimoInicioSesion"]
+                        else "%Y-%m-%dT%H:%M:%S",
+                    )
                 except ValueError as exc:
                     raise ValueError(
                         "Manager access API row "
@@ -177,20 +216,32 @@ class ManagerAccessApiResource:
                         "Manager access API row "
                         f"{index} field ultimoInicioSesion must use local time."
                     )
-            expected_status = (
-                "Ingresó a tiempo"
-                if row["ingresoAntesDelCorte"]
-                else "Sin ingreso hoy"
-            )
+            if row["ingresoAntesDelCorte"]:
+                expected_status = "Ingresó a tiempo"
+                valid_evaluation = (
+                    last_access is not None
+                    and last_access.date() == requested_date
+                    and last_access <= cutoff_at
+                    and row["diasSinIngresar"] == 0
+                )
+            elif last_access is None:
+                expected_status = f"Sin ingreso en los últimos {history_days} días"
+                valid_evaluation = row["diasSinIngresar"] is None
+            else:
+                expected_status = "Sin ingreso al corte"
+                expected_days_without_access = (
+                    requested_date - last_access.date()
+                ).days
+                valid_evaluation = (
+                    last_access < cutoff_at
+                    and expected_days_without_access >= 1
+                    and row["diasSinIngresar"] == expected_days_without_access
+                )
             if row["estatusCorte"] != expected_status:
                 raise ValueError(
                     f"Manager access API row {index} cutoff status is inconsistent."
                 )
-            if row["ingresoAntesDelCorte"] and (
-                last_access is None
-                or last_access.date() != requested_date
-                or last_access > cutoff_at
-            ):
+            if not valid_evaluation:
                 raise ValueError(
                     f"Manager access API row {index} cutoff evaluation is inconsistent."
                 )
@@ -202,13 +253,23 @@ class ManagerAccessApiResource:
         total = payload["totalGerentes"]
         entered = payload["totalIngresaronAntesDeCorte"]
         missing = payload["totalSinIngresoEnCorte"]
-        if min(total, entered, missing) < 0:
+        total_records = payload["totalRegistros"]
+        if min(total, entered, missing, total_records) < 0:
             raise ValueError("Manager access API totals cannot be negative.")
-        if total != len(rows) or total != entered + missing:
+        manager_ids = {row["idUsuario"] for row in rows}
+        entered_manager_ids = {
+            row["idUsuario"] for row in rows if row["ingresoAntesDelCorte"]
+        }
+        missing_manager_ids = {
+            row["idUsuario"] for row in rows if not row["ingresoAntesDelCorte"]
+        }
+        if (
+            total_records != len(rows)
+            or total != len(manager_ids)
+            or total != entered + missing
+        ):
             raise ValueError("Manager access API totals are inconsistent.")
-        if total == 0:
-            raise ValueError("Manager access API returned an empty snapshot.")
-        if entered != sum(row["ingresoAntesDelCorte"] for row in rows):
+        if entered != len(entered_manager_ids) or missing != len(missing_manager_ids):
             raise ValueError("Manager access API detail does not match its totals.")
         expected_percentage = round(entered * 100 / total, 2) if total else 0.0
         percentage = float(payload["porcentajeCumplimiento"])
@@ -217,7 +278,12 @@ class ManagerAccessApiResource:
 
         return payload
 
-    def fetch(self, requested_date: date, cutoff_hour: int) -> Dict[str, Any]:
+    def fetch(
+        self,
+        requested_date: date,
+        cutoff_hour: int,
+        history_days: int,
+    ) -> Dict[str, Any]:
         if (
             not self.url
             or not self.user
@@ -229,6 +295,7 @@ class ManagerAccessApiResource:
             {
                 "fecha": requested_date.isoformat(),
                 "corteHora": cutoff_hour,
+                "diasHistorial": history_days,
             }
         )
         separator = "&" if "?" in self.url else "?"
@@ -260,7 +327,12 @@ class ManagerAccessApiResource:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise RuntimeError("Manager access API returned invalid JSON.") from exc
 
-        return self.validate_payload(payload, requested_date, cutoff_hour)
+        return self.validate_payload(
+            payload,
+            requested_date,
+            cutoff_hour,
+            history_days,
+        )
 
 
 @resource
