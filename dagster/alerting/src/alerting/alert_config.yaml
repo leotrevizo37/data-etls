@@ -10,7 +10,7 @@ defaults:
   pipeline_alerts:
     ingestion_control_failed: true
     dagster_run_failure: true
-    stale_detection: false
+    stale_detection: true
     default_expected_interval_minutes: 720
 
   asset_row_count_trends:
@@ -51,39 +51,39 @@ user_codes:
     database_env: CARLSJR_DB
     ingestions:
       factRedingsAudits:
-        expected_interval_minutes: 60
+        expected_interval_minutes: 45
       FactLecturas:
-        expected_interval_minutes: 1660
+        expected_interval_minutes: 1500
       FactSensorEvents:
-        expected_interval_minutes: 4320
+        expected_interval_minutes: 400
       factReadingsMeasurement:
-        expected_interval_minutes: 4320
+        expected_interval_minutes: 400
       factSmartauditsCategories:
         expected_interval_minutes: 1500
       factUrlAvailabilityDaily:
-        expected_interval_minutes: 2000
+        expected_interval_minutes: 140
 
   valledelencino:
     database: valledelencino
     database_env: VALLEDELENCINO_DB
     ingestions:
       factRedingsAudits:
-        expected_interval_minutes: 200
+        expected_interval_minutes: 60
       FactSensorEvents:
-        expected_interval_minutes: 5000
+        expected_interval_minutes: 400
       factReadingsMeasurement:
-        expected_interval_minutes: 5000
+        expected_interval_minutes: 400
 
   emerson:
     database: emerson
     database_env: EMERSON_DB
     ingestions:
       factRedingsAudits:
-        expected_interval_minutes: 60
+        expected_interval_minutes: 45
       FactSensorEvents:
-        expected_interval_minutes: 4500
+        expected_interval_minutes: 400
       factReadingsMeasurement:
-        expected_interval_minutes: 4500
+        expected_interval_minutes: 400
 
   bafar:
     database: bafar
@@ -96,3 +96,5 @@ user_codes:
         expected_interval_minutes: 900
       FactStoreSalesDaily:
         expected_interval_minutes: 1700
+      FactManagerAccessDaily:
+        expected_interval_minutes: 1460
