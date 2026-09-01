@@ -852,6 +852,10 @@ def test_consolidated_html_contains_all_sections():
     assert 'bgcolor="#0f766e"' in html
     assert "Evidencia medida" in html
     assert "#0f0f23" not in html
+    assert not any(entity in html for entity in (
+        "&#x1F50C;", "&#x23F1;", "&#x274C;", "&#x1F40C;",
+        "&#x26A0;", "&#x1F4C9;", "&#x2705;",
+    ))
 
 
 def test_format_time_ago():

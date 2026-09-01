@@ -54,15 +54,6 @@ _TYPE_LABELS = {
     "asset_row_count_trend": "Caída de Volumen de Lecturas",
 }
 
-_TYPE_ICONS = {
-    "connection_lost": "&#x1F50C;",   # 🔌
-    "late_readings": "&#x23F1;",      # ⏱
-    "pipeline_failure": "&#x274C;",   # ❌
-    "pipeline_stale": "&#x1F40C;",    # 🐌
-    "dagster_run_failure": "&#x26A0;", # ⚠
-    "asset_row_count_trend": "&#x1F4C9;",
-}
-
 _STATE_LABELS = {
     "OPEN": "ALERTA",
     "REMINDER": "RECORDATORIO",
@@ -448,9 +439,8 @@ def _build_consolidated_html(payload: ConsolidatedPayload) -> str:
         alerts = by_type.get(atype)
         if not alerts:
             continue
-        icon = _TYPE_ICONS.get(atype, "")
         label = _TYPE_LABELS.get(atype, atype)
-        active_sections += _build_section_header(f"{icon} {label}")
+        active_sections += _build_section_header(label)
 
         if atype in sensor_types:
             # Group by location
@@ -472,7 +462,7 @@ def _build_consolidated_html(payload: ConsolidatedPayload) -> str:
     # ── Resolved alerts section ───────────────────────────────────
     resolved_section = ""
     if payload.resolved_alerts:
-        resolved_section += _build_section_header("&#x2705; Alertas Resueltas")
+        resolved_section += _build_section_header("Alertas Resueltas")
         for a in payload.resolved_alerts:
             resolved_section += _build_alert_card(a, "#27ae60")
 
