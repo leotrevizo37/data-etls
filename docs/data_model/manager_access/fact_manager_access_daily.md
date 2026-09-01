@@ -20,9 +20,11 @@ Un registro representa el estado de un gerente en una sucursal para una fecha de
 | `Fecha` | `DATE` | No | Fecha local solicitada a la API y particion logica de la snapshot. |
 | `FechaCorte` | `DATETIME2(0)` | No | Fecha y hora local exacta aplicada como corte. |
 | `CorteHora` | `TINYINT` | No | Hora del corte devuelta por la API. |
+| `DiasHistorial` | `SMALLINT` | Si para datos historicos previos | Ventana de historial aplicada; las cargas nuevas siempre la informan. |
 | `IdUsuario` | `INT` | No | Identificador del gerente. |
 | `NoEmpleado` | `NVARCHAR(50)` | No | Numero de empleado. |
 | `NombreGerente` | `NVARCHAR(250)` | No | Nombre reportado para el gerente. |
+| `NombreUsuario` | `NVARCHAR(250)` | Si para datos historicos previos | Cuenta usada para vincular al gerente con la bitacora de accesos; las cargas nuevas siempre la informan. |
 | `Email` | `NVARCHAR(320)` | No | Correo reportado para el gerente. |
 | `Puesto` | `NVARCHAR(250)` | No | Puesto reportado. |
 | `Rol` | `NVARCHAR(250)` | No | Rol del usuario en la plataforma. |
@@ -41,7 +43,10 @@ Un registro representa el estado de un gerente en una sucursal para una fecha de
 
 - La snapshot se escribe unicamente despues de validar el contrato completo de la API.
 - `IdTienda`, `UltimoInicioSesion` y `DiasSinIngresar` pueden ser nulos y no provocan que el registro sea excluido.
-- Los agregados del encabezado se validan contra el detalle y se publican como metadatos de la materializacion; no se duplican en cada fila.
+- `EstatusCorte` distingue `Ingresó a tiempo`, `Sin ingreso al corte` y `Sin ingreso en los últimos N días`.
+- `totalGerentes` cuenta `IdUsuario` distintos y `totalRegistros` cuenta filas gerente-sucursal; ambos se validan contra el detalle.
+- Los agregados del encabezado se publican como metadatos de la materializacion; no se duplican en cada fila.
+- Una respuesta con `data` vacio es valida cuando sus totales y porcentaje son consistentes.
 - El `MERGE` compara `Fecha`, `IdUsuario` y `ClaveTienda`.
 - Una repeticion de la misma snapshot actualiza los atributos y `ModifiedAt`; una fecha nueva conserva el historico anterior.
 - El indice `ix_factManagerAccessDaily_fecha_ingresoAntesDelCorte` soporta comparaciones por periodo y estado de acceso.
@@ -51,8 +56,8 @@ Un registro representa el estado de un gerente en una sucursal para una fecha de
 
 ## Backfill
 
-- El job `025_bafar_manager_access_backfill_daily` reprocesa particiones desde `2026-08-27` en `America/Ciudad_Juarez`.
-- Cada particion solicita una fecha, reutiliza `stg.factManagerAccessDaily` y consolida con el mismo `MERGE`.
+- El job `025_bafar_manager_access_backfill_daily` reprocesa particiones desde `2026-01-01` en `America/Ciudad_Juarez`.
+- Cada particion solicita una fecha con `corteHora=23` y `diasHistorial=180`, reutiliza `stg.factManagerAccessDaily` y consolida con el mismo `MERGE`.
 - El backfill no lee ni actualiza el watermark `FactManagerAccessDaily`.
 - Los datos historicos reflejan la respuesta que la API entregue para la fecha solicitada.
 
