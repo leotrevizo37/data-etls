@@ -198,7 +198,7 @@ ORDER BY code_location, asset_key, metadata_key, observation_date DESC;
 
 @dataclass
 class AlertRecord:
-    """A row from alert_delivery_state."""
+    """A row from alert_workflow_state."""
     alert_key: str
     user_code: str
     trigger_source: str
@@ -410,7 +410,7 @@ class AlertStateStoreResource:
                    notification_attempt_count, max_notification_attempts,
                    last_error_code, last_error_message, last_error_at,
                    created_at, updated_at
-            FROM alerting.alert_delivery_state
+            FROM alerting.alert_workflow_state
         """
 
     @staticmethod
@@ -477,7 +477,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state
+            UPDATE alerting.alert_workflow_state
             SET trigger_source = ?,
                 severity = ?,
                 details = ?,
@@ -489,7 +489,7 @@ class AlertStateStoreResource:
             WHERE alert_key = ?;
 
             IF @@ROWCOUNT = 0
-                INSERT INTO alerting.alert_delivery_state
+                INSERT INTO alerting.alert_workflow_state
                     (alert_key, trigger_source, alert_type, entity_id, severity,
                      state, notification_type, notification_status, details,
                      metadata_json, ticket_id, first_detected_at,
@@ -541,7 +541,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state
+            UPDATE alerting.alert_workflow_state
             SET state = ?,
                 notification_type = ?,
                 notification_status = ?,
@@ -604,7 +604,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state
+            UPDATE alerting.alert_workflow_state
             SET notification_type = ?,
                 notification_status = ?,
                 details = COALESCE(?, details),
@@ -683,7 +683,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state WITH (UPDLOCK, ROWLOCK)
+            UPDATE alerting.alert_workflow_state WITH (UPDLOCK, ROWLOCK)
             SET notification_status = ?,
                 notification_attempt_count = notification_attempt_count + 1,
                 last_notification_attempt_at = SYSUTCDATETIME(),
@@ -731,7 +731,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state
+            UPDATE alerting.alert_workflow_state
             SET state = CASE
                     WHEN notification_type = ? THEN ?
                     ELSE state
@@ -772,7 +772,7 @@ class AlertStateStoreResource:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
-            UPDATE alerting.alert_delivery_state
+            UPDATE alerting.alert_workflow_state
             SET notification_status = CASE
                     WHEN notification_attempt_count >= max_notification_attempts
                         THEN ?

@@ -74,7 +74,7 @@ La recuperacion de un sensor desconectado requiere evidencia posterior a `Connec
 ## Ciclo de entrega
 
 1. El sensor central recolecta las condiciones activas de los tenants configurados y las corridas fallidas de Dagster.
-2. Compara las condiciones actuales con `alerting.alert_delivery_state`.
+2. Compara las condiciones actuales con `alerting.alert_workflow_state`.
 3. Cada ocurrencia nueva recibe una clave con UUID; una incidencia resuelta no se reutiliza si la condicion reaparece.
 4. Las aperturas del sensor central se envian inmediatamente, incluso durante las horas silenciosas.
 5. Los recordatorios se agrupan una vez al dia por tenant. La configuracion actual usa `07:30` en `America/Mexico_City`.
@@ -86,7 +86,7 @@ La recuperacion de un sensor desconectado requiere evidencia posterior a `Connec
 
 | Objeto | Evidencia |
 |---|---|
-| `alerting.alert_delivery_state` | Estado, detalle, timestamps y contador de notificaciones por incidencia |
+| `alerting.alert_workflow_state` | Estado, detalle, timestamps y contador de notificaciones por incidencia |
 | `alerting.asset_row_count_daily` | Agregados diarios, promedios 1/7/28 dias y cambios porcentuales |
 | `ux_alert_state_active_condition` | Limita a una incidencia activa por tenant, tipo y entidad |
 | Estados | `OPEN`, `REMINDER`, `RESOLVED_PENDING`, `RESOLVED` |

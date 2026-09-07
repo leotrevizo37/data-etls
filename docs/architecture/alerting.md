@@ -142,7 +142,7 @@ Los nombres y valores de ejemplo permitidos estan en `compose-data_etls/.env.exa
 
 | Objeto | Uso |
 |---|---|
-| `alerting.alert_delivery_state` | Ciclo de vida, detalle, timestamps y contador de notificaciones |
+| `alerting.alert_workflow_state` | Ciclo de vida, detalle, timestamps y contador de notificaciones |
 | `alerting.asset_row_count_daily` | Agregados diarios, promedios 1/7/28 dias, cambios porcentuales y cursor de materializacion |
 | `ix_alert_state_active` | Consulta de incidencias activas |
 | `ux_alert_state_active_condition` | Una sola incidencia activa por condicion |
