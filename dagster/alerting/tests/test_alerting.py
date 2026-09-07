@@ -251,12 +251,11 @@ def test_alert_state_maps_all_sql_server_types():
     assert alert.ticket_id is None
 
 
-def test_sensor_recovery_requires_latest_healthy_audit():
-    resumed_at = datetime(2026, 8, 21, 20, 3, 4)
+def test_sensor_recovery_uses_latest_healthy_audit_last_reading():
     last_reading_at = datetime(2026, 8, 21, 22, 1, 30)
     row = MagicMock()
     row.SensorId = "sensor-1"
-    row.CommunicationResumedAt = resumed_at
+    row.CommunicationResumedAt = last_reading_at
     row.LastReadingAt = last_reading_at
     connection = MagicMock()
     cursor = MagicMock()
@@ -272,10 +271,15 @@ def test_sensor_recovery_requires_latest_healthy_audit():
 
     query, parameters = cursor.execute.call_args.args
     assert "latest.IsConnectionLost = 0" in query
-    assert "MIN(reading.TimeSpan) AS CommunicationResumedAt" in query
-    assert "MAX(reading.TimeSpan) AS LastReadingAt" in query
+    assert "latest.LastReadingAt AS CommunicationResumedAt" in query
+    assert "latest.LastReadingAt AS LastReadingAt" in query
+    assert "latest.LastReadingAt IS NOT NULL" in query
+    assert "latest.LastReadingAt >= lost.ConnectionLostAt" in query
+    assert "dwh.factReadingsMeasurement" not in query
     assert parameters == ["sensor-1", "sensor-1"]
-    assert recoveries["sensor-1"].communication_resumed_at == resumed_at
+    assert (
+        recoveries["sensor-1"].communication_resumed_at == last_reading_at
+    )
     assert recoveries["sensor-1"].last_reading_at == last_reading_at
 
 
@@ -475,7 +479,7 @@ def test_email_delivery_claims_and_sends_tenant_notifications():
     resolution = AlertRecord(
         alert_key="resolution-1",
         user_code="carlsjr",
-        trigger_source="sensor_monitoring",
+        trigger_source="dagster_etl",
         alert_type="pipeline_failure",
         entity_id="FactLecturas",
         state="RESOLVED_PENDING",
@@ -640,7 +644,7 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
     mssql.get_sensor_recoveries.return_value = {
         "sensor-1": SensorRecovery(
             sensor_id="sensor-1",
-            communication_resumed_at=datetime(2026, 8, 21, 20, 3, 4),
+            communication_resumed_at=datetime(2026, 8, 21, 22, 1, 30),
             last_reading_at=datetime(2026, 8, 21, 22, 1, 30),
         )
     }
@@ -680,11 +684,11 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
         f"{key}::incident-1",
     )
     assert resolved_call.args[3] == (
-        "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
+        "CommunicationResumedAt: 2026-08-21 22:01:30 UTC, "
         "LastReadingAt: 2026-08-21 22:01:30 UTC"
     )
     assert resolved_call.args[4]["evidence"] == {
-        "communication_resumed_at": "2026-08-21T20:03:04",
+        "communication_resumed_at": "2026-08-21T22:01:30",
         "last_reading_at": "2026-08-21T22:01:30",
     }
     state.mark_resolved.assert_called_once()
@@ -1045,6 +1049,7 @@ def test_pipeline_alerts_are_persisted_without_dimensions():
     call = state.upsert_alert.call_args.kwargs
     assert call["alert_type"] == "pipeline_failure"
     assert call["entity_id"] == "FactLecturas"
+    assert call["trigger_source"] == "dagster_etl"
     assert "context" not in call["metadata"]
     mssql.get_sensor_dimensions.assert_not_called()
 
@@ -1197,8 +1202,8 @@ def test_consolidated_html_contains_all_sections():
     assert "Evidencia medida" in html
     assert "Justificaci&oacute;n" in html
     assert "El sensor perdió comunicación." in html
-    assert "Trazabilidad" in html
-    assert "minutes_without_readings" in html
+    assert "Trazabilidad" not in html
+    assert "minutes_without_readings" not in html
     assert "#0f0f23" not in html
     assert not any(entity in html for entity in (
         "&#x1F50C;", "&#x23F1;", "&#x274C;", "&#x1F40C;",

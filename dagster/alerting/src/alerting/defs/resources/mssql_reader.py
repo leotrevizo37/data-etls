@@ -141,6 +141,7 @@ class MssqlReaderResource:
                 SELECT
                     SensorId,
                     IsConnectionLost,
+                    LastReadingAt,
                     ROW_NUMBER() OVER (
                         PARTITION BY SensorId
                         ORDER BY TimeSpan DESC
@@ -162,18 +163,16 @@ class MssqlReaderResource:
             )
             SELECT
                 CAST(latest.SensorId AS VARCHAR(36)) AS SensorId,
-                MIN(reading.TimeSpan) AS CommunicationResumedAt,
-                MAX(reading.TimeSpan) AS LastReadingAt
+                latest.LastReadingAt AS CommunicationResumedAt,
+                latest.LastReadingAt AS LastReadingAt
             FROM LatestAudit AS latest
             INNER JOIN LastLostAudit AS lost
                 ON lost.SensorId = latest.SensorId
                AND lost.RowNumber = 1
-            INNER JOIN dwh.factReadingsMeasurement AS reading
-                ON reading.SensorId = latest.SensorId
-               AND reading.TimeSpan >= lost.ConnectionLostAt
             WHERE latest.RowNumber = 1
               AND latest.IsConnectionLost = 0
-            GROUP BY latest.SensorId
+              AND latest.LastReadingAt IS NOT NULL
+              AND latest.LastReadingAt >= lost.ConnectionLostAt
         """
         results: Dict[str, SensorRecovery] = {}
         with self._get_connection(database, user_code) as conn:

@@ -265,7 +265,7 @@ def operational_alerts_sensor(
                 )
                 active_conditions[key] = {
                     "user_code": uc_name,
-                    "trigger_source": "sensor_monitoring",
+                    "trigger_source": "dagster_etl",
                     "alert_type": "pipeline_failure",
                     "entity_id": alert.ingestion_name,
                     "severity": "CRITICAL",
@@ -312,7 +312,7 @@ def operational_alerts_sensor(
                 )
                 active_conditions[key] = {
                     "user_code": uc_name,
-                    "trigger_source": "sensor_monitoring",
+                    "trigger_source": "dagster_etl",
                     "alert_type": "pipeline_stale",
                     "entity_id": alert.ingestion_name,
                     "severity": "WARNING",

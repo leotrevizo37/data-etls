@@ -47,7 +47,7 @@ Se evalua con un intervalo minimo de 300 segundos. Consulta las condiciones conf
 
 Las alertas de sensores se enriquecen, cuando existe coincidencia, con sucursal, sububicacion, dispositivo y sensor desde `dwh.dimSidonProdDimensions`.
 
-Una desconexion no se considera resuelta solo porque desaparezca del lookback. La recuperacion requiere que el ultimo audit indique comunicacion activa y que exista una lectura en `dwh.factReadingsMeasurement` posterior a `ConnectionLostAt`. El correo puede incluir `CommunicationResumedAt` y `LastReadingAt` como evidencia.
+Una desconexion no se considera resuelta solo porque desaparezca del lookback. La recuperacion requiere que el ultimo audit indique comunicacion activa y que su `LastReadingAt` no sea nulo ni anterior a `ConnectionLostAt`. El correo usa ese `LastReadingAt` exacto, sin truncarlo a la hora, como evidencia en `CommunicationResumedAt` y `LastReadingAt`.
 
 ## `asset_row_count_trend_sensor`
 

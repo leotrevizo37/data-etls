@@ -264,6 +264,7 @@ def test_trend_sensor_records_open_alert_without_sending_email():
     )
     assert call["notification_count"] == 0
     assert call["state"] == "OPEN"
+    assert call["trigger_source"] == "dagster"
     assert "Severity: CRITICAL" in call["details"]
     assert "Average28d: 120.00" in call["details"]
     assert "1 opened" in result.skip_message
