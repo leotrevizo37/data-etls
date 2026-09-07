@@ -1,9 +1,10 @@
 """Tenant alert state and Dagster PostgreSQL row-count history."""
 
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import psycopg2
 import psycopg2.extras
@@ -13,9 +14,19 @@ from .mssql_reader import MssqlReaderResource
 
 
 ALERT_STATE_OPEN = "OPEN"
-ALERT_STATE_REMINDER = "REMINDER"
 ALERT_STATE_RESOLVED_PENDING = "RESOLVED_PENDING"
 ALERT_STATE_RESOLVED = "RESOLVED"
+
+NOTIFICATION_TYPE_OPEN = "OPEN"
+NOTIFICATION_TYPE_REMINDER = "REMINDER"
+NOTIFICATION_TYPE_RESOLUTION = "RESOLUTION"
+
+NOTIFICATION_STATUS_PENDING = "PENDING"
+NOTIFICATION_STATUS_PROCESSING = "PROCESSING"
+NOTIFICATION_STATUS_SENT = "SENT"
+NOTIFICATION_STATUS_RETRY_PENDING = "RETRY_PENDING"
+NOTIFICATION_STATUS_FAILED = "FAILED"
+NOTIFICATION_STATUS_CANCELLED = "CANCELLED"
 
 _ENSURE_SCHEMA_SQL = "CREATE SCHEMA IF NOT EXISTS alerting;"
 
@@ -190,14 +201,31 @@ class AlertRecord:
     """A row from alert_delivery_state."""
     alert_key: str
     user_code: str
+    trigger_source: str
     alert_type: str
     entity_id: str
     state: str
     details: Optional[str]
     first_detected_at: datetime
-    last_notified_at: datetime
+    last_notified_at: Optional[datetime]
     resolved_at: Optional[datetime]
     notification_count: int
+    severity: Optional[str] = None
+    notification_type: str = NOTIFICATION_TYPE_OPEN
+    notification_status: str = NOTIFICATION_STATUS_SENT
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    ticket_id: Optional[str] = None
+    last_detected_at: Optional[datetime] = None
+    notification_queued_at: Optional[datetime] = None
+    last_notification_attempt_at: Optional[datetime] = None
+    next_retry_at: Optional[datetime] = None
+    notification_attempt_count: int = 0
+    max_notification_attempts: int = 3
+    last_error_code: Optional[str] = None
+    last_error_message: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -356,87 +384,148 @@ class AlertStateStoreResource:
         user_code: str,
     ) -> Dict[str, AlertRecord]:
         """Return active alerts keyed by their condition identity."""
-        query = """
-            SELECT alert_key, user_code, alert_type, entity_id, state,
-                   details, first_detected_at, last_notified_at,
-                   resolved_at, notification_count
-            FROM alerting.alert_delivery_state
-            WHERE user_code = ?
-              AND state IN (?, ?)
+        query = self._alert_select_sql() + """
+            WHERE state = ?
         """
         result: Dict[str, AlertRecord] = {}
         with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    query,
-                    user_code,
-                    ALERT_STATE_OPEN,
-                    ALERT_STATE_REMINDER,
-                )
+                cur.execute(query, ALERT_STATE_OPEN)
                 for row in cur.fetchall():
-                    rec = AlertRecord(
-                        alert_key=row[0],
-                        user_code=row[1],
-                        alert_type=row[2],
-                        entity_id=row[3],
-                        state=row[4],
-                        details=row[5],
-                        first_detected_at=row[6],
-                        last_notified_at=row[7],
-                        resolved_at=row[8],
-                        notification_count=row[9],
-                    )
+                    rec = self._alert_record_from_row(row, user_code)
                     result[
                         f"{rec.user_code}::{rec.alert_type}::{rec.entity_id}"
                     ] = rec
         return result
+
+    @staticmethod
+    def _alert_select_sql() -> str:
+        return """
+            SELECT alert_key, trigger_source, alert_type, entity_id, severity,
+                   state, notification_type, notification_status, details,
+                   metadata_json, ticket_id, first_detected_at,
+                   last_detected_at, notification_queued_at,
+                   last_notification_attempt_at, last_notified_at,
+                   next_retry_at, resolved_at, notification_count,
+                   notification_attempt_count, max_notification_attempts,
+                   last_error_code, last_error_message, last_error_at,
+                   created_at, updated_at
+            FROM alerting.alert_delivery_state
+        """
+
+    @staticmethod
+    def _alert_record_from_row(row, user_code: str) -> AlertRecord:
+        metadata = json.loads(row[9]) if row[9] else {}
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata_json must contain a JSON object")
+        return AlertRecord(
+            alert_key=row[0],
+            user_code=user_code,
+            trigger_source=row[1],
+            alert_type=row[2],
+            entity_id=row[3],
+            severity=row[4],
+            state=row[5],
+            notification_type=row[6],
+            notification_status=row[7],
+            details=row[8],
+            metadata=metadata,
+            ticket_id=row[10],
+            first_detected_at=row[11],
+            last_detected_at=row[12],
+            notification_queued_at=row[13],
+            last_notification_attempt_at=row[14],
+            last_notified_at=row[15],
+            next_retry_at=row[16],
+            resolved_at=row[17],
+            notification_count=row[18],
+            notification_attempt_count=row[19],
+            max_notification_attempts=row[20],
+            last_error_code=row[21],
+            last_error_message=row[22],
+            last_error_at=row[23],
+            created_at=row[24],
+            updated_at=row[25],
+        )
+
+    @staticmethod
+    def _metadata_json(metadata: Optional[Dict[str, Any]]) -> str:
+        return json.dumps(
+            metadata or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
     def upsert_alert(
         self,
         database: str,
         alert_key: str,
         user_code: str,
+        trigger_source: str,
         alert_type: str,
         entity_id: str,
         details: Optional[str] = None,
         state: str = ALERT_STATE_OPEN,
-        notification_count: int = 1,
+        notification_count: int = 0,
+        severity: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        ticket_id: Optional[str] = None,
+        max_notification_attempts: int = 3,
     ) -> None:
-        """Insert a new alert or update an existing one (bump notification count)."""
+        """Insert a new alert or refresh its detection evidence."""
         query = """
             SET QUOTED_IDENTIFIER ON;
 
             UPDATE alerting.alert_delivery_state
-            SET state = ?,
+            SET trigger_source = ?,
+                severity = ?,
                 details = ?,
-                last_notified_at = SYSUTCDATETIME(),
-                notification_count = notification_count + 1,
-                resolved_at = NULL,
+                metadata_json = ?,
+                ticket_id = COALESCE(?, ticket_id),
+                max_notification_attempts = ?,
+                last_detected_at = SYSUTCDATETIME(),
                 updated_at = SYSUTCDATETIME()
             WHERE alert_key = ?;
 
             IF @@ROWCOUNT = 0
                 INSERT INTO alerting.alert_delivery_state
-                    (alert_key, user_code, alert_type, entity_id, state, details,
-                     first_detected_at, last_notified_at, notification_count,
+                    (alert_key, trigger_source, alert_type, entity_id, severity,
+                     state, notification_type, notification_status, details,
+                     metadata_json, ticket_id, first_detected_at,
+                     last_detected_at, notification_queued_at,
+                     notification_count, max_notification_attempts,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), SYSUTCDATETIME(),
-                        ?, SYSUTCDATETIME(), SYSUTCDATETIME());
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        SYSUTCDATETIME(), SYSUTCDATETIME(),
+                        SYSUTCDATETIME(), ?, ?, SYSUTCDATETIME(),
+                        SYSUTCDATETIME());
         """
+        metadata_json = self._metadata_json(metadata)
         with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    state,
+                    trigger_source,
+                    severity,
                     details,
+                    metadata_json,
+                    ticket_id,
+                    max_notification_attempts,
                     alert_key,
                     alert_key,
-                    user_code,
+                    trigger_source,
                     alert_type,
                     entity_id,
+                    severity,
                     state,
+                    NOTIFICATION_TYPE_OPEN,
+                    NOTIFICATION_STATUS_PENDING,
                     details,
+                    metadata_json,
+                    ticket_id,
                     notification_count,
+                    max_notification_attempts,
                 )
             conn.commit()
 
@@ -446,6 +535,7 @@ class AlertStateStoreResource:
         user_code: str,
         alert_key: str,
         details: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Queue an alert resolution for a grouped notification."""
         query = """
@@ -453,23 +543,36 @@ class AlertStateStoreResource:
 
             UPDATE alerting.alert_delivery_state
             SET state = ?,
+                notification_type = ?,
+                notification_status = ?,
                 details = COALESCE(?, details),
+                metadata_json = COALESCE(?, metadata_json),
+                notification_queued_at = SYSUTCDATETIME(),
+                notification_attempt_count = 0,
+                last_notification_attempt_at = NULL,
+                next_retry_at = NULL,
+                last_error_code = NULL,
+                last_error_message = NULL,
+                last_error_at = NULL,
                 resolved_at = SYSUTCDATETIME(),
                 updated_at = SYSUTCDATETIME()
             WHERE alert_key = ?
-              AND user_code = ?
-              AND state IN (?, ?)
+              AND state = ?
         """
+        metadata_json = (
+            self._metadata_json(metadata) if metadata is not None else None
+        )
         with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
                     ALERT_STATE_RESOLVED_PENDING,
+                    NOTIFICATION_TYPE_RESOLUTION,
+                    NOTIFICATION_STATUS_PENDING,
                     details,
+                    metadata_json,
                     alert_key,
-                    user_code,
                     ALERT_STATE_OPEN,
-                    ALERT_STATE_REMINDER,
                 )
             conn.commit()
 
@@ -478,61 +581,228 @@ class AlertStateStoreResource:
         database: str,
         user_code: str,
     ) -> Dict[str, AlertRecord]:
-        query = """
-            SELECT alert_key, user_code, alert_type, entity_id, state,
-                   details, first_detected_at, last_notified_at,
-                   resolved_at, notification_count
-            FROM alerting.alert_delivery_state
-            WHERE user_code = ?
-              AND state = ?
+        query = self._alert_select_sql() + """
+            WHERE state = ?
         """
         result: Dict[str, AlertRecord] = {}
         with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, user_code, ALERT_STATE_RESOLVED_PENDING)
+                cur.execute(query, ALERT_STATE_RESOLVED_PENDING)
                 for row in cur.fetchall():
-                    rec = AlertRecord(
-                        alert_key=row[0],
-                        user_code=row[1],
-                        alert_type=row[2],
-                        entity_id=row[3],
-                        state=row[4],
-                        details=row[5],
-                        first_detected_at=row[6],
-                        last_notified_at=row[7],
-                        resolved_at=row[8],
-                        notification_count=row[9],
-                    )
+                    rec = self._alert_record_from_row(row, user_code)
                     result[rec.alert_key] = rec
         return result
 
-    def mark_resolution_notified(
+    def queue_reminder(
         self,
         database: str,
         user_code: str,
         alert_key: str,
+        details: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         query = """
             SET QUOTED_IDENTIFIER ON;
 
             UPDATE alerting.alert_delivery_state
-            SET state = ?,
-                last_notified_at = SYSUTCDATETIME(),
-                notification_count = notification_count + 1,
+            SET notification_type = ?,
+                notification_status = ?,
+                details = COALESCE(?, details),
+                metadata_json = COALESCE(?, metadata_json),
+                notification_queued_at = SYSUTCDATETIME(),
+                notification_attempt_count = 0,
+                last_notification_attempt_at = NULL,
+                next_retry_at = NULL,
+                last_error_code = NULL,
+                last_error_message = NULL,
+                last_error_at = NULL,
                 updated_at = SYSUTCDATETIME()
             WHERE alert_key = ?
-              AND user_code = ?
               AND state = ?
+              AND notification_status = ?
+        """
+        metadata_json = (
+            self._metadata_json(metadata) if metadata is not None else None
+        )
+        with self._get_alert_connection(database, user_code) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    NOTIFICATION_TYPE_REMINDER,
+                    NOTIFICATION_STATUS_PENDING,
+                    details,
+                    metadata_json,
+                    alert_key,
+                    ALERT_STATE_OPEN,
+                    NOTIFICATION_STATUS_SENT,
+                )
+            conn.commit()
+
+    def get_deliverable_notifications(
+        self,
+        database: str,
+        user_code: str,
+        processing_timeout_minutes: int = 30,
+    ) -> Sequence[AlertRecord]:
+        query = self._alert_select_sql() + """
+            WHERE state IN (?, ?)
+              AND (
+                    notification_status = ?
+                 OR (notification_status = ?
+                     AND next_retry_at <= SYSUTCDATETIME())
+                 OR (notification_status = ?
+                     AND last_notification_attempt_at <= DATEADD(
+                         MINUTE, -?, SYSUTCDATETIME()
+                     ))
+              )
+            ORDER BY notification_queued_at, first_detected_at
         """
         with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    ALERT_STATE_RESOLVED,
-                    alert_key,
-                    user_code,
+                    ALERT_STATE_OPEN,
                     ALERT_STATE_RESOLVED_PENDING,
+                    NOTIFICATION_STATUS_PENDING,
+                    NOTIFICATION_STATUS_RETRY_PENDING,
+                    NOTIFICATION_STATUS_PROCESSING,
+                    processing_timeout_minutes,
                 )
+                return [
+                    self._alert_record_from_row(row, user_code)
+                    for row in cur.fetchall()
+                ]
+
+    def claim_notifications(
+        self,
+        database: str,
+        user_code: str,
+        alert_keys: Sequence[str],
+        processing_timeout_minutes: int = 30,
+    ) -> Sequence[str]:
+        query = """
+            SET QUOTED_IDENTIFIER ON;
+
+            UPDATE alerting.alert_delivery_state WITH (UPDLOCK, ROWLOCK)
+            SET notification_status = ?,
+                notification_attempt_count = notification_attempt_count + 1,
+                last_notification_attempt_at = SYSUTCDATETIME(),
+                updated_at = SYSUTCDATETIME()
+            OUTPUT INSERTED.alert_key
+            WHERE alert_key = ?
+              AND state IN (?, ?)
+              AND (
+                    notification_status = ?
+                 OR (notification_status = ?
+                     AND next_retry_at <= SYSUTCDATETIME())
+                 OR (notification_status = ?
+                     AND last_notification_attempt_at <= DATEADD(
+                         MINUTE, -?, SYSUTCDATETIME()
+                     ))
+              )
+        """
+        claimed = []
+        with self._get_alert_connection(database, user_code) as conn:
+            with conn.cursor() as cur:
+                for alert_key in alert_keys:
+                    cur.execute(
+                        query,
+                        NOTIFICATION_STATUS_PROCESSING,
+                        alert_key,
+                        ALERT_STATE_OPEN,
+                        ALERT_STATE_RESOLVED_PENDING,
+                        NOTIFICATION_STATUS_PENDING,
+                        NOTIFICATION_STATUS_RETRY_PENDING,
+                        NOTIFICATION_STATUS_PROCESSING,
+                        processing_timeout_minutes,
+                    )
+                    row = cur.fetchone()
+                    if row is not None:
+                        claimed.append(row[0])
+            conn.commit()
+        return claimed
+
+    def mark_notifications_sent(
+        self,
+        database: str,
+        user_code: str,
+        alert_keys: Sequence[str],
+    ) -> None:
+        query = """
+            SET QUOTED_IDENTIFIER ON;
+
+            UPDATE alerting.alert_delivery_state
+            SET state = CASE
+                    WHEN notification_type = ? THEN ?
+                    ELSE state
+                END,
+                notification_status = ?,
+                last_notified_at = SYSUTCDATETIME(),
+                notification_count = notification_count + 1,
+                next_retry_at = NULL,
+                last_error_code = NULL,
+                last_error_message = NULL,
+                last_error_at = NULL,
+                updated_at = SYSUTCDATETIME()
+            WHERE alert_key = ?
+              AND notification_status = ?
+        """
+        with self._get_alert_connection(database, user_code) as conn:
+            with conn.cursor() as cur:
+                for alert_key in alert_keys:
+                    cur.execute(
+                        query,
+                        NOTIFICATION_TYPE_RESOLUTION,
+                        ALERT_STATE_RESOLVED,
+                        NOTIFICATION_STATUS_SENT,
+                        alert_key,
+                        NOTIFICATION_STATUS_PROCESSING,
+                    )
+            conn.commit()
+
+    def mark_notifications_failed(
+        self,
+        database: str,
+        user_code: str,
+        alert_keys: Sequence[str],
+        error_code: str,
+        error_message: str,
+        retry_delay_minutes: int,
+    ) -> None:
+        query = """
+            SET QUOTED_IDENTIFIER ON;
+
+            UPDATE alerting.alert_delivery_state
+            SET notification_status = CASE
+                    WHEN notification_attempt_count >= max_notification_attempts
+                        THEN ?
+                    ELSE ?
+                END,
+                next_retry_at = CASE
+                    WHEN notification_attempt_count >= max_notification_attempts
+                        THEN NULL
+                    ELSE DATEADD(MINUTE, ?, SYSUTCDATETIME())
+                END,
+                last_error_code = ?,
+                last_error_message = ?,
+                last_error_at = SYSUTCDATETIME(),
+                updated_at = SYSUTCDATETIME()
+            WHERE alert_key = ?
+              AND notification_status = ?
+        """
+        with self._get_alert_connection(database, user_code) as conn:
+            with conn.cursor() as cur:
+                for alert_key in alert_keys:
+                    cur.execute(
+                        query,
+                        NOTIFICATION_STATUS_FAILED,
+                        NOTIFICATION_STATUS_RETRY_PENDING,
+                        retry_delay_minutes,
+                        error_code[:100],
+                        error_message,
+                        alert_key,
+                        NOTIFICATION_STATUS_PROCESSING,
+                    )
             conn.commit()
 
     def should_send_reminder(
@@ -543,7 +813,12 @@ class AlertStateStoreResource:
     ) -> bool:
         """Check whether enough time has passed since last notification."""
         alert = existing_alerts.get(alert_key)
-        if alert is None:
+        if (
+            alert is None
+            or alert.state != ALERT_STATE_OPEN
+            or alert.notification_status != NOTIFICATION_STATUS_SENT
+            or alert.last_notified_at is None
+        ):
             return False
         now = datetime.now(timezone.utc)
         last = alert.last_notified_at

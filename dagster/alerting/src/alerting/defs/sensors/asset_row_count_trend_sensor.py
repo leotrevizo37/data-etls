@@ -218,6 +218,7 @@ def asset_row_count_trend_sensor(
         active_conditions[key] = {
             "user_code": trend.code_location,
             "entity_id": trend.asset_key,
+            "severity": severity,
             "details": (
                 f"Severity: {severity}, "
                 f"ObservationDate: {trend.observation_date}, "
@@ -231,6 +232,43 @@ def asset_row_count_trend_sensor(
                 f"Materializations: {trend.daily_materialization_count}, "
                 f"LatestRunId: {trend.latest_run_id or 'N/A'}"
             ),
+            "metadata": {
+                "reason": (
+                    "El volumen diario cayó por debajo de los umbrales "
+                    "de los promedios de 7 y 28 días."
+                ),
+                "measurements": {
+                    "observation_date": trend.observation_date.isoformat(),
+                    "daily_row_count": trend.daily_row_count,
+                    "average_1d": trend.average_1d,
+                    "average_7d": trend.average_7d,
+                    "average_28d": trend.average_28d,
+                    "change_vs_1d_pct": trend.change_vs_1d_pct,
+                    "change_vs_7d_pct": trend.change_vs_7d_pct,
+                    "change_vs_28d_pct": trend.change_vs_28d_pct,
+                    "daily_materialization_count": (
+                        trend.daily_materialization_count
+                    ),
+                },
+                "thresholds": {
+                    "warning_drop_pct": warning_drop,
+                    "critical_drop_pct": critical_drop,
+                    "minimum_observed_days_7d": int(
+                        trend_cfg.get("minimum_observed_days_7d", 7)
+                    ),
+                    "minimum_observed_days_28d": int(
+                        trend_cfg.get("minimum_observed_days_28d", 28)
+                    ),
+                },
+                "evidence": {
+                    "latest_run_id": trend.latest_run_id,
+                    "latest_materialized_at": (
+                        trend.latest_materialized_at.isoformat()
+                    ),
+                    "observed_days_7d": trend.observed_days_7d,
+                    "observed_days_28d": trend.observed_days_28d,
+                },
+            },
         }
 
     existing_alerts = {}
@@ -252,18 +290,26 @@ def asset_row_count_trend_sensor(
                 existing_alerts[key] = alert
     opened = 0
     for key, condition in active_conditions.items():
-        if key not in existing_alerts:
-            occurrence_key = f"{key}::{uuid.uuid4()}"
-            state_store.upsert_alert(
-                database=uc_databases[condition["user_code"]],
-                alert_key=occurrence_key,
-                user_code=condition["user_code"],
-                alert_type=_ALERT_TYPE,
-                entity_id=condition["entity_id"],
-                details=condition["details"],
-                state=ALERT_STATE_OPEN,
-                notification_count=0,
-            )
+        existing = existing_alerts.get(key)
+        occurrence_key = (
+            existing.alert_key
+            if existing is not None
+            else f"{key}::{uuid.uuid4()}"
+        )
+        state_store.upsert_alert(
+            database=uc_databases[condition["user_code"]],
+            alert_key=occurrence_key,
+            user_code=condition["user_code"],
+            trigger_source="dagster",
+            alert_type=_ALERT_TYPE,
+            entity_id=condition["entity_id"],
+            severity=condition["severity"],
+            details=condition["details"],
+            metadata=condition["metadata"],
+            state=ALERT_STATE_OPEN,
+            notification_count=0,
+        )
+        if existing is None:
             opened += 1
 
     resolved = 0
@@ -275,6 +321,10 @@ def asset_row_count_trend_sensor(
             alert.user_code,
             alert.alert_key,
             alert.details,
+            {
+                **alert.metadata,
+                "reason": "El volumen dejó de incumplir los umbrales.",
+            },
         )
         resolved += 1
 
