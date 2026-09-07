@@ -33,6 +33,7 @@ IF OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NULL
             metadata_json NVARCHAR(MAX) NOT NULL
             CONSTRAINT DF_alert_workflow_state_metadata_json DEFAULT (N'{}'),
             ticket_id NVARCHAR(250) NULL,
+            ticket_created_at DATETIME2(3) NULL,
             first_detected_at DATETIME2(3) NOT NULL
             CONSTRAINT DF_alert_workflow_state_first_detected_at
             DEFAULT (SYSUTCDATETIME()),
