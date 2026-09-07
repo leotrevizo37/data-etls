@@ -84,43 +84,49 @@ IF OBJECT_ID(N'alerting.alert_delivery_state', N'U') IS NULL
     END;
 GO
 
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE name = N'ix_alert_state_active'
-      AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            name = N'ix_alert_state_active'
+            AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
+    )
     BEGIN
         CREATE INDEX ix_alert_state_active
-        ON alerting.alert_delivery_state (state)
-        WHERE state IN ('OPEN', 'RESOLVED_PENDING');
+            ON alerting.alert_delivery_state (state)
+            WHERE state IN ('OPEN', 'RESOLVED_PENDING');
     END;
 GO
 
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE name = N'ux_alert_state_active_condition'
-      AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            name = N'ux_alert_state_active_condition'
+            AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
+    )
     BEGIN
         CREATE UNIQUE INDEX ux_alert_state_active_condition
-        ON alerting.alert_delivery_state
+            ON alerting.alert_delivery_state
             (trigger_source, alert_type, entity_id)
-        WHERE state = 'OPEN';
+            WHERE state = 'OPEN';
     END;
 GO
 
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE name = N'ix_alert_state_notification_ready'
-      AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            name = N'ix_alert_state_notification_ready'
+            AND object_id = OBJECT_ID(N'alerting.alert_delivery_state')
+    )
     BEGIN
         CREATE INDEX ix_alert_state_notification_ready
-        ON alerting.alert_delivery_state
+            ON alerting.alert_delivery_state
             (notification_status, next_retry_at, notification_queued_at)
-        WHERE state IN ('OPEN', 'RESOLVED_PENDING');
+            WHERE state IN ('OPEN', 'RESOLVED_PENDING');
     END;
 GO
