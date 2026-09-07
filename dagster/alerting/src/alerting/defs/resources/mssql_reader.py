@@ -65,6 +65,7 @@ class MssqlReaderResource:
         self,
         database: str,
         user_code: Optional[str] = None,
+        read_only: bool = True,
     ) -> pyodbc.Connection:
         prefix = "".join(
             character if character.isalnum() else "_"
@@ -81,8 +82,9 @@ class MssqlReaderResource:
             f"UID={user};"
             f"PWD={password};"
             f"TrustServerCertificate=yes;"
-            f"ApplicationIntent=ReadOnly;"
         )
+        if read_only:
+            conn_str += "ApplicationIntent=ReadOnly;"
         return pyodbc.connect(conn_str, timeout=30)
 
     def get_connection_lost_sensors(

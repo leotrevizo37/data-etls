@@ -1,8 +1,4 @@
-"""Alert delivery state management backed by Dagster PostgreSQL.
-
-Stores alert lifecycle (OPEN -> REMINDER -> RESOLVED) in a dedicated
-``alerting.alert_delivery_state`` table within the Dagster PostgreSQL
-database.  The table is created idempotently on first use."""
+"""Tenant alert state and Dagster PostgreSQL row-count history."""
 
 import os
 from dataclasses import dataclass
@@ -13,6 +9,8 @@ import psycopg2
 import psycopg2.extras
 from dagster import InitResourceContext, resource
 
+from .mssql_reader import MssqlReaderResource
+
 
 ALERT_STATE_OPEN = "OPEN"
 ALERT_STATE_REMINDER = "REMINDER"
@@ -20,35 +18,6 @@ ALERT_STATE_RESOLVED_PENDING = "RESOLVED_PENDING"
 ALERT_STATE_RESOLVED = "RESOLVED"
 
 _ENSURE_SCHEMA_SQL = "CREATE SCHEMA IF NOT EXISTS alerting;"
-
-_ENSURE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS alerting.alert_delivery_state (
-    alert_key          VARCHAR(500)  PRIMARY KEY,
-    user_code          VARCHAR(100)  NOT NULL,
-    alert_type         VARCHAR(50)   NOT NULL,
-    entity_id          VARCHAR(250)  NOT NULL,
-    state              VARCHAR(20)   NOT NULL,
-    details            TEXT          NULL,
-    first_detected_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    last_notified_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    resolved_at        TIMESTAMPTZ   NULL,
-    notification_count INT           NOT NULL DEFAULT 1,
-    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW()
-);
-"""
-
-_ENSURE_INDEX_SQL = """
-CREATE INDEX IF NOT EXISTS ix_alert_state_active
-    ON alerting.alert_delivery_state (state)
-    WHERE state IN ('OPEN', 'REMINDER');
-"""
-
-_ENSURE_ACTIVE_CONDITION_INDEX_SQL = """
-CREATE UNIQUE INDEX IF NOT EXISTS ux_alert_state_active_condition
-    ON alerting.alert_delivery_state (user_code, alert_type, entity_id)
-    WHERE state IN ('OPEN', 'REMINDER');
-"""
 
 _ENSURE_ROW_COUNT_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS alerting.asset_row_count_daily (
@@ -264,9 +233,10 @@ class AssetRowCountTrend:
 
 
 class AlertStateStoreResource:
-    """Manages alert delivery state in Dagster PostgreSQL."""
+    """Manages tenant alert state and Dagster row-count history."""
 
-    def __init__(self) -> None:
+    def __init__(self, mssql_reader: MssqlReaderResource) -> None:
+        self._mssql_reader = mssql_reader
         self._dsn = self._build_dsn()
         self._ensure_schema()
 
@@ -285,14 +255,18 @@ class AlertStateStoreResource:
     def _get_connection(self) -> psycopg2.extensions.connection:
         return psycopg2.connect(self._dsn)
 
+    def _get_alert_connection(self, database: str, user_code: str):
+        return self._mssql_reader._get_connection(
+            database,
+            user_code,
+            read_only=False,
+        )
+
     def _ensure_schema(self) -> None:
-        """Idempotently create the alerting schema and table."""
+        """Idempotently create the PostgreSQL row-count history."""
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(_ENSURE_SCHEMA_SQL)
-                cur.execute(_ENSURE_TABLE_SQL)
-                cur.execute(_ENSURE_INDEX_SQL)
-                cur.execute(_ENSURE_ACTIVE_CONDITION_INDEX_SQL)
                 cur.execute(_ENSURE_ROW_COUNT_TABLE_SQL)
                 cur.execute(_ENSURE_ROW_COUNT_INDEX_SQL)
             conn.commit()
@@ -376,19 +350,29 @@ class AlertStateStoreResource:
                     for row in cur.fetchall()
                 ]
 
-    def get_active_alerts(self) -> Dict[str, AlertRecord]:
+    def get_active_alerts(
+        self,
+        database: str,
+        user_code: str,
+    ) -> Dict[str, AlertRecord]:
         """Return active alerts keyed by their condition identity."""
         query = """
             SELECT alert_key, user_code, alert_type, entity_id, state,
                    details, first_detected_at, last_notified_at,
                    resolved_at, notification_count
             FROM alerting.alert_delivery_state
-            WHERE state IN (%s, %s)
+            WHERE user_code = ?
+              AND state IN (?, ?)
         """
         result: Dict[str, AlertRecord] = {}
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (ALERT_STATE_OPEN, ALERT_STATE_REMINDER))
+                cur.execute(
+                    query,
+                    user_code,
+                    ALERT_STATE_OPEN,
+                    ALERT_STATE_REMINDER,
+                )
                 for row in cur.fetchall():
                     rec = AlertRecord(
                         alert_key=row[0],
@@ -409,6 +393,7 @@ class AlertStateStoreResource:
 
     def upsert_alert(
         self,
+        database: str,
         alert_key: str,
         user_code: str,
         alert_type: str,
@@ -419,76 +404,92 @@ class AlertStateStoreResource:
     ) -> None:
         """Insert a new alert or update an existing one (bump notification count)."""
         query = """
-            INSERT INTO alerting.alert_delivery_state
-                (alert_key, user_code, alert_type, entity_id, state, details,
-                 first_detected_at, last_notified_at, notification_count,
-                 created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, NOW(), NOW())
-            ON CONFLICT (alert_key) DO UPDATE SET
-                state = EXCLUDED.state,
-                details = EXCLUDED.details,
-                last_notified_at = NOW(),
-                notification_count = alerting.alert_delivery_state.notification_count + 1,
+            SET QUOTED_IDENTIFIER ON;
+
+            UPDATE alerting.alert_delivery_state
+            SET state = ?,
+                details = ?,
+                last_notified_at = SYSUTCDATETIME(),
+                notification_count = notification_count + 1,
                 resolved_at = NULL,
-                updated_at = NOW()
+                updated_at = SYSUTCDATETIME()
+            WHERE alert_key = ?;
+
+            IF @@ROWCOUNT = 0
+                INSERT INTO alerting.alert_delivery_state
+                    (alert_key, user_code, alert_type, entity_id, state, details,
+                     first_detected_at, last_notified_at, notification_count,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, SYSUTCDATETIME(), SYSUTCDATETIME(),
+                        ?, SYSUTCDATETIME(), SYSUTCDATETIME());
         """
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (
-                        alert_key,
-                        user_code,
-                        alert_type,
-                        entity_id,
-                        state,
-                        details,
-                        notification_count,
-                    ),
+                    state,
+                    details,
+                    alert_key,
+                    alert_key,
+                    user_code,
+                    alert_type,
+                    entity_id,
+                    state,
+                    details,
+                    notification_count,
                 )
             conn.commit()
 
     def mark_resolved(
         self,
+        database: str,
+        user_code: str,
         alert_key: str,
         details: Optional[str] = None,
     ) -> None:
         """Queue an alert resolution for a grouped notification."""
         query = """
+            SET QUOTED_IDENTIFIER ON;
+
             UPDATE alerting.alert_delivery_state
-            SET state = %s,
-                details = COALESCE(%s, details),
-                resolved_at = NOW(),
-                updated_at = NOW()
-            WHERE alert_key = %s
-              AND state IN (%s, %s)
+            SET state = ?,
+                details = COALESCE(?, details),
+                resolved_at = SYSUTCDATETIME(),
+                updated_at = SYSUTCDATETIME()
+            WHERE alert_key = ?
+              AND user_code = ?
+              AND state IN (?, ?)
         """
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (
-                        ALERT_STATE_RESOLVED_PENDING,
-                        details,
-                        alert_key,
-                        ALERT_STATE_OPEN,
-                        ALERT_STATE_REMINDER,
-                    ),
+                    ALERT_STATE_RESOLVED_PENDING,
+                    details,
+                    alert_key,
+                    user_code,
+                    ALERT_STATE_OPEN,
+                    ALERT_STATE_REMINDER,
                 )
             conn.commit()
 
-    def get_pending_resolved_alerts(self) -> Dict[str, AlertRecord]:
+    def get_pending_resolved_alerts(
+        self,
+        database: str,
+        user_code: str,
+    ) -> Dict[str, AlertRecord]:
         query = """
             SELECT alert_key, user_code, alert_type, entity_id, state,
                    details, first_detected_at, last_notified_at,
                    resolved_at, notification_count
             FROM alerting.alert_delivery_state
-            WHERE state = %s
+            WHERE user_code = ?
+              AND state = ?
         """
         result: Dict[str, AlertRecord] = {}
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (ALERT_STATE_RESOLVED_PENDING,))
+                cur.execute(query, user_code, ALERT_STATE_RESOLVED_PENDING)
                 for row in cur.fetchall():
                     rec = AlertRecord(
                         alert_key=row[0],
@@ -505,25 +506,32 @@ class AlertStateStoreResource:
                     result[rec.alert_key] = rec
         return result
 
-    def mark_resolution_notified(self, alert_key: str) -> None:
+    def mark_resolution_notified(
+        self,
+        database: str,
+        user_code: str,
+        alert_key: str,
+    ) -> None:
         query = """
+            SET QUOTED_IDENTIFIER ON;
+
             UPDATE alerting.alert_delivery_state
-            SET state = %s,
-                last_notified_at = NOW(),
+            SET state = ?,
+                last_notified_at = SYSUTCDATETIME(),
                 notification_count = notification_count + 1,
-                updated_at = NOW()
-            WHERE alert_key = %s
-              AND state = %s
+                updated_at = SYSUTCDATETIME()
+            WHERE alert_key = ?
+              AND user_code = ?
+              AND state = ?
         """
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
-                    (
-                        ALERT_STATE_RESOLVED,
-                        alert_key,
-                        ALERT_STATE_RESOLVED_PENDING,
-                    ),
+                    ALERT_STATE_RESOLVED,
+                    alert_key,
+                    user_code,
+                    ALERT_STATE_RESOLVED_PENDING,
                 )
             conn.commit()
 
@@ -545,8 +553,8 @@ class AlertStateStoreResource:
         return elapsed >= reminder_interval_minutes
 
 
-@resource
+@resource(required_resource_keys={"mssql_reader"})
 def alert_state_store_resource(
-    _context: InitResourceContext,
+    context: InitResourceContext,
 ) -> AlertStateStoreResource:
-    return AlertStateStoreResource()
+    return AlertStateStoreResource(context.resources.mssql_reader)

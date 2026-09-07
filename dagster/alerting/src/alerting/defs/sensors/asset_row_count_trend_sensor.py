@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -156,6 +157,13 @@ def asset_row_count_trend_sensor(
         )
 
     user_codes_cfg = config.get("user_codes", {})
+    uc_databases = {
+        user_code: os.environ.get(
+            user_code_cfg.get("database_env", ""),
+            user_code_cfg.get("database", user_code),
+        )
+        for user_code, user_code_cfg in user_codes_cfg.items()
+    }
     active_conditions: Dict[str, Dict[str, Any]] = {}
     for trend in state_store.get_latest_asset_row_count_trends():
         if trend.code_location not in user_codes_cfg:
@@ -226,24 +234,28 @@ def asset_row_count_trend_sensor(
         }
 
     existing_alerts = {}
-    for key, alert in state_store.get_active_alerts().items():
-        if alert.alert_type != _ALERT_TYPE or alert.user_code not in user_codes_cfg:
-            continue
-        alert_cfg = {
-            **trend_defaults,
-            **user_codes_cfg[alert.user_code].get(
-                "asset_row_count_trends", {}
-            ),
-        }
-        if alert_cfg.get("enabled", True) and alert_cfg.get(
-            "notifications_enabled", True
-        ):
-            existing_alerts[key] = alert
+    for user_code, database in uc_databases.items():
+        for key, alert in state_store.get_active_alerts(
+            database, user_code
+        ).items():
+            if alert.alert_type != _ALERT_TYPE:
+                continue
+            alert_cfg = {
+                **trend_defaults,
+                **user_codes_cfg[alert.user_code].get(
+                    "asset_row_count_trends", {}
+                ),
+            }
+            if alert_cfg.get("enabled", True) and alert_cfg.get(
+                "notifications_enabled", True
+            ):
+                existing_alerts[key] = alert
     opened = 0
     for key, condition in active_conditions.items():
         if key not in existing_alerts:
             occurrence_key = f"{key}::{uuid.uuid4()}"
             state_store.upsert_alert(
+                database=uc_databases[condition["user_code"]],
                 alert_key=occurrence_key,
                 user_code=condition["user_code"],
                 alert_type=_ALERT_TYPE,
@@ -258,7 +270,12 @@ def asset_row_count_trend_sensor(
     for key, alert in existing_alerts.items():
         if key in active_conditions:
             continue
-        state_store.mark_resolved(alert.alert_key, alert.details)
+        state_store.mark_resolved(
+            uc_databases[alert.user_code],
+            alert.user_code,
+            alert.alert_key,
+            alert.details,
+        )
         resolved += 1
 
     summary = (

@@ -313,8 +313,15 @@ def operational_alerts_sensor(
             }
 
     # ── 3. Reconcile: determine pending actions (deferred) ────────
-    all_existing_alerts = state_store.get_active_alerts()
-    pending_resolved_alerts = state_store.get_pending_resolved_alerts()
+    all_existing_alerts = {}
+    pending_resolved_alerts = {}
+    for uc_name, database in uc_databases.items():
+        all_existing_alerts.update(
+            state_store.get_active_alerts(database, uc_name)
+        )
+        pending_resolved_alerts.update(
+            state_store.get_pending_resolved_alerts(database, uc_name)
+        )
     existing_alerts = {
         key: alert
         for key, alert in all_existing_alerts.items()
@@ -433,7 +440,12 @@ def operational_alerts_sensor(
     for action in pending:
         if action.action != "resolve":
             continue
-        state_store.mark_resolved(action.payload.alert_key, action.details)
+        state_store.mark_resolved(
+            uc_databases[action.user_code],
+            action.user_code,
+            action.payload.alert_key,
+            action.details,
+        )
         resolution_groups[action.user_code].append(action)
 
     reminder_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
@@ -568,6 +580,7 @@ def operational_alerts_sensor(
             for pa in group["active"]:
                 if pa.action == "open":
                     state_store.upsert_alert(
+                        database=uc_databases[pa.user_code],
                         alert_key=pa.payload.alert_key,
                         user_code=pa.user_code,
                         alert_type=pa.alert_type,
@@ -577,7 +590,11 @@ def operational_alerts_sensor(
                     )
                     opened += 1
             for pa in resolution_actions:
-                state_store.mark_resolution_notified(pa.payload.alert_key)
+                state_store.mark_resolution_notified(
+                    uc_databases[pa.user_code],
+                    pa.user_code,
+                    pa.payload.alert_key,
+                )
                 resolved += 1
 
     for uc_name, actions in reminder_groups.items():
@@ -592,6 +609,7 @@ def operational_alerts_sensor(
         if sent:
             for action in actions:
                 state_store.upsert_alert(
+                    database=uc_databases[action.user_code],
                     alert_key=action.payload.alert_key,
                     user_code=action.user_code,
                     alert_type=action.alert_type,
@@ -602,6 +620,8 @@ def operational_alerts_sensor(
                 reminded += 1
             for action in resolution_actions:
                 state_store.mark_resolution_notified(
+                    uc_databases[action.user_code],
+                    action.user_code,
                     action.payload.alert_key
                 )
                 resolved += 1

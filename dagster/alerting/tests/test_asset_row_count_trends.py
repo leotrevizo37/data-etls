@@ -258,6 +258,7 @@ def test_trend_sensor_records_open_alert_without_sending_email():
     email.send_consolidated.assert_not_called()
     state.upsert_alert.assert_called_once()
     call = state.upsert_alert.call_args.kwargs
+    assert call["database"] == "carlsjr"
     assert call["alert_key"].startswith(
         "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas::"
     )
@@ -388,7 +389,9 @@ def test_trend_sensor_queues_resolution_without_sending_email():
 
     email.send_consolidated.assert_not_called()
     state.upsert_alert.assert_not_called()
-    state.mark_resolved.assert_called_once_with(key, None)
+    state.mark_resolved.assert_called_once_with(
+        "carlsjr", "carlsjr", key, None
+    )
     assert "0 opened, 1 resolved" in result.skip_message
 
 

@@ -10,7 +10,10 @@ import yaml
 from dagster import build_sensor_context
 
 from alerting.definitions import defs
-from alerting.defs.resources.alert_state_store import AlertRecord
+from alerting.defs.resources.alert_state_store import (
+    AlertRecord,
+    AlertStateStoreResource,
+)
 from alerting.defs.resources.email_notifier import (
     AlertPayload,
     ConsolidatedPayload,
@@ -80,12 +83,101 @@ def test_mssql_uses_user_code_connection_override(monkeypatch):
     monkeypatch.setenv("CARLSJR_MSSQL_USER", "carlsjr-user")
     monkeypatch.setenv("CARLSJR_MSSQL_PASSWORD", "carlsjr-password")
     with patch("alerting.defs.resources.mssql_reader.pyodbc.connect") as connect:
-        MssqlReaderResource()._get_connection("carlsjr", "carlsjr")
+        reader = MssqlReaderResource()
+        reader._get_connection("carlsjr", "carlsjr")
+        read_connection_string = connect.call_args.args[0]
+        reader._get_connection("carlsjr", "carlsjr", read_only=False)
 
-    connection_string = connect.call_args.args[0]
-    assert "SERVER=carlsjr-host,1433;" in connection_string
-    assert "UID=carlsjr-user;" in connection_string
-    assert "PWD=carlsjr-password;" in connection_string
+    write_connection_string = connect.call_args.args[0]
+    assert "SERVER=carlsjr-host,1433;" in read_connection_string
+    assert "UID=carlsjr-user;" in read_connection_string
+    assert "PWD=carlsjr-password;" in read_connection_string
+    assert "ApplicationIntent=ReadOnly;" in read_connection_string
+    assert "ApplicationIntent" not in write_connection_string
+
+
+def test_alert_state_upsert_uses_sql_server_syntax():
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    cursor = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    reader = MagicMock()
+    reader._get_connection.return_value = connection
+    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
+    store._mssql_reader = reader
+
+    store.upsert_alert(
+        database="carlsjr_db",
+        alert_key="alert-1",
+        user_code="carlsjr",
+        alert_type="connection_lost",
+        entity_id="sensor-1",
+        details="details",
+    )
+
+    reader._get_connection.assert_called_once_with(
+        "carlsjr_db", "carlsjr", read_only=False
+    )
+    query = cursor.execute.call_args.args[0]
+    assert "IF @@ROWCOUNT = 0" in query
+    assert "ON CONFLICT" not in query
+    assert cursor.execute.call_args.args[1:] == (
+        "OPEN",
+        "details",
+        "alert-1",
+        "alert-1",
+        "carlsjr",
+        "connection_lost",
+        "sensor-1",
+        "OPEN",
+        "details",
+        1,
+    )
+    connection.commit.assert_called_once_with()
+
+
+def test_alert_state_updates_all_resolution_columns():
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    cursor = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    reader = MagicMock()
+    reader._get_connection.return_value = connection
+    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
+    store._mssql_reader = reader
+
+    store.mark_resolved(
+        "carlsjr_db",
+        "carlsjr",
+        "alert-1",
+        "resolución con acentos",
+    )
+
+    resolved_query = cursor.execute.call_args.args[0]
+    assert "details = COALESCE(?, details)" in resolved_query
+    assert "resolved_at = SYSUTCDATETIME()" in resolved_query
+    assert "updated_at = SYSUTCDATETIME()" in resolved_query
+    assert cursor.execute.call_args.args[1:] == (
+        "RESOLVED_PENDING",
+        "resolución con acentos",
+        "alert-1",
+        "carlsjr",
+        "OPEN",
+        "REMINDER",
+    )
+
+    store.mark_resolution_notified("carlsjr_db", "carlsjr", "alert-1")
+
+    notified_query = cursor.execute.call_args.args[0]
+    assert "last_notified_at = SYSUTCDATETIME()" in notified_query
+    assert "notification_count = notification_count + 1" in notified_query
+    assert "updated_at = SYSUTCDATETIME()" in notified_query
+    assert cursor.execute.call_args.args[1:] == (
+        "RESOLVED",
+        "alert-1",
+        "carlsjr",
+        "RESOLVED_PENDING",
+    )
 
 
 def test_sensor_recovery_requires_latest_healthy_audit():
@@ -210,6 +302,42 @@ def _make_resources(mssql=None, state=None, email=None):
     }
 
 
+def test_alert_state_reads_each_tenant_database(monkeypatch):
+    config = {
+        "defaults": {
+            "sensor_alerts": {
+                "connection_lost": False,
+                "late_readings": False,
+            },
+            "pipeline_alerts": {
+                "ingestion_control_failed": False,
+                "dagster_run_failure": False,
+                "stale_detection": False,
+            },
+        },
+        "user_codes": {
+            "carlsjr": {"database": "carlsjr_db"},
+            "emerson": {"database_env": "EMERSON_TEST_DB"},
+        },
+    }
+    monkeypatch.setenv("EMERSON_TEST_DB", "emerson_db")
+    state = MagicMock()
+    state.get_active_alerts.return_value = {}
+    state.get_pending_resolved_alerts.return_value = {}
+
+    with patch.object(sensor_module, "_load_config", return_value=config):
+        context = build_sensor_context(resources=_make_resources(state=state))
+        sensor_module.operational_alerts_sensor.evaluate_tick(context)
+
+    assert [
+        state_call.args for state_call in state.get_active_alerts.call_args_list
+    ] == [("carlsjr_db", "carlsjr"), ("emerson_db", "emerson")]
+    assert [
+        state_call.args
+        for state_call in state.get_pending_resolved_alerts.call_args_list
+    ] == [("carlsjr_db", "carlsjr"), ("emerson_db", "emerson")]
+
+
 def test_failed_email_is_not_recorded(monkeypatch):
     config = _make_base_config()
     state = MagicMock()
@@ -327,10 +455,14 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
 
     assert state.upsert_alert.call_count == 2
     state.mark_resolved.assert_called_once_with(
+        "carlsjr",
+        "carlsjr",
         f"{key}::incident-1",
         resolved.details,
     )
     state.mark_resolution_notified.assert_called_once_with(
+        "carlsjr",
+        "carlsjr",
         f"{key}::incident-1"
     )
 
@@ -420,7 +552,9 @@ def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
         resolved_key
     ]
     assert state.upsert_alert.call_count == 2
-    state.mark_resolution_notified.assert_called_once_with(resolved_key)
+    state.mark_resolution_notified.assert_called_once_with(
+        "carlsjr", "carlsjr", resolved_key
+    )
 
 
 def test_connection_lost_is_not_resolved_without_recovery_evidence():
@@ -619,6 +753,10 @@ def test_consolidated_email_groups_by_user_code():
     assert isinstance(payload, ConsolidatedPayload)
     assert payload.user_code == "carlsjr"
     assert len(payload.active_alerts) == 3
+    assert {
+        state_call.kwargs["database"]
+        for state_call in state.upsert_alert.call_args_list
+    } == {"carlsjr"}
 
 
 def test_sensor_dimensions_enrich_alerts():
