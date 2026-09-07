@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
+import json
 import os
 import pyodbc
 from dagster import resource
@@ -548,6 +549,91 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+FACT_LECTURAS_MQTT_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factLecturasMqtt WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        MqttId,
+        FechaLocal,
+        TimeSpan,
+        DevEui,
+        Tenant,
+        Dispositivo,
+        Aplicacion,
+        Sucursal,
+        Topic,
+        Variable,
+        ValorJson,
+        ValorTexto,
+        MedicionesJson,
+        FechaRecepcion,
+        MensajeRaw
+    FROM stg.factLecturasMqtt
+    WHERE RunId = ?
+) AS source
+    ON target.MqttId = source.MqttId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.FechaLocal = source.FechaLocal,
+        target.TimeSpan = source.TimeSpan,
+        target.DevEui = source.DevEui,
+        target.Tenant = source.Tenant,
+        target.Dispositivo = source.Dispositivo,
+        target.Aplicacion = source.Aplicacion,
+        target.Sucursal = source.Sucursal,
+        target.Topic = source.Topic,
+        target.Variable = source.Variable,
+        target.ValorJson = source.ValorJson,
+        target.ValorTexto = source.ValorTexto,
+        target.MedicionesJson = source.MedicionesJson,
+        target.FechaRecepcion = source.FechaRecepcion,
+        target.MensajeRaw = source.MensajeRaw,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        MqttId,
+        FechaLocal,
+        TimeSpan,
+        DevEui,
+        Tenant,
+        Dispositivo,
+        Aplicacion,
+        Sucursal,
+        Topic,
+        Variable,
+        ValorJson,
+        ValorTexto,
+        MedicionesJson,
+        FechaRecepcion,
+        MensajeRaw
+    )
+    VALUES (
+        source.MqttId,
+        source.FechaLocal,
+        source.TimeSpan,
+        source.DevEui,
+        source.Tenant,
+        source.Dispositivo,
+        source.Aplicacion,
+        source.Sucursal,
+        source.Topic,
+        source.Variable,
+        source.ValorJson,
+        source.ValorTexto,
+        source.MedicionesJson,
+        source.FechaRecepcion,
+        source.MensajeRaw
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 class SqlServerResource:
     def __init__(
         self,
@@ -839,6 +925,100 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(FACT_REDINGS_AUDITS_MERGE_SQL, run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_lecturas_mqtt_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factLecturasMqtt WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def write_fact_lecturas_mqtt_stage(
+        self,
+        run_id: str,
+        rows: list[Dict[str, Any]],
+        batch_size: int = 500,
+    ) -> int:
+        values = [
+            (
+                run_id,
+                row["mqtt_id"],
+                row["fecha_local"],
+                row["time_span_utc"],
+                row["deveui"],
+                row["tenant"],
+                row["dispositivo"],
+                row["aplicacion"],
+                row["sucursal"],
+                row["topic"],
+                row["variable"],
+                json.dumps(
+                    row["valor"],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                )
+                if row["valor"] is not None
+                else None,
+                row["valor_texto"],
+                json.dumps(
+                    row["mediciones"],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ),
+                row["fecha_recepcion"],
+                row["mensaje_raw"],
+            )
+            for row in rows
+        ]
+        if not values:
+            return 0
+        insert_sql = """
+INSERT INTO stg.factLecturasMqtt (
+    RunId,
+    MqttId,
+    FechaLocal,
+    TimeSpan,
+    DevEui,
+    Tenant,
+    Dispositivo,
+    Aplicacion,
+    Sucursal,
+    Topic,
+    Variable,
+    ValorJson,
+    ValorTexto,
+    MedicionesJson,
+    FechaRecepcion,
+    MensajeRaw
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.fast_executemany = True
+                for start in range(0, len(values), batch_size):
+                    cursor.executemany(
+                        insert_sql,
+                        values[start:start + batch_size],
+                    )
+                    conn.commit()
+        return len(values)
+
+    def merge_fact_lecturas_mqtt(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(FACT_LECTURAS_MQTT_MERGE_SQL, run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:
