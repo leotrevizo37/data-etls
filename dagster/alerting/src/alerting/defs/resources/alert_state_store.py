@@ -1,13 +1,10 @@
-"""Tenant alert state and Dagster PostgreSQL row-count history."""
+"""Tenant alert state and row-count history."""
 
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional, Sequence
 
-import psycopg2
-import psycopg2.extras
 from dagster import InitResourceContext, resource
 
 from .mssql_reader import MssqlReaderResource
@@ -28,112 +25,102 @@ NOTIFICATION_STATUS_RETRY_PENDING = "RETRY_PENDING"
 NOTIFICATION_STATUS_FAILED = "FAILED"
 NOTIFICATION_STATUS_CANCELLED = "CANCELLED"
 
-_ENSURE_SCHEMA_SQL = "CREATE SCHEMA IF NOT EXISTS alerting;"
-
-_ENSURE_ROW_COUNT_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS alerting.asset_row_count_daily (
-    observation_date            DATE           NOT NULL,
-    code_location               VARCHAR(100)   NOT NULL,
-    asset_key                   VARCHAR(500)   NOT NULL,
-    metadata_key                VARCHAR(100)   NOT NULL,
-    daily_materialization_count INT            NOT NULL,
-    daily_row_count_sum         BIGINT         NOT NULL,
-    daily_row_count_average     NUMERIC(20, 4) NOT NULL,
-    daily_row_count_min         BIGINT         NOT NULL,
-    daily_row_count_max         BIGINT         NOT NULL,
-    first_result_count          BIGINT         NOT NULL,
-    last_result_count           BIGINT         NOT NULL,
-    average_1d                  NUMERIC(20, 4) NULL,
-    average_7d                  NUMERIC(20, 4) NULL,
-    average_28d                 NUMERIC(20, 4) NULL,
-    observed_days_7d            SMALLINT       NOT NULL DEFAULT 0,
-    observed_days_28d           SMALLINT       NOT NULL DEFAULT 0,
-    change_vs_1d_pct            NUMERIC(12, 4) NULL,
-    change_vs_7d_pct            NUMERIC(12, 4) NULL,
-    change_vs_28d_pct           NUMERIC(12, 4) NULL,
-    latest_event_storage_id     BIGINT         NOT NULL,
-    latest_run_id               VARCHAR(64)    NULL,
-    latest_materialized_at      TIMESTAMPTZ    NOT NULL,
-    created_at                  TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    updated_at                  TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (observation_date, code_location, asset_key, metadata_key)
-);
-"""
-
-_ENSURE_ROW_COUNT_INDEX_SQL = """
-CREATE INDEX IF NOT EXISTS ix_asset_row_count_daily_asset
-    ON alerting.asset_row_count_daily
-        (code_location, asset_key, metadata_key, observation_date DESC);
-"""
-
 _UPSERT_ROW_COUNT_SQL = """
-INSERT INTO alerting.asset_row_count_daily (
-    observation_date, code_location, asset_key, metadata_key,
-    daily_materialization_count, daily_row_count_sum,
-    daily_row_count_average, daily_row_count_min, daily_row_count_max,
-    first_result_count, last_result_count, latest_event_storage_id,
-    latest_run_id, latest_materialized_at, created_at, updated_at
-)
-VALUES (%s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
-ON CONFLICT (observation_date, code_location, asset_key, metadata_key)
-DO UPDATE SET
-    daily_materialization_count =
-        alerting.asset_row_count_daily.daily_materialization_count + 1,
-    daily_row_count_sum =
-        alerting.asset_row_count_daily.daily_row_count_sum
-        + EXCLUDED.daily_row_count_sum,
+SET NOCOUNT ON;
+
+DECLARE @observation_date DATE = ?;
+DECLARE @code_location NVARCHAR(100) = ?;
+DECLARE @asset_key NVARCHAR(500) = ?;
+DECLARE @metadata_key NVARCHAR(100) = ?;
+DECLARE @row_count BIGINT = ?;
+DECLARE @event_storage_id BIGINT = ?;
+DECLARE @run_id NVARCHAR(64) = ?;
+DECLARE @materialized_at DATETIME2(3) = ?;
+DECLARE @recorded BIT = 0;
+
+UPDATE alerting.asset_row_count_daily WITH (UPDLOCK, SERIALIZABLE)
+SET daily_materialization_count = daily_materialization_count + 1,
+    daily_row_count_sum = daily_row_count_sum + @row_count,
     daily_row_count_average = ROUND(
-        (
-            alerting.asset_row_count_daily.daily_row_count_sum
-            + EXCLUDED.daily_row_count_sum
-        )::NUMERIC
-        / (alerting.asset_row_count_daily.daily_materialization_count + 1),
+        CAST(daily_row_count_sum + @row_count AS NUMERIC(38, 4))
+        / (daily_materialization_count + 1),
         4
     ),
-    daily_row_count_min = LEAST(
-        alerting.asset_row_count_daily.daily_row_count_min,
-        EXCLUDED.daily_row_count_min
-    ),
-    daily_row_count_max = GREATEST(
-        alerting.asset_row_count_daily.daily_row_count_max,
-        EXCLUDED.daily_row_count_max
-    ),
-    last_result_count = EXCLUDED.last_result_count,
-    latest_event_storage_id = EXCLUDED.latest_event_storage_id,
-    latest_run_id = EXCLUDED.latest_run_id,
-    latest_materialized_at = EXCLUDED.latest_materialized_at,
-    updated_at = NOW()
-WHERE alerting.asset_row_count_daily.latest_event_storage_id
-      < EXCLUDED.latest_event_storage_id
-RETURNING observation_date;
+    daily_row_count_min = CASE
+        WHEN daily_row_count_min > @row_count THEN @row_count
+        ELSE daily_row_count_min
+    END,
+    daily_row_count_max = CASE
+        WHEN daily_row_count_max < @row_count THEN @row_count
+        ELSE daily_row_count_max
+    END,
+    last_result_count = @row_count,
+    latest_event_storage_id = @event_storage_id,
+    latest_run_id = @run_id,
+    latest_materialized_at = @materialized_at,
+    updated_at = SYSUTCDATETIME()
+WHERE observation_date = @observation_date
+  AND code_location = @code_location
+  AND asset_key = @asset_key
+  AND metadata_key = @metadata_key
+  AND latest_event_storage_id < @event_storage_id;
+
+IF @@ROWCOUNT > 0
+    SET @recorded = 1;
+ELSE IF NOT EXISTS (
+    SELECT 1
+    FROM alerting.asset_row_count_daily
+    WHERE observation_date = @observation_date
+      AND code_location = @code_location
+      AND asset_key = @asset_key
+      AND metadata_key = @metadata_key
+)
+    BEGIN
+        INSERT INTO alerting.asset_row_count_daily (
+            observation_date, code_location, asset_key, metadata_key,
+            daily_materialization_count, daily_row_count_sum,
+            daily_row_count_average, daily_row_count_min, daily_row_count_max,
+            first_result_count, last_result_count, latest_event_storage_id,
+            latest_run_id, latest_materialized_at
+        )
+        VALUES (
+            @observation_date, @code_location, @asset_key, @metadata_key,
+            1, @row_count, @row_count, @row_count, @row_count,
+            @row_count, @row_count, @event_storage_id,
+            @run_id, @materialized_at
+        );
+        SET @recorded = 1;
+    END;
+
+SELECT @recorded;
 """
 
 _REFRESH_ROW_COUNT_AVERAGES_SQL = """
-UPDATE alerting.asset_row_count_daily AS target
+UPDATE target
 SET average_1d = (
-        SELECT AVG(history.daily_row_count_sum)
+        SELECT AVG(CAST(history.daily_row_count_sum AS NUMERIC(38, 4)))
         FROM alerting.asset_row_count_daily AS history
         WHERE history.code_location = target.code_location
           AND history.asset_key = target.asset_key
           AND history.metadata_key = target.metadata_key
-          AND history.observation_date = target.observation_date - 1
+          AND history.observation_date = DATEADD(DAY, -1, target.observation_date)
     ),
     average_7d = (
-        SELECT AVG(history.daily_row_count_sum)
+        SELECT AVG(CAST(history.daily_row_count_sum AS NUMERIC(38, 4)))
         FROM alerting.asset_row_count_daily AS history
         WHERE history.code_location = target.code_location
           AND history.asset_key = target.asset_key
           AND history.metadata_key = target.metadata_key
-          AND history.observation_date >= target.observation_date - 7
+          AND history.observation_date >= DATEADD(DAY, -7, target.observation_date)
           AND history.observation_date < target.observation_date
     ),
     average_28d = (
-        SELECT AVG(history.daily_row_count_sum)
+        SELECT AVG(CAST(history.daily_row_count_sum AS NUMERIC(38, 4)))
         FROM alerting.asset_row_count_daily AS history
         WHERE history.code_location = target.code_location
           AND history.asset_key = target.asset_key
           AND history.metadata_key = target.metadata_key
-          AND history.observation_date >= target.observation_date - 28
+          AND history.observation_date >= DATEADD(DAY, -28, target.observation_date)
           AND history.observation_date < target.observation_date
     ),
     observed_days_7d = (
@@ -142,7 +129,7 @@ SET average_1d = (
         WHERE history.code_location = target.code_location
           AND history.asset_key = target.asset_key
           AND history.metadata_key = target.metadata_key
-          AND history.observation_date >= target.observation_date - 7
+          AND history.observation_date >= DATEADD(DAY, -7, target.observation_date)
           AND history.observation_date < target.observation_date
     ),
     observed_days_28d = (
@@ -151,48 +138,74 @@ SET average_1d = (
         WHERE history.code_location = target.code_location
           AND history.asset_key = target.asset_key
           AND history.metadata_key = target.metadata_key
-          AND history.observation_date >= target.observation_date - 28
+          AND history.observation_date >= DATEADD(DAY, -28, target.observation_date)
           AND history.observation_date < target.observation_date
     ),
-    updated_at = NOW()
-WHERE target.code_location = %s
-  AND target.asset_key = %s
-  AND target.metadata_key = %s
-  AND target.observation_date >= %s;
+    updated_at = SYSUTCDATETIME()
+FROM alerting.asset_row_count_daily AS target
+WHERE target.code_location = ?
+  AND target.asset_key = ?
+  AND target.metadata_key = ?
+  AND target.observation_date >= ?;
 """
 
 _REFRESH_ROW_COUNT_CHANGES_SQL = """
 UPDATE alerting.asset_row_count_daily
 SET change_vs_1d_pct = CASE
         WHEN average_1d IS NULL OR average_1d = 0 THEN NULL
-        ELSE ROUND((daily_row_count_sum - average_1d) / average_1d * 100, 4)
+        ELSE ROUND(
+            (CAST(daily_row_count_sum AS NUMERIC(38, 4)) - average_1d)
+            / average_1d * 100,
+            4
+        )
     END,
     change_vs_7d_pct = CASE
         WHEN average_7d IS NULL OR average_7d = 0 THEN NULL
-        ELSE ROUND((daily_row_count_sum - average_7d) / average_7d * 100, 4)
+        ELSE ROUND(
+            (CAST(daily_row_count_sum AS NUMERIC(38, 4)) - average_7d)
+            / average_7d * 100,
+            4
+        )
     END,
     change_vs_28d_pct = CASE
         WHEN average_28d IS NULL OR average_28d = 0 THEN NULL
-        ELSE ROUND((daily_row_count_sum - average_28d) / average_28d * 100, 4)
+        ELSE ROUND(
+            (CAST(daily_row_count_sum AS NUMERIC(38, 4)) - average_28d)
+            / average_28d * 100,
+            4
+        )
     END,
-    updated_at = NOW()
-WHERE code_location = %s
-  AND asset_key = %s
-  AND metadata_key = %s
-  AND observation_date >= %s;
+    updated_at = SYSUTCDATETIME()
+WHERE code_location = ?
+  AND asset_key = ?
+  AND metadata_key = ?
+  AND observation_date >= ?;
 """
 
 _GET_LATEST_ROW_COUNT_TRENDS_SQL = """
-SELECT DISTINCT ON (code_location, asset_key, metadata_key)
-       observation_date, code_location, asset_key, metadata_key,
+WITH latest AS (
+    SELECT observation_date, code_location, asset_key, metadata_key,
+           daily_materialization_count, daily_row_count_sum,
+           average_1d, average_7d, average_28d,
+           observed_days_7d, observed_days_28d,
+           change_vs_1d_pct, change_vs_7d_pct, change_vs_28d_pct,
+           latest_run_id, latest_materialized_at,
+           ROW_NUMBER() OVER (
+               PARTITION BY code_location, asset_key, metadata_key
+               ORDER BY observation_date DESC
+           ) AS row_number
+    FROM alerting.asset_row_count_daily
+    WHERE code_location = ?
+      AND observation_date < CONVERT(DATE, SYSUTCDATETIME())
+)
+SELECT observation_date, code_location, asset_key, metadata_key,
        daily_materialization_count, daily_row_count_sum,
        average_1d, average_7d, average_28d,
        observed_days_7d, observed_days_28d,
        change_vs_1d_pct, change_vs_7d_pct, change_vs_28d_pct,
        latest_run_id, latest_materialized_at
-FROM alerting.asset_row_count_daily
-WHERE observation_date < (NOW() AT TIME ZONE 'UTC')::DATE
-ORDER BY code_location, asset_key, metadata_key, observation_date DESC;
+FROM latest
+WHERE row_number = 1;
 """
 
 
@@ -261,27 +274,10 @@ class AssetRowCountTrend:
 
 
 class AlertStateStoreResource:
-    """Manages tenant alert state and Dagster row-count history."""
+    """Manages tenant alert state and row-count history."""
 
     def __init__(self, mssql_reader: MssqlReaderResource) -> None:
         self._mssql_reader = mssql_reader
-        self._dsn = self._build_dsn()
-        self._ensure_schema()
-
-    @staticmethod
-    def _build_dsn() -> str:
-        host = os.environ.get("DAGSTER_PG_HOSTNAME", "dagster-postgres")
-        port = os.environ.get("DAGSTER_PG_PORT", "5432")
-        user = os.environ["DAGSTER_PG_USER"]
-        password = os.environ["DAGSTER_PG_PASSWORD"]
-        dbname = os.environ.get("DAGSTER_PG_DB", "dagster")
-        return (
-            f"host={host} port={port} dbname={dbname} "
-            f"user={user} password={password}"
-        )
-
-    def _get_connection(self) -> psycopg2.extensions.connection:
-        return psycopg2.connect(self._dsn)
 
     def _get_alert_connection(self, database: str, user_code: str):
         return self._mssql_reader._get_connection(
@@ -290,22 +286,22 @@ class AlertStateStoreResource:
             read_only=False,
         )
 
-    def _ensure_schema(self) -> None:
-        """Idempotently create the PostgreSQL row-count history."""
-        with self._get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(_ENSURE_SCHEMA_SQL)
-                cur.execute(_ENSURE_ROW_COUNT_TABLE_SQL)
-                cur.execute(_ENSURE_ROW_COUNT_INDEX_SQL)
-            conn.commit()
-
     def record_asset_row_counts(
         self,
+        database: str,
+        user_code: str,
         observations: Sequence[AssetRowCountObservation],
     ) -> int:
+        if any(
+            observation.code_location != user_code
+            for observation in observations
+        ):
+            raise ValueError(
+                "All observations must belong to the target user_code"
+            )
         affected = {}
         recorded = 0
-        with self._get_connection() as conn:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
                 for observation in observations:
                     cur.execute(
@@ -316,17 +312,12 @@ class AlertStateStoreResource:
                             observation.asset_key,
                             observation.metadata_key,
                             observation.row_count,
-                            observation.row_count,
-                            observation.row_count,
-                            observation.row_count,
-                            observation.row_count,
-                            observation.row_count,
                             observation.event_storage_id,
                             observation.run_id,
                             observation.materialized_at,
                         ),
                     )
-                    if cur.fetchone() is None:
+                    if not cur.fetchone()[0]:
                         continue
                     recorded += 1
                     key = (
@@ -346,10 +337,14 @@ class AlertStateStoreResource:
             conn.commit()
         return recorded
 
-    def get_latest_asset_row_count_trends(self) -> Sequence[AssetRowCountTrend]:
-        with self._get_connection() as conn:
+    def get_latest_asset_row_count_trends(
+        self,
+        database: str,
+        user_code: str,
+    ) -> Sequence[AssetRowCountTrend]:
+        with self._get_alert_connection(database, user_code) as conn:
             with conn.cursor() as cur:
-                cur.execute(_GET_LATEST_ROW_COUNT_TRENDS_SQL)
+                cur.execute(_GET_LATEST_ROW_COUNT_TRENDS_SQL, user_code)
                 return [
                     AssetRowCountTrend(
                         observation_date=row[0],

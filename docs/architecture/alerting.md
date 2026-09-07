@@ -28,7 +28,7 @@ La code location registra estos recursos:
 | Recurso | Responsabilidad |
 |---|---|
 | `mssql_reader` | Consultas de solo lectura a las bases SQL Server de cada tenant |
-| `alert_state` | Estado de entrega e historial diario de `row_count` en PostgreSQL de Dagster |
+| `alert_state` | Estado de entrega e historial diario de `row_count` en SQL Server por tenant |
 | `email_notifier` | Construccion y envio de correo HTML mediante SMTP |
 
 Tambien registra dos sensores, ambos habilitados por defecto.
@@ -84,7 +84,7 @@ La base de cada tenant puede reemplazarse con su variable `database_env`. La con
 
 ## Ciclo de vida
 
-El estado se conserva en PostgreSQL de Dagster bajo el esquema `alerting`.
+El estado se conserva bajo el esquema `alerting` de la base SQL Server de cada tenant.
 
 | Estado | Significado |
 |---|---|
@@ -138,7 +138,7 @@ Los nombres y valores de ejemplo permitidos estan en `compose-data_etls/.env.exa
 
 ## Persistencia
 
-`alert_state` crea de forma idempotente el esquema y sus objetos al inicializarse:
+`sql-init` crea de forma idempotente el esquema y sus objetos en la base SQL Server de cada tenant:
 
 | Objeto | Uso |
 |---|---|
@@ -168,7 +168,7 @@ La suite actual contiene una prueba SMTP real deshabilitada por defecto. Solo se
 | `dagster/alerting/src/alerting/defs/sensors/operational_alerts_sensor.py` | Deteccion, reconciliacion y envio consolidado |
 | `dagster/alerting/src/alerting/defs/sensors/asset_row_count_trend_sensor.py` | Captura y evaluacion de tendencias `row_count` |
 | `dagster/alerting/src/alerting/defs/resources/mssql_reader.py` | Consultas SQL Server de solo lectura |
-| `dagster/alerting/src/alerting/defs/resources/alert_state_store.py` | Persistencia PostgreSQL |
+| `dagster/alerting/src/alerting/defs/resources/alert_state_store.py` | Persistencia SQL Server por tenant |
 | `dagster/alerting/src/alerting/defs/resources/email_notifier.py` | Asuntos, HTML, destinatarios y SMTP |
 | `dagster/alerting/src/alerting/alert_config.yaml` | Tenants, señales, cadencias, recordatorios y umbrales |
 | `compose-data_etls/docker-compose.yml` | Servicio, dependencias, variables, volumenes y healthcheck |
