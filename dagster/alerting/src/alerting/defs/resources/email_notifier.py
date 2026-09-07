@@ -3,6 +3,7 @@
 Supports both individual alert emails and consolidated per-tenant
 digest emails with dark-themed HTML."""
 
+import json
 import os
 import smtplib
 from collections import defaultdict
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dagster import InitResourceContext, get_dagster_logger, resource
 
@@ -34,6 +35,7 @@ class AlertPayload:
     device_name: Optional[str] = None
     sensor_name: Optional[str] = None
     first_detected_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -331,6 +333,40 @@ def _build_alert_card(
             f"</td></tr></table>"
         )
 
+    metadata_html = ""
+    reason = payload.metadata.get("reason")
+    trace_metadata = {
+        key: value
+        for key, value in payload.metadata.items()
+        if key not in {"reason", "context"}
+    }
+    if reason or trace_metadata:
+        reason_html = (
+            f'<strong style="color:{_CLR_TEXT};">Justificaci&oacute;n:</strong> '
+            f"{_esc(str(reason))}<br/><br/>"
+            if reason
+            else ""
+        )
+        trace_html = ""
+        if trace_metadata:
+            serialized = json.dumps(
+                trace_metadata,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            trace_html = (
+                f'<strong style="color:{_CLR_TEXT};">Trazabilidad:</strong>'
+                f'<pre style="white-space:pre-wrap;color:#334155;'
+                f'font-size:12px;margin:6px 0 0 0;">{_esc(serialized)}</pre>'
+            )
+        metadata_html = (
+            f'<table width="100%" cellpadding="0" cellspacing="0" '
+            f'style="background-color:{_CLR_DETAIL_BG};margin-top:12px;'
+            f'border-radius:6px;"><tr><td style="padding:12px 16px;">'
+            f"{reason_html}{trace_html}</td></tr></table>"
+        )
+
     # Notification count for reminders
     notif_html = ""
     if payload.state == "REMINDER" and payload.notification_count > 1:
@@ -357,6 +393,7 @@ def _build_alert_card(
         f"{hierarchy_html}"
         # Details
         f"{details_html}"
+        f"{metadata_html}"
         f"</td></tr></table>"
     )
 
@@ -548,6 +585,8 @@ class EmailNotifierResource:
             "ALERT_SMTP_USE_TLS", "true"
         ).lower() in ("true", "1", "yes")
         self._enabled = bool(self._host and self._from_addr)
+        self.last_error_code: Optional[str] = None
+        self.last_error_message: Optional[str] = None
 
     def _resolve_recipients(
         self,
@@ -582,6 +621,8 @@ class EmailNotifierResource:
     def send(self, payload: AlertPayload) -> bool:
         """Send an individual alert email.  Returns True on success."""
         if not self._enabled:
+            self.last_error_code = "SMTP_DISABLED"
+            self.last_error_message = "Falta la configuración SMTP requerida."
             logger.warning(
                 "Email notifier is disabled (missing SMTP config). "
                 "Skipping alert: %s",
@@ -593,6 +634,8 @@ class EmailNotifierResource:
             payload.user_code, payload.alert_type
         )
         if not to_addrs:
+            self.last_error_code = "SMTP_RECIPIENTS_MISSING"
+            self.last_error_message = "No hay destinatarios configurados."
             logger.warning(
                 "No recipients configured for alert: %s",
                 payload.alert_key,
@@ -616,8 +659,12 @@ class EmailNotifierResource:
                     smtp.login(self._user, self._password)
                 smtp.sendmail(self._from_addr, to_addrs, msg.as_string())
             logger.info("Sent alert email: %s — %s", subject, payload.alert_key)
+            self.last_error_code = None
+            self.last_error_message = None
             return True
-        except Exception:
+        except Exception as error:
+            self.last_error_code = type(error).__name__
+            self.last_error_message = str(error)
             logger.exception(
                 "Failed to send alert email for %s", payload.alert_key
             )
@@ -632,6 +679,8 @@ class EmailNotifierResource:
         Returns True on success, False on skip/error.
         """
         if not self._enabled:
+            self.last_error_code = "SMTP_DISABLED"
+            self.last_error_message = "Falta la configuración SMTP requerida."
             logger.warning(
                 "Email notifier is disabled (missing SMTP config). "
                 "Skipping consolidated alert for %s",
@@ -640,12 +689,16 @@ class EmailNotifierResource:
             return False
 
         if not payload.active_alerts and not payload.resolved_alerts:
+            self.last_error_code = "EMPTY_NOTIFICATION"
+            self.last_error_message = "La notificación no contiene alertas."
             return False
 
         to_addrs = self._resolve_recipients(
             payload.user_code, payload.recipient_alert_type
         )
         if not to_addrs:
+            self.last_error_code = "SMTP_RECIPIENTS_MISSING"
+            self.last_error_message = "No hay destinatarios configurados."
             logger.warning(
                 "No recipients configured for user_code: %s",
                 payload.user_code,
@@ -674,8 +727,12 @@ class EmailNotifierResource:
                 len(payload.active_alerts),
                 len(payload.resolved_alerts),
             )
+            self.last_error_code = None
+            self.last_error_message = None
             return True
-        except Exception:
+        except Exception as error:
+            self.last_error_code = type(error).__name__
+            self.last_error_message = str(error)
             logger.exception(
                 "Failed to send consolidated email for %s",
                 payload.user_code,

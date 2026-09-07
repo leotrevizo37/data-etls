@@ -1,28 +1,11 @@
-"""Central operational alerting sensor.
-
-Every 5 minutes this sensor:
-1. Reads alert_config.yaml for the list of user_codes and their expected
-   ingestion cadences.
-2. Queries each user_code's SQL Server database (read-only) for:
-   - Sensors with IsConnectionLost = 1  (observability.factRedingsAudits)
-   - Sensors with HasLateReadings = 1   (observability.factRedingsAudits)
-   - Ingestions with LastRunStatus = 'FAILED' (ctl.IngestionControl)
-   - Ingestions whose LastRunFinishedAt exceeds the expected interval
-3. Queries Dagster PostgreSQL for recent runs with status = FAILURE.
-4. Reconciles detected conditions against the persisted alert state,
-   groups all resulting notifications by user_code, enriches sensor
-   alerts with dimension context from dwh.dimSidonProdDimensions, and
-   sends **one consolidated email per user_code**.
-"""
+"""Detect operational alerts and persist them in each tenant SQL Server."""
 
 import json
 import os
 import uuid
-from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 import psycopg2
@@ -36,13 +19,8 @@ from dagster import (
 
 from ..resources.alert_state_store import (
     ALERT_STATE_OPEN,
-    ALERT_STATE_REMINDER,
+    NOTIFICATION_STATUS_SENT,
     AlertStateStoreResource,
-)
-from ..resources.email_notifier import (
-    AlertPayload,
-    ConsolidatedPayload,
-    EmailNotifierResource,
 )
 from ..resources.mssql_reader import MssqlReaderResource
 
@@ -69,12 +47,7 @@ def _load_config() -> Dict[str, Any]:
 def _get_recent_dagster_failures(
     hours: int = 2,
 ) -> List[Dict[str, Any]]:
-    """Query Dagster PostgreSQL for runs with status FAILURE in the
-    last *hours* hours.
-
-    Returns a list of dicts with keys: run_id, job_name,
-    code_location, error.
-    """
+    """Return recent failed Dagster runs with their code location."""
     dsn = (
         f"host={os.environ.get('DAGSTER_PG_HOSTNAME', 'dagster-postgres')} "
         f"port={os.environ.get('DAGSTER_PG_PORT', '5432')} "
@@ -85,7 +58,7 @@ def _get_recent_dagster_failures(
     query = """
         SELECT
             r.run_id,
-            r.pipeline_name  AS job_name,
+            r.pipeline_name AS job_name,
             COALESCE(
                 r.run_body::json->>'remote_job_origin',
                 r.run_body::json->>'external_pipeline_origin'
@@ -141,31 +114,29 @@ def _build_alert_key(
     return f"{user_code}::{alert_type}::{entity_id}"
 
 
-@dataclass
-class _PendingAction:
-    """Internal: a deferred state-change + notification."""
-    action: str          # "open", "reminder", "resolve"
-    key: str
-    payload: AlertPayload
-    user_code: str
-    alert_type: str
-    entity_id: str
-    details: Optional[str] = None
+def _resolve_user_code_databases(
+    user_codes_cfg: Dict[str, Any],
+) -> Dict[str, str]:
+    return {
+        user_code: os.environ.get(
+            user_code_cfg.get("database_env", ""),
+            user_code_cfg.get("database", user_code),
+        )
+        for user_code, user_code_cfg in user_codes_cfg.items()
+    }
 
 
 @sensor(
     name="operational_alerts_sensor",
     minimum_interval_seconds=300,
-    required_resource_keys={"mssql_reader", "alert_state", "email_notifier"},
+    required_resource_keys={"mssql_reader", "alert_state"},
     default_status=DefaultSensorStatus.RUNNING,
 )
 def operational_alerts_sensor(
     context: SensorEvaluationContext,
 ) -> SkipReason:
-    """Central alerting sensor — see module docstring for details."""
-    mssql: MssqlReaderResource = context.resources.mssql_reader  # type: ignore[attr-defined]
-    state_store: AlertStateStoreResource = context.resources.alert_state  # type: ignore[attr-defined]
-    email: EmailNotifierResource = context.resources.email_notifier  # type: ignore[attr-defined]
+    mssql: MssqlReaderResource = context.resources.mssql_reader
+    state_store: AlertStateStoreResource = context.resources.alert_state
 
     config = _load_config()
     defaults = config.get("defaults", {})
@@ -173,7 +144,12 @@ def operational_alerts_sensor(
     pipeline_defaults = defaults.get("pipeline_alerts", {})
     reminder_cfg = defaults.get("daily_reminders", {})
     quiet_cfg = defaults.get("quiet_hours", {})
+    delivery_cfg = defaults.get("email_delivery", {})
+    max_notification_attempts = max(
+        1, int(delivery_cfg.get("max_notification_attempts", 3))
+    )
     user_codes_cfg = config.get("user_codes", {})
+    uc_databases = _resolve_user_code_databases(user_codes_cfg)
 
     reminder_timezone = ZoneInfo(
         reminder_cfg.get(
@@ -182,7 +158,6 @@ def operational_alerts_sensor(
         )
     )
     reminder_now = datetime.now(reminder_timezone)
-
     reminders_silenced = False
     if quiet_cfg.get("enabled", False):
         quiet_start = time.fromisoformat(quiet_cfg["start"])
@@ -197,150 +172,240 @@ def operational_alerts_sensor(
                 current_time >= quiet_start or current_time < quiet_end
             )
 
-    # ── 1. Collect all active conditions across user_codes ────────
     active_conditions: Dict[str, Dict[str, Any]] = {}
-    uc_databases: Dict[str, str] = {}   # user_code → resolved database name
-
     for uc_name, uc_cfg in user_codes_cfg.items():
-        database = os.environ.get(
-            uc_cfg.get("database_env", ""), uc_cfg.get("database", uc_name)
-        )
-        uc_databases[uc_name] = database
+        database = uc_databases[uc_name]
         uc_sensor_cfg = {**sensor_defaults, **uc_cfg.get("sensor_alerts", {})}
         uc_pipeline_cfg = {
             **pipeline_defaults,
             **uc_cfg.get("pipeline_alerts", {}),
         }
-        lookback = uc_sensor_cfg.get("lookback_hours", 2)
+        lookback = int(uc_sensor_cfg.get("lookback_hours", 2))
         ingestions_cfg = uc_cfg.get("ingestions", {}) or {}
 
-        # Sensor: connection lost
         if uc_sensor_cfg.get("connection_lost", True):
-            for sa in mssql.get_connection_lost_sensors(
+            for alert in mssql.get_connection_lost_sensors(
                 database, lookback, uc_name
             ):
-                key = _build_alert_key(uc_name, "connection_lost", sa.sensor_id)
-                active_conditions[key] = {
-                    "user_code": uc_name,
-                    "alert_type": "connection_lost",
-                    "entity_id": sa.sensor_id,
-                    "details": (
-                        f"MinutesWithoutReadings: {sa.minutes_without_readings}, "
-                        f"ConnectionLostAt: {sa.connection_lost_at}"
-                    ),
-                }
-
-        # Sensor: late readings
-        if uc_sensor_cfg.get("late_readings", True):
-            for sa in mssql.get_late_reading_sensors(
-                database, lookback, uc_name
-            ):
-                key = _build_alert_key(uc_name, "late_readings", sa.sensor_id)
-                active_conditions[key] = {
-                    "user_code": uc_name,
-                    "alert_type": "late_readings",
-                    "entity_id": sa.sensor_id,
-                    "details": (
-                        f"MinutesWithoutReadings: {sa.minutes_without_readings}, "
-                        f"LatestTimeSpan: {sa.latest_time_span}"
-                    ),
-                }
-
-        # Pipeline: ctl.IngestionControl FAILED
-        if uc_pipeline_cfg.get("ingestion_control_failed", True):
-            for ia in mssql.get_failed_ingestions(database, uc_name):
                 key = _build_alert_key(
-                    uc_name, "pipeline_failure", ia.ingestion_name
+                    uc_name, "connection_lost", alert.sensor_id
+                )
+                lost_at = (
+                    alert.connection_lost_at.isoformat()
+                    if alert.connection_lost_at is not None
+                    else None
                 )
                 active_conditions[key] = {
                     "user_code": uc_name,
-                    "alert_type": "pipeline_failure",
-                    "entity_id": ia.ingestion_name,
+                    "trigger_source": "sensor_monitoring",
+                    "alert_type": "connection_lost",
+                    "entity_id": alert.sensor_id,
+                    "severity": "CRITICAL",
                     "details": (
-                        f"LastRunStatus: {ia.last_run_status}, "
-                        f"LastRunFinishedAt: {ia.last_run_finished_at}, "
-                        f"Error: {ia.last_run_error}"
+                        "MinutesWithoutReadings: "
+                        f"{alert.minutes_without_readings}, "
+                        f"ConnectionLostAt: {alert.connection_lost_at}"
                     ),
+                    "metadata": {
+                        "reason": "El sensor reporta pérdida de comunicación.",
+                        "measurements": {
+                            "minutes_without_readings": (
+                                alert.minutes_without_readings
+                            ),
+                            "connection_lost_at": lost_at,
+                        },
+                        "thresholds": {"lookback_hours": lookback},
+                    },
                 }
 
-        # Pipeline: stale ingestions
+        if uc_sensor_cfg.get("late_readings", True):
+            for alert in mssql.get_late_reading_sensors(
+                database, lookback, uc_name
+            ):
+                key = _build_alert_key(
+                    uc_name, "late_readings", alert.sensor_id
+                )
+                latest_time_span = (
+                    alert.latest_time_span.isoformat()
+                    if alert.latest_time_span is not None
+                    else None
+                )
+                active_conditions[key] = {
+                    "user_code": uc_name,
+                    "trigger_source": "sensor_monitoring",
+                    "alert_type": "late_readings",
+                    "entity_id": alert.sensor_id,
+                    "severity": "WARNING",
+                    "details": (
+                        "MinutesWithoutReadings: "
+                        f"{alert.minutes_without_readings}, "
+                        f"LatestTimeSpan: {alert.latest_time_span}"
+                    ),
+                    "metadata": {
+                        "reason": "El sensor presenta lecturas retrasadas.",
+                        "measurements": {
+                            "minutes_without_readings": (
+                                alert.minutes_without_readings
+                            ),
+                            "latest_time_span": latest_time_span,
+                        },
+                        "thresholds": {"lookback_hours": lookback},
+                    },
+                }
+
+        if uc_pipeline_cfg.get("ingestion_control_failed", True):
+            for alert in mssql.get_failed_ingestions(database, uc_name):
+                key = _build_alert_key(
+                    uc_name, "pipeline_failure", alert.ingestion_name
+                )
+                finished_at = (
+                    alert.last_run_finished_at.isoformat()
+                    if alert.last_run_finished_at is not None
+                    else None
+                )
+                active_conditions[key] = {
+                    "user_code": uc_name,
+                    "trigger_source": "sensor_monitoring",
+                    "alert_type": "pipeline_failure",
+                    "entity_id": alert.ingestion_name,
+                    "severity": "CRITICAL",
+                    "details": (
+                        f"LastRunStatus: {alert.last_run_status}, "
+                        f"LastRunFinishedAt: {alert.last_run_finished_at}, "
+                        f"Error: {alert.last_run_error}"
+                    ),
+                    "metadata": {
+                        "reason": "La última ejecución de la ingesta falló.",
+                        "evidence": {
+                            "last_run_status": alert.last_run_status,
+                            "last_run_finished_at": finished_at,
+                            "last_run_error": alert.last_run_error,
+                        },
+                    },
+                }
+
         if uc_pipeline_cfg.get("stale_detection", True) and ingestions_cfg:
             intervals = {
-                name: ing_cfg.get(
+                name: ingestion_cfg.get(
                     "expected_interval_minutes",
                     uc_pipeline_cfg.get(
                         "default_expected_interval_minutes", 720
                     ),
                 )
-                for name, ing_cfg in ingestions_cfg.items()
+                for name, ingestion_cfg in ingestions_cfg.items()
             }
-            default_interval = uc_pipeline_cfg.get(
-                "default_expected_interval_minutes", 720
+            default_interval = int(
+                uc_pipeline_cfg.get(
+                    "default_expected_interval_minutes", 720
+                )
             )
-            for ia in mssql.get_stale_ingestions(
+            for alert in mssql.get_stale_ingestions(
                 database, intervals, default_interval, uc_name
             ):
                 key = _build_alert_key(
-                    uc_name, "pipeline_stale", ia.ingestion_name
+                    uc_name, "pipeline_stale", alert.ingestion_name
+                )
+                finished_at = (
+                    alert.last_run_finished_at.isoformat()
+                    if alert.last_run_finished_at is not None
+                    else None
                 )
                 active_conditions[key] = {
                     "user_code": uc_name,
+                    "trigger_source": "sensor_monitoring",
                     "alert_type": "pipeline_stale",
-                    "entity_id": ia.ingestion_name,
+                    "entity_id": alert.ingestion_name,
+                    "severity": "WARNING",
                     "details": (
-                        f"LastRunFinishedAt: {ia.last_run_finished_at}, "
-                        f"{ia.last_run_error}"
+                        f"LastRunFinishedAt: {alert.last_run_finished_at}, "
+                        f"{alert.last_run_error}"
                     ),
+                    "metadata": {
+                        "reason": "La ingesta excedió su intervalo esperado.",
+                        "measurements": {
+                            "last_run_finished_at": finished_at,
+                        },
+                        "thresholds": {
+                            "expected_interval_minutes": intervals.get(
+                                alert.ingestion_name, default_interval
+                            )
+                        },
+                        "evidence": {
+                            "last_run_error": alert.last_run_error,
+                        },
+                    },
                 }
 
-    # ── 2. Dagster runs FAILURE ───────────────────────────────────
     if pipeline_defaults.get("dagster_run_failure", True):
         for run in _get_recent_dagster_failures(hours=2):
-            uc = run["code_location"]
-            if uc not in user_codes_cfg:
+            user_code = run["code_location"]
+            if user_code not in user_codes_cfg:
                 continue
             key = _build_alert_key(
-                uc, "dagster_run_failure", run["run_id"]
+                user_code, "dagster_run_failure", run["run_id"]
+            )
+            created_at = (
+                run["created"].isoformat()
+                if run["created"] is not None
+                else None
+            )
+            updated_at = (
+                run["updated"].isoformat()
+                if run["updated"] is not None
+                else None
             )
             active_conditions[key] = {
-                "user_code": uc,
+                "user_code": user_code,
+                "trigger_source": "dagster",
                 "alert_type": "dagster_run_failure",
                 "entity_id": run["run_id"],
+                "severity": "CRITICAL",
                 "details": (
-                    f"Job: {run['job_name']}, "
-                    f"Updated: {run['updated']}"
+                    f"Job: {run['job_name']}, Updated: {run['updated']}"
                 ),
+                "metadata": {
+                    "reason": "Una ejecución de Dagster terminó con error.",
+                    "evidence": {
+                        "run_id": run["run_id"],
+                        "job_name": run["job_name"],
+                        "status": run["status"],
+                        "created_at": created_at,
+                        "updated_at": updated_at,
+                    },
+                },
             }
 
-    # ── 3. Reconcile: determine pending actions (deferred) ────────
     all_existing_alerts = {}
-    pending_resolved_alerts = {}
-    for uc_name, database in uc_databases.items():
+    for user_code, database in uc_databases.items():
         all_existing_alerts.update(
-            state_store.get_active_alerts(database, uc_name)
-        )
-        pending_resolved_alerts.update(
-            state_store.get_pending_resolved_alerts(database, uc_name)
+            state_store.get_active_alerts(database, user_code)
         )
     existing_alerts = {
         key: alert
         for key, alert in all_existing_alerts.items()
         if alert.alert_type in _OPERATIONAL_ALERT_TYPES
     }
+
     connection_recoveries = {}
-    for uc_name, database in uc_databases.items():
+    for user_code, database in uc_databases.items():
         sensor_ids = [
             alert.entity_id
             for key, alert in existing_alerts.items()
             if key not in active_conditions
-            and alert.user_code == uc_name
+            and alert.user_code == user_code
             and alert.alert_type == "connection_lost"
         ]
-        for sensor_id, recovery in mssql.get_sensor_recoveries(
-            database, sensor_ids, uc_name
-        ).items():
-            key = _build_alert_key(uc_name, "connection_lost", sensor_id)
-            connection_recoveries[key] = recovery
+        connection_recoveries.update(
+            {
+                _build_alert_key(user_code, "connection_lost", sensor_id): (
+                    recovery
+                )
+                for sensor_id, recovery in mssql.get_sensor_recoveries(
+                    database, sensor_ids, user_code
+                ).items()
+            }
+        )
+
     for key, alert in existing_alerts.items():
         if (
             key not in active_conditions
@@ -349,288 +414,183 @@ def operational_alerts_sensor(
         ):
             active_conditions[key] = {
                 "user_code": alert.user_code,
+                "trigger_source": alert.trigger_source,
                 "alert_type": alert.alert_type,
                 "entity_id": alert.entity_id,
+                "severity": alert.severity,
                 "details": alert.details,
+                "metadata": alert.metadata,
             }
-    pending: List[_PendingAction] = []
-    suppressed = 0
 
-    # New or ongoing conditions
-    for key, cond in active_conditions.items():
-        alert_type = cond["alert_type"]
-
-        if key not in existing_alerts:
-            # New alert → OPEN
-            occurrence_key = f"{key}::{uuid.uuid4()}"
-            pending.append(_PendingAction(
-                action="open",
-                key=key,
-                user_code=cond["user_code"],
-                alert_type=alert_type,
-                entity_id=cond["entity_id"],
-                details=cond.get("details"),
-                payload=AlertPayload(
-                    alert_key=occurrence_key,
-                    user_code=cond["user_code"],
-                    alert_type=alert_type,
-                    entity_id=cond["entity_id"],
-                    state="OPEN",
-                    details=cond.get("details"),
-                    notification_count=1,
-                    first_detected_at=datetime.now(timezone.utc),
-                ),
-            ))
-
-    # Cleared conditions → RESOLVED
+    sensor_ids_by_user_code: Dict[str, List[str]] = {}
+    for condition in active_conditions.values():
+        if condition["alert_type"] in _SENSOR_ALERT_TYPES:
+            sensor_ids_by_user_code.setdefault(
+                condition["user_code"], []
+            ).append(condition["entity_id"])
     for key, alert in existing_alerts.items():
-        if key not in active_conditions:
-            details = alert.details
-            if alert.alert_type == "connection_lost":
-                recovery = connection_recoveries.get(key)
-                if recovery is None:
-                    continue
-                details = (
-                    "CommunicationResumedAt: "
-                    f"{recovery.communication_resumed_at:%Y-%m-%d %H:%M:%S} UTC, "
-                    "LastReadingAt: "
-                    f"{recovery.last_reading_at:%Y-%m-%d %H:%M:%S} UTC"
-                )
-            pending.append(_PendingAction(
-                action="resolve",
-                key=key,
-                user_code=alert.user_code,
-                alert_type=alert.alert_type,
-                entity_id=alert.entity_id,
-                details=details,
-                payload=AlertPayload(
-                    alert_key=alert.alert_key,
-                    user_code=alert.user_code,
-                    alert_type=alert.alert_type,
-                    entity_id=alert.entity_id,
-                    state="RESOLVED",
-                    details=details,
-                    notification_count=alert.notification_count,
-                    first_detected_at=alert.first_detected_at,
-                ),
-            ))
-
-    resolution_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
-    for alert in pending_resolved_alerts.values():
-        resolution_groups[alert.user_code].append(_PendingAction(
-            action="resolve",
-            key=_build_alert_key(
-                alert.user_code, alert.alert_type, alert.entity_id
-            ),
-            user_code=alert.user_code,
-            alert_type=alert.alert_type,
-            entity_id=alert.entity_id,
-            details=alert.details,
-            payload=AlertPayload(
-                alert_key=alert.alert_key,
-                user_code=alert.user_code,
-                alert_type=alert.alert_type,
-                entity_id=alert.entity_id,
-                state="RESOLVED",
-                details=alert.details,
-                notification_count=alert.notification_count,
-                first_detected_at=alert.first_detected_at,
-            ),
-        ))
-    for action in pending:
-        if action.action != "resolve":
-            continue
-        state_store.mark_resolved(
-            uc_databases[action.user_code],
-            action.user_code,
-            action.payload.alert_key,
-            action.details,
-        )
-        resolution_groups[action.user_code].append(action)
-
-    reminder_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
-    trend_reminder_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
-    reminder_time = time.fromisoformat(reminder_cfg.get("time", "08:00"))
-    if reminder_cfg.get("enabled", True) and reminder_now.time() >= reminder_time:
-        resolving_keys = {
-            action.key for action in pending if action.action == "resolve"
-        }
-        for key, alert in all_existing_alerts.items():
-            if alert.user_code not in user_codes_cfg or key in resolving_keys:
-                continue
-            if alert.alert_type != _TREND_ALERT_TYPE:
-                last_notified_at = alert.last_notified_at
-                if last_notified_at.tzinfo is None:
-                    last_notified_at = last_notified_at.replace(
-                        tzinfo=timezone.utc
-                    )
-                if (
-                    last_notified_at.astimezone(reminder_timezone).date()
-                    >= reminder_now.date()
-                ):
-                    continue
-            details = active_conditions.get(key, {}).get(
-                "details", alert.details
+        if key not in active_conditions and alert.alert_type in _SENSOR_ALERT_TYPES:
+            sensor_ids_by_user_code.setdefault(alert.user_code, []).append(
+                alert.entity_id
             )
-            action = _PendingAction(
-                action="reminder",
-                key=key,
-                user_code=alert.user_code,
-                alert_type=alert.alert_type,
-                entity_id=alert.entity_id,
-                details=details,
-                payload=AlertPayload(
-                    alert_key=alert.alert_key,
-                    user_code=alert.user_code,
-                    alert_type=alert.alert_type,
-                    entity_id=alert.entity_id,
-                    state="REMINDER",
-                    details=details,
-                    notification_count=alert.notification_count + 1,
-                    first_detected_at=alert.first_detected_at,
-                ),
-            )
-            if alert.alert_type == _TREND_ALERT_TYPE:
-                trend_reminder_groups[alert.user_code].append(action)
-            else:
-                reminder_groups[alert.user_code].append(action)
-
-        for user_code in list(reminder_groups):
-            reminder_groups[user_code].extend(
-                trend_reminder_groups[user_code]
-            )
-
-    if reminders_silenced:
-        suppressed = sum(len(actions) for actions in reminder_groups.values())
-        reminder_groups.clear()
-
-    # ── 4. Group by user_code ─────────────────────────────────────
-    groups: Dict[str, Dict[str, List[_PendingAction]]] = defaultdict(
-        lambda: {"active": [], "resolved": []}
-    )
-    for pa in pending:
-        bucket = "resolved" if pa.action == "resolve" else "active"
-        groups[pa.user_code][bucket].append(pa)
-
-    # ── 5. Enrich sensor alerts with dimensional context ──────────
-    enrichment_groups: Dict[str, List[_PendingAction]] = defaultdict(list)
-    opening_tenants = {
-        user_code
-        for user_code, group in groups.items()
-        if group["active"]
-    }
-    for uc_name, group in groups.items():
-        if group["active"]:
-            enrichment_groups[uc_name].extend(
-                group["active"] + resolution_groups[uc_name]
-            )
-    for uc_name, actions in reminder_groups.items():
-        enrichment_groups[uc_name].extend(actions)
-        if uc_name not in opening_tenants:
-            enrichment_groups[uc_name].extend(resolution_groups[uc_name])
-
-    for uc_name, all_actions in enrichment_groups.items():
-        sensor_ids = [
-            pa.entity_id
-            for pa in all_actions
-            if pa.alert_type in _SENSOR_ALERT_TYPES
-        ]
-        if not sensor_ids or uc_name not in uc_databases:
-            continue
+    dimensions = {}
+    for user_code, sensor_ids in sensor_ids_by_user_code.items():
         try:
-            dims = mssql.get_sensor_dimensions(
-                uc_databases[uc_name], sensor_ids, uc_name
+            dimensions[user_code] = mssql.get_sensor_dimensions(
+                uc_databases[user_code], sensor_ids, user_code
             )
         except Exception:
             context.log.warning(
-                "Failed to fetch sensor dimensions for %s, "
-                "alerts will be sent without hierarchy.",
-                uc_name,
+                "Failed to fetch sensor dimensions for %s.",
+                user_code,
                 exc_info=True,
             )
-            continue
-        for pa in all_actions:
-            dim = dims.get(pa.entity_id)
-            if dim:
-                pa.payload.location_name = dim.location_name
-                pa.payload.sublocation_name = dim.sublocation_name
-                pa.payload.device_name = dim.device_name
-                pa.payload.sensor_name = dim.sensor_name
-
-    # ── 6. Send one consolidated email per user_code ──────────────
-    opened = 0
-    reminded = 0
-    resolved = 0
-
-    for uc_name, group in groups.items():
-        active_payloads = [pa.payload for pa in group["active"]]
-        resolution_actions = resolution_groups[uc_name]
-        resolved_payloads = [pa.payload for pa in resolution_actions]
-
-        if not active_payloads:
-            continue
-
-        sent = email.send_consolidated(ConsolidatedPayload(
-            user_code=uc_name,
-            active_alerts=active_payloads,
-            resolved_alerts=resolved_payloads,
-        ))
-
-        if sent:
-            for pa in group["active"]:
-                if pa.action == "open":
-                    state_store.upsert_alert(
-                        database=uc_databases[pa.user_code],
-                        alert_key=pa.payload.alert_key,
-                        user_code=pa.user_code,
-                        alert_type=pa.alert_type,
-                        entity_id=pa.entity_id,
-                        details=pa.details,
-                        state=ALERT_STATE_OPEN,
-                    )
-                    opened += 1
-            for pa in resolution_actions:
-                state_store.mark_resolution_notified(
-                    uc_databases[pa.user_code],
-                    pa.user_code,
-                    pa.payload.alert_key,
-                )
-                resolved += 1
-
-    for uc_name, actions in reminder_groups.items():
-        resolution_actions = (
-            [] if uc_name in opening_tenants else resolution_groups[uc_name]
+            dimensions[user_code] = {}
+    for condition in active_conditions.values():
+        dimension = dimensions.get(condition["user_code"], {}).get(
+            condition["entity_id"]
         )
-        sent = email.send_consolidated(ConsolidatedPayload(
-            user_code=uc_name,
-            active_alerts=[action.payload for action in actions],
-            resolved_alerts=[action.payload for action in resolution_actions],
-        ))
-        if sent:
-            for action in actions:
-                state_store.upsert_alert(
-                    database=uc_databases[action.user_code],
-                    alert_key=action.payload.alert_key,
-                    user_code=action.user_code,
-                    alert_type=action.alert_type,
-                    entity_id=action.entity_id,
-                    details=action.details,
-                    state=ALERT_STATE_REMINDER,
+        if dimension is not None:
+            condition["metadata"]["context"] = {
+                "location_name": dimension.location_name,
+                "sublocation_name": dimension.sublocation_name,
+                "sublocation_type": dimension.sublocation_type,
+                "device_name": dimension.device_name,
+                "device_type": dimension.device_type,
+                "sensor_name": dimension.sensor_name,
+                "sensor_type": dimension.sensor_type,
+            }
+
+    opened = 0
+    for key, condition in active_conditions.items():
+        existing = existing_alerts.get(key)
+        alert_key = (
+            existing.alert_key
+            if existing is not None
+            else f"{key}::{uuid.uuid4()}"
+        )
+        state_store.upsert_alert(
+            database=uc_databases[condition["user_code"]],
+            alert_key=alert_key,
+            user_code=condition["user_code"],
+            trigger_source=condition["trigger_source"],
+            alert_type=condition["alert_type"],
+            entity_id=condition["entity_id"],
+            severity=condition["severity"],
+            details=condition["details"],
+            metadata=condition["metadata"],
+            state=ALERT_STATE_OPEN,
+            max_notification_attempts=max_notification_attempts,
+        )
+        if existing is None:
+            opened += 1
+
+    resolved = 0
+    for key, alert in existing_alerts.items():
+        if key in active_conditions:
+            continue
+        details = alert.details
+        metadata = dict(alert.metadata)
+        metadata["reason"] = "La condición dejó de detectarse."
+        if alert.alert_type == "connection_lost":
+            recovery = connection_recoveries.get(key)
+            if recovery is None:
+                continue
+            details = (
+                "CommunicationResumedAt: "
+                f"{recovery.communication_resumed_at:%Y-%m-%d %H:%M:%S} UTC, "
+                "LastReadingAt: "
+                f"{recovery.last_reading_at:%Y-%m-%d %H:%M:%S} UTC"
+            )
+            metadata["reason"] = "La comunicación del sensor se restableció."
+            metadata["evidence"] = {
+                "communication_resumed_at": (
+                    recovery.communication_resumed_at.isoformat()
+                ),
+                "last_reading_at": recovery.last_reading_at.isoformat(),
+            }
+            dimension = dimensions.get(alert.user_code, {}).get(
+                alert.entity_id
+            )
+            if dimension is not None:
+                metadata["context"] = {
+                    "location_name": dimension.location_name,
+                    "sublocation_name": dimension.sublocation_name,
+                    "sublocation_type": dimension.sublocation_type,
+                    "device_name": dimension.device_name,
+                    "device_type": dimension.device_type,
+                    "sensor_name": dimension.sensor_name,
+                    "sensor_type": dimension.sensor_type,
+                }
+        state_store.mark_resolved(
+            uc_databases[alert.user_code],
+            alert.user_code,
+            alert.alert_key,
+            details,
+            metadata,
+        )
+        resolved += 1
+
+    reminded = 0
+    suppressed = 0
+    reminder_time = time.fromisoformat(reminder_cfg.get("time", "08:00"))
+    if reminder_cfg.get("enabled", True) and reminder_now.time() >= reminder_time:
+        due_operational = []
+        due_trends = []
+        for key, alert in all_existing_alerts.items():
+            if key not in active_conditions and alert.alert_type != _TREND_ALERT_TYPE:
+                continue
+            if (
+                alert.notification_status != NOTIFICATION_STATUS_SENT
+                or alert.last_notified_at is None
+            ):
+                continue
+            if alert.alert_type == _TREND_ALERT_TYPE:
+                due_trends.append(alert)
+                continue
+            last_notified_at = alert.last_notified_at
+            if last_notified_at.tzinfo is None:
+                last_notified_at = last_notified_at.replace(
+                    tzinfo=timezone.utc
+                )
+            if (
+                last_notified_at.astimezone(reminder_timezone).date()
+                >= reminder_now.date()
+            ):
+                continue
+            due_operational.append(alert)
+
+        tenants_with_operational_reminder = {
+            alert.user_code for alert in due_operational
+        }
+        due_alerts = due_operational + [
+            alert
+            for alert in due_trends
+            if alert.user_code in tenants_with_operational_reminder
+        ]
+        if reminders_silenced:
+            suppressed = len(due_alerts)
+        else:
+            for alert in due_alerts:
+                condition = active_conditions.get(
+                    _build_alert_key(
+                        alert.user_code, alert.alert_type, alert.entity_id
+                    )
+                )
+                state_store.queue_reminder(
+                    uc_databases[alert.user_code],
+                    alert.user_code,
+                    alert.alert_key,
+                    condition["details"] if condition else alert.details,
+                    condition["metadata"] if condition else alert.metadata,
                 )
                 reminded += 1
-            for action in resolution_actions:
-                state_store.mark_resolution_notified(
-                    uc_databases[action.user_code],
-                    action.user_code,
-                    action.payload.alert_key
-                )
-                resolved += 1
 
     summary = (
         f"Checked {len(user_codes_cfg)} user_codes: "
         f"{len(active_conditions)} active conditions, "
-        f"{opened} opened, {reminded} reminded, {resolved} resolved, "
-        f"{suppressed} reminders suppressed"
+        f"{opened} opened, {reminded} reminders queued, "
+        f"{resolved} resolutions queued, {suppressed} reminders suppressed"
     )
     context.log.info(summary)
     return SkipReason(summary)

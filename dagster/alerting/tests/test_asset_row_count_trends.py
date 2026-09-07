@@ -342,6 +342,7 @@ def test_trend_sensor_queues_resolution_without_sending_email():
         key: AlertRecord(
             alert_key=key,
             user_code="carlsjr",
+            trigger_source="dagster",
             alert_type="asset_row_count_trend",
             entity_id="carlsjr/dwh_factlecturas",
             state="OPEN",
@@ -390,7 +391,11 @@ def test_trend_sensor_queues_resolution_without_sending_email():
     email.send_consolidated.assert_not_called()
     state.upsert_alert.assert_not_called()
     state.mark_resolved.assert_called_once_with(
-        "carlsjr", "carlsjr", key, None
+        "carlsjr",
+        "carlsjr",
+        key,
+        None,
+        {"reason": "El volumen dejó de incumplir los umbrales."},
     )
     assert "0 opened, 1 resolved" in result.skip_message
 

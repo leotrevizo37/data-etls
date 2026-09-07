@@ -33,6 +33,9 @@ from alerting.defs.resources.mssql_reader import (
 sensor_module = importlib.import_module(
     "alerting.defs.sensors.operational_alerts_sensor"
 )
+delivery_module = importlib.import_module(
+    "alerting.defs.sensors.email_delivery_sensor"
+)
 
 
 def test_definitions_bind_sensor_resources():
@@ -113,6 +116,9 @@ def test_alert_state_upsert_uses_sql_server_syntax():
         alert_type="connection_lost",
         entity_id="sensor-1",
         details="details",
+        trigger_source="sensor_monitoring",
+        severity="CRITICAL",
+        metadata={"reason": "razón"},
     )
 
     reader._get_connection.assert_called_once_with(
@@ -121,17 +127,29 @@ def test_alert_state_upsert_uses_sql_server_syntax():
     query = cursor.execute.call_args.args[0]
     assert "IF @@ROWCOUNT = 0" in query
     assert "ON CONFLICT" not in query
+    assert "user_code" not in query
+    assert "trigger_source" in query
     assert cursor.execute.call_args.args[1:] == (
-        "OPEN",
+        "sensor_monitoring",
+        "CRITICAL",
         "details",
+        '{"reason":"razón"}',
+        None,
+        3,
         "alert-1",
         "alert-1",
-        "carlsjr",
+        "sensor_monitoring",
         "connection_lost",
         "sensor-1",
+        "CRITICAL",
         "OPEN",
+        "OPEN",
+        "PENDING",
         "details",
-        1,
+        '{"reason":"razón"}',
+        None,
+        0,
+        3,
     )
     connection.commit.assert_called_once_with()
 
@@ -155,29 +173,82 @@ def test_alert_state_updates_all_resolution_columns():
 
     resolved_query = cursor.execute.call_args.args[0]
     assert "details = COALESCE(?, details)" in resolved_query
+    assert "metadata_json = COALESCE(?, metadata_json)" in resolved_query
+    assert "notification_attempt_count = 0" in resolved_query
     assert "resolved_at = SYSUTCDATETIME()" in resolved_query
     assert "updated_at = SYSUTCDATETIME()" in resolved_query
     assert cursor.execute.call_args.args[1:] == (
         "RESOLVED_PENDING",
+        "RESOLUTION",
+        "PENDING",
         "resolución con acentos",
+        None,
         "alert-1",
-        "carlsjr",
         "OPEN",
-        "REMINDER",
     )
 
-    store.mark_resolution_notified("carlsjr_db", "carlsjr", "alert-1")
+    store.mark_notifications_sent(
+        "carlsjr_db", "carlsjr", ["alert-1"]
+    )
 
     notified_query = cursor.execute.call_args.args[0]
     assert "last_notified_at = SYSUTCDATETIME()" in notified_query
     assert "notification_count = notification_count + 1" in notified_query
     assert "updated_at = SYSUTCDATETIME()" in notified_query
     assert cursor.execute.call_args.args[1:] == (
+        "RESOLUTION",
         "RESOLVED",
+        "SENT",
         "alert-1",
-        "carlsjr",
-        "RESOLVED_PENDING",
+        "PROCESSING",
     )
+
+
+def test_alert_state_maps_all_sql_server_types():
+    now = datetime.now(timezone.utc)
+    row = (
+        "alert-1",
+        "sensor_monitoring",
+        "connection_lost",
+        "sensor-1",
+        "CRITICAL",
+        "OPEN",
+        "REMINDER",
+        "RETRY_PENDING",
+        "detalle",
+        '{"measurements":{"minutes_without_readings":90}}',
+        None,
+        now,
+        now,
+        now,
+        now,
+        now,
+        now,
+        None,
+        2,
+        1,
+        3,
+        "SMTP_TIMEOUT",
+        "timeout",
+        now,
+        now,
+        now,
+    )
+
+    alert = AlertStateStoreResource._alert_record_from_row(row, "carlsjr")
+
+    assert alert.user_code == "carlsjr"
+    assert alert.trigger_source == "sensor_monitoring"
+    assert alert.severity == "CRITICAL"
+    assert alert.metadata == {
+        "measurements": {"minutes_without_readings": 90}
+    }
+    assert alert.notification_count == 2
+    assert alert.notification_attempt_count == 1
+    assert alert.max_notification_attempts == 3
+    assert alert.next_retry_at == now
+    assert alert.last_error_code == "SMTP_TIMEOUT"
+    assert alert.ticket_id is None
 
 
 def test_sensor_recovery_requires_latest_healthy_audit():
@@ -323,7 +394,6 @@ def test_alert_state_reads_each_tenant_database(monkeypatch):
     monkeypatch.setenv("EMERSON_TEST_DB", "emerson_db")
     state = MagicMock()
     state.get_active_alerts.return_value = {}
-    state.get_pending_resolved_alerts.return_value = {}
 
     with patch.object(sensor_module, "_load_config", return_value=config):
         context = build_sensor_context(resources=_make_resources(state=state))
@@ -332,18 +402,14 @@ def test_alert_state_reads_each_tenant_database(monkeypatch):
     assert [
         state_call.args for state_call in state.get_active_alerts.call_args_list
     ] == [("carlsjr_db", "carlsjr"), ("emerson_db", "emerson")]
-    assert [
-        state_call.args
-        for state_call in state.get_pending_resolved_alerts.call_args_list
-    ] == [("carlsjr_db", "carlsjr"), ("emerson_db", "emerson")]
+    state.get_pending_resolved_alerts.assert_not_called()
 
 
-def test_failed_email_is_not_recorded(monkeypatch):
+def test_detection_is_recorded_without_sending_email(monkeypatch):
     config = _make_base_config()
     state = MagicMock()
     state.get_active_alerts.return_value = {}
     email = MagicMock()
-    email.send_consolidated.return_value = False
     mssql = MagicMock()
     mssql.get_connection_lost_sensors.return_value = [
         SensorAlert(sensor_id="sensor-1", minutes_without_readings=90)
@@ -358,8 +424,186 @@ def test_failed_email_is_not_recorded(monkeypatch):
         )
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    email.send_consolidated.assert_called_once()
-    state.upsert_alert.assert_not_called()
+    email.send_consolidated.assert_not_called()
+    state.upsert_alert.assert_called_once()
+    call = state.upsert_alert.call_args.kwargs
+    assert call["database"] == "carlsjr"
+    assert call["user_code"] == "carlsjr"
+    assert call["trigger_source"] == "sensor_monitoring"
+    assert call["metadata"]["reason"]
+    assert call["metadata"]["measurements"] == {
+        "minutes_without_readings": 90,
+        "connection_lost_at": None,
+    }
+
+
+def test_email_delivery_claims_and_sends_tenant_notifications():
+    detected_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    operational = AlertRecord(
+        alert_key="operational-1",
+        user_code="carlsjr",
+        trigger_source="sensor_monitoring",
+        alert_type="connection_lost",
+        entity_id="sensor-1",
+        state="OPEN",
+        details="details",
+        first_detected_at=detected_at,
+        last_notified_at=None,
+        resolved_at=None,
+        notification_count=0,
+        notification_status="PENDING",
+        metadata={
+            "reason": "Sin comunicación.",
+            "context": {"location_name": "Sucursal Centro"},
+        },
+    )
+    trend = AlertRecord(
+        alert_key="trend-1",
+        user_code="carlsjr",
+        trigger_source="dagster",
+        alert_type="asset_row_count_trend",
+        entity_id="asset-1",
+        state="OPEN",
+        details="trend",
+        first_detected_at=detected_at,
+        last_notified_at=None,
+        resolved_at=None,
+        notification_count=0,
+        notification_status="PENDING",
+        metadata={"reason": "Caída de volumen."},
+    )
+    resolution = AlertRecord(
+        alert_key="resolution-1",
+        user_code="carlsjr",
+        trigger_source="sensor_monitoring",
+        alert_type="pipeline_failure",
+        entity_id="FactLecturas",
+        state="RESOLVED_PENDING",
+        details="resolved",
+        first_detected_at=detected_at,
+        last_notified_at=detected_at,
+        resolved_at=datetime.now(timezone.utc),
+        notification_count=1,
+        notification_type="RESOLUTION",
+        notification_status="PENDING",
+        metadata={"reason": "La condición dejó de detectarse."},
+    )
+    state = MagicMock()
+    state.get_deliverable_notifications.return_value = [
+        operational,
+        trend,
+        resolution,
+    ]
+    state.claim_notifications.side_effect = (
+        lambda _database, _user_code, alert_keys, _timeout: alert_keys
+    )
+    email = MagicMock()
+    email.send_consolidated.return_value = True
+    config = {
+        "defaults": {"email_delivery": {}},
+        "user_codes": {"carlsjr": {"database": "carlsjr_db"}},
+    }
+
+    with patch.object(delivery_module, "_load_config", return_value=config):
+        context = build_sensor_context(
+            resources={"alert_state": state, "email_notifier": email}
+        )
+        delivery_module.email_delivery_sensor.evaluate_tick(context)
+
+    payload = email.send_consolidated.call_args.args[0]
+    assert payload.user_code == "carlsjr"
+    assert {alert.alert_key for alert in payload.active_alerts} == {
+        "operational-1",
+        "trend-1",
+    }
+    assert [alert.alert_key for alert in payload.resolved_alerts] == [
+        "resolution-1"
+    ]
+    assert payload.active_alerts[0].location_name == "Sucursal Centro"
+    state.mark_notifications_sent.assert_called_once_with(
+        "carlsjr_db",
+        "carlsjr",
+        ["operational-1", "trend-1", "resolution-1"],
+    )
+
+
+def test_email_delivery_does_not_send_trend_alert_standalone():
+    trend = AlertRecord(
+        alert_key="trend-1",
+        user_code="carlsjr",
+        trigger_source="dagster",
+        alert_type="asset_row_count_trend",
+        entity_id="asset-1",
+        state="OPEN",
+        details=None,
+        first_detected_at=datetime.now(timezone.utc),
+        last_notified_at=None,
+        resolved_at=None,
+        notification_count=0,
+        notification_status="PENDING",
+    )
+    state = MagicMock()
+    state.get_deliverable_notifications.return_value = [trend]
+    email = MagicMock()
+    config = {
+        "defaults": {"email_delivery": {}},
+        "user_codes": {"carlsjr": {"database": "carlsjr_db"}},
+    }
+
+    with patch.object(delivery_module, "_load_config", return_value=config):
+        context = build_sensor_context(
+            resources={"alert_state": state, "email_notifier": email}
+        )
+        delivery_module.email_delivery_sensor.evaluate_tick(context)
+
+    state.claim_notifications.assert_not_called()
+    email.send_consolidated.assert_not_called()
+
+
+def test_email_delivery_records_retry_error_and_delay():
+    alert = AlertRecord(
+        alert_key="operational-1",
+        user_code="carlsjr",
+        trigger_source="sensor_monitoring",
+        alert_type="connection_lost",
+        entity_id="sensor-1",
+        state="OPEN",
+        details=None,
+        first_detected_at=datetime.now(timezone.utc),
+        last_notified_at=None,
+        resolved_at=None,
+        notification_count=0,
+        notification_status="RETRY_PENDING",
+        notification_attempt_count=2,
+    )
+    state = MagicMock()
+    state.get_deliverable_notifications.return_value = [alert]
+    state.claim_notifications.return_value = [alert.alert_key]
+    email = MagicMock()
+    email.send_consolidated.return_value = False
+    email.last_error_code = "SMTPException"
+    email.last_error_message = "timeout"
+    config = {
+        "defaults": {
+            "email_delivery": {"retry_delays_minutes": [5, 15, 60]}
+        },
+        "user_codes": {"carlsjr": {"database": "carlsjr_db"}},
+    }
+
+    with patch.object(delivery_module, "_load_config", return_value=config):
+        context = build_sensor_context(
+            resources={"alert_state": state, "email_notifier": email}
+        )
+        delivery_module.email_delivery_sensor.evaluate_tick(context)
+
+    state.mark_notifications_failed.assert_called_once_with(
+        "carlsjr_db",
+        "carlsjr",
+        ["operational-1"],
+        "SMTPException",
+        "timeout",
+        60,
+    )
 
 
 def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
@@ -370,6 +614,7 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
     alert = AlertRecord(
         alert_key=f"{key}::incident-1",
         user_code="carlsjr",
+        trigger_source="sensor_monitoring",
         alert_type="connection_lost",
         entity_id="sensor-1",
         state="OPEN",
@@ -379,27 +624,9 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
         resolved_at=None,
         notification_count=1,
     )
-    resolved_alert = AlertRecord(
-        alert_key=f"{key}::incident-1",
-        user_code="carlsjr",
-        alert_type="connection_lost",
-        entity_id="sensor-1",
-        state="RESOLVED_PENDING",
-        details=(
-            "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
-            "LastReadingAt: 2026-08-21 22:01:30 UTC"
-        ),
-        first_detected_at=alert.first_detected_at,
-        last_notified_at=alert.last_notified_at,
-        resolved_at=datetime.now(timezone.utc),
-        notification_count=1,
-    )
     state = MagicMock()
     state.get_active_alerts.side_effect = [
         {}, {key: alert}, {key: alert}, {},
-    ]
-    state.get_pending_resolved_alerts.side_effect = [
-        {}, {}, {}, {resolved_alert.alert_key: resolved_alert},
     ]
     email = MagicMock()
     email.send_consolidated.return_value = True
@@ -436,35 +663,32 @@ def test_alert_lifecycle_opens_new_occurrence_after_resolution(monkeypatch):
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    assert email.send_consolidated.call_count == 2
-    calls = email.send_consolidated.call_args_list
-    first_open = calls[0].args[0].active_alerts[0]
-    resolved = calls[1].args[0].resolved_alerts[0]
-    second_open = calls[1].args[0].active_alerts[0]
-
-    assert first_open.state == "OPEN"
-    assert first_open.alert_key == f"{key}::incident-1"
-    assert resolved.state == "RESOLVED"
-    assert resolved.alert_key == f"{key}::incident-1"
-    assert resolved.details == (
-        "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
-        "LastReadingAt: 2026-08-21 22:01:30 UTC"
-    )
-    assert second_open.state == "OPEN"
-    assert second_open.alert_key == f"{key}::incident-2"
-
-    assert state.upsert_alert.call_count == 2
-    state.mark_resolved.assert_called_once_with(
+    email.send_consolidated.assert_not_called()
+    assert state.upsert_alert.call_count == 3
+    assert [
+        state_call.kwargs["alert_key"]
+        for state_call in state.upsert_alert.call_args_list
+    ] == [
+        f"{key}::incident-1",
+        f"{key}::incident-1",
+        f"{key}::incident-2",
+    ]
+    resolved_call = state.mark_resolved.call_args
+    assert resolved_call.args[:3] == (
         "carlsjr",
         "carlsjr",
         f"{key}::incident-1",
-        resolved.details,
     )
-    state.mark_resolution_notified.assert_called_once_with(
-        "carlsjr",
-        "carlsjr",
-        f"{key}::incident-1"
+    assert resolved_call.args[3] == (
+        "CommunicationResumedAt: 2026-08-21 20:03:04 UTC, "
+        "LastReadingAt: 2026-08-21 22:01:30 UTC"
     )
+    assert resolved_call.args[4]["evidence"] == {
+        "communication_resumed_at": "2026-08-21T20:03:04",
+        "last_reading_at": "2026-08-21T22:01:30",
+    }
+    state.mark_resolved.assert_called_once()
+    state.mark_resolution_notified.assert_not_called()
 
 
 def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
@@ -478,13 +702,13 @@ def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
     )
     sensor_key = "carlsjr::connection_lost::sensor-1"
     trend_key = "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas"
-    resolved_key = "carlsjr::pipeline_failure::FactLecturas::incident-3"
     last_notified_at = datetime.now(timezone.utc) - timedelta(days=1)
     state = MagicMock()
     state.get_active_alerts.return_value = {
         sensor_key: AlertRecord(
             alert_key=f"{sensor_key}::incident-1",
             user_code="carlsjr",
+            trigger_source="sensor_monitoring",
             alert_type="connection_lost",
             entity_id="sensor-1",
             state="OPEN",
@@ -497,6 +721,7 @@ def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
         trend_key: AlertRecord(
             alert_key=f"{trend_key}::incident-2",
             user_code="carlsjr",
+            trigger_source="dagster",
             alert_type="asset_row_count_trend",
             entity_id="carlsjr/dwh_factlecturas",
             state="OPEN",
@@ -506,20 +731,6 @@ def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
             resolved_at=None,
             notification_count=0,
         ),
-    }
-    state.get_pending_resolved_alerts.return_value = {
-        resolved_key: AlertRecord(
-            alert_key=resolved_key,
-            user_code="carlsjr",
-            alert_type="pipeline_failure",
-            entity_id="FactLecturas",
-            state="RESOLVED_PENDING",
-            details="Resolved details",
-            first_detected_at=last_notified_at,
-            last_notified_at=last_notified_at,
-            resolved_at=datetime.now(timezone.utc),
-            notification_count=1,
-        )
     }
     email = MagicMock()
     email.send_consolidated.return_value = True
@@ -539,22 +750,15 @@ def test_daily_reminder_groups_alerts_from_both_sensors_by_tenant():
         )
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    email.send_consolidated.assert_called_once()
-    payload = email.send_consolidated.call_args.args[0]
-    assert payload.user_code == "carlsjr"
-    assert payload.recipient_alert_type is None
-    assert {alert.alert_type for alert in payload.active_alerts} == {
-        "connection_lost",
-        "asset_row_count_trend",
+    email.send_consolidated.assert_not_called()
+    state.upsert_alert.assert_called_once()
+    assert {
+        state_call.args[2]
+        for state_call in state.queue_reminder.call_args_list
+    } == {
+        f"{sensor_key}::incident-1",
+        f"{trend_key}::incident-2",
     }
-    assert {alert.state for alert in payload.active_alerts} == {"REMINDER"}
-    assert [alert.alert_key for alert in payload.resolved_alerts] == [
-        resolved_key
-    ]
-    assert state.upsert_alert.call_count == 2
-    state.mark_resolution_notified.assert_called_once_with(
-        "carlsjr", "carlsjr", resolved_key
-    )
 
 
 def test_connection_lost_is_not_resolved_without_recovery_evidence():
@@ -565,6 +769,7 @@ def test_connection_lost_is_not_resolved_without_recovery_evidence():
         key: AlertRecord(
             alert_key=key,
             user_code="carlsjr",
+            trigger_source="sensor_monitoring",
             alert_type="connection_lost",
             entity_id="sensor-1",
             state="OPEN",
@@ -584,7 +789,7 @@ def test_connection_lost_is_not_resolved_without_recovery_evidence():
     resources["email_notifier"].send_consolidated.assert_not_called()
     state.mark_resolved.assert_not_called()
     assert "1 active conditions" in result.skip_message
-    assert "0 resolved" in result.skip_message
+    assert "0 resolutions queued" in result.skip_message
 
 
 def test_alert_config_covers_active_user_codes():
@@ -642,6 +847,7 @@ def test_quiet_hours_suppress_only_reminder_email():
         key: AlertRecord(
             alert_key=f"{key}::incident-1",
             user_code="carlsjr",
+            trigger_source="sensor_monitoring",
             alert_type="connection_lost",
             entity_id="sensor-1",
             state="OPEN",
@@ -668,7 +874,8 @@ def test_quiet_hours_suppress_only_reminder_email():
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
     email.send_consolidated.assert_not_called()
-    state.upsert_alert.assert_not_called()
+    state.upsert_alert.assert_called_once()
+    state.queue_reminder.assert_not_called()
 
 
 def test_trend_alert_does_not_create_daily_monitoring_email():
@@ -678,6 +885,7 @@ def test_trend_alert_does_not_create_daily_monitoring_email():
         key: AlertRecord(
             alert_key=f"{key}::incident-1",
             user_code="carlsjr",
+            trigger_source="dagster",
             alert_type="asset_row_count_trend",
             entity_id="carlsjr/dwh_factlecturas",
             state="OPEN",
@@ -711,8 +919,7 @@ def test_trend_alert_does_not_create_daily_monitoring_email():
 
 # ── New tests ─────────────────────────────────────────────────────
 
-def test_consolidated_email_groups_by_user_code():
-    """Multiple alerts for the same user_code produce ONE send_consolidated call."""
+def test_detector_persists_multiple_alerts_in_tenant_database():
     config = {
         "defaults": {
             "sensor_alerts": {
@@ -747,20 +954,19 @@ def test_consolidated_email_groups_by_user_code():
         )
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    # Only ONE consolidated email for carlsjr, containing 3 alerts
-    email.send_consolidated.assert_called_once()
-    payload = email.send_consolidated.call_args.args[0]
-    assert isinstance(payload, ConsolidatedPayload)
-    assert payload.user_code == "carlsjr"
-    assert len(payload.active_alerts) == 3
+    email.send_consolidated.assert_not_called()
+    assert state.upsert_alert.call_count == 3
     assert {
         state_call.kwargs["database"]
         for state_call in state.upsert_alert.call_args_list
     } == {"carlsjr"}
+    assert {
+        state_call.kwargs["trigger_source"]
+        for state_call in state.upsert_alert.call_args_list
+    } == {"sensor_monitoring"}
 
 
-def test_sensor_dimensions_enrich_alerts():
-    """Sensor alerts are enriched with location/device/sensor names."""
+def test_sensor_dimensions_are_persisted_in_metadata():
     config = _make_base_config()
     state = MagicMock()
     state.get_active_alerts.return_value = {}
@@ -788,16 +994,15 @@ def test_sensor_dimensions_enrich_alerts():
         )
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    payload = email.send_consolidated.call_args.args[0]
-    alert = payload.active_alerts[0]
-    assert alert.location_name == "Sucursal Centro"
-    assert alert.sublocation_name == "Cuarto Frío 1"
-    assert alert.device_name == "Refrigerador A"
-    assert alert.sensor_name == "Temp Interior"
+    email.send_consolidated.assert_not_called()
+    metadata = state.upsert_alert.call_args.kwargs["metadata"]
+    assert metadata["context"]["location_name"] == "Sucursal Centro"
+    assert metadata["context"]["sublocation_name"] == "Cuarto Frío 1"
+    assert metadata["context"]["device_name"] == "Refrigerador A"
+    assert metadata["context"]["sensor_name"] == "Temp Interior"
 
 
-def test_pipeline_alerts_in_consolidated_without_dimensions():
-    """Pipeline alerts appear in consolidated email without spatial hierarchy."""
+def test_pipeline_alerts_are_persisted_without_dimensions():
     config = {
         "defaults": {
             "sensor_alerts": {
@@ -836,14 +1041,11 @@ def test_pipeline_alerts_in_consolidated_without_dimensions():
         )
         sensor_module.operational_alerts_sensor.evaluate_tick(context)
 
-    payload = email.send_consolidated.call_args.args[0]
-    alert = payload.active_alerts[0]
-    assert alert.alert_type == "pipeline_failure"
-    assert alert.entity_id == "FactLecturas"
-    # No dimension fields set for pipeline alerts
-    assert alert.location_name is None
-    assert alert.sensor_name is None
-    # get_sensor_dimensions should NOT be called (no sensor alerts)
+    email.send_consolidated.assert_not_called()
+    call = state.upsert_alert.call_args.kwargs
+    assert call["alert_type"] == "pipeline_failure"
+    assert call["entity_id"] == "FactLecturas"
+    assert "context" not in call["metadata"]
     mssql.get_sensor_dimensions.assert_not_called()
 
 
@@ -956,6 +1158,10 @@ def test_consolidated_html_contains_all_sections():
                 state="OPEN", details="MinutesWithoutReadings: 90",
                 location_name="Sucursal Norte",
                 sensor_name="Temp Cuarto 1",
+                metadata={
+                    "reason": "El sensor perdió comunicación.",
+                    "measurements": {"minutes_without_readings": 90},
+                },
             ),
             AlertPayload(
                 alert_key="k2", user_code="carlsjr",
@@ -989,6 +1195,10 @@ def test_consolidated_html_contains_all_sections():
     assert "background-color:transparent" in html
     assert 'bgcolor="#0f766e"' in html
     assert "Evidencia medida" in html
+    assert "Justificaci&oacute;n" in html
+    assert "El sensor perdió comunicación." in html
+    assert "Trazabilidad" in html
+    assert "minutes_without_readings" in html
     assert "#0f0f23" not in html
     assert not any(entity in html for entity in (
         "&#x1F50C;", "&#x23F1;", "&#x274C;", "&#x1F40C;",

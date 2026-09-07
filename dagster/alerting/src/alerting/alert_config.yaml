@@ -35,6 +35,11 @@ defaults:
     end: "08:00"
     timezone: America/Mexico_City
 
+  email_delivery:
+    max_notification_attempts: 3
+    retry_delays_minutes: [5, 15, 60]
+    processing_timeout_minutes: 30
+
 user_codes:
   bafar_poc_gabinete:
     database: cdp
