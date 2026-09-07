@@ -69,6 +69,14 @@ def asset_row_count_trend_sensor(
         return SkipReason("Asset row count trends are disabled")
 
     state_store: AlertStateStoreResource = context.resources.alert_state
+    user_codes_cfg = config.get("user_codes", {})
+    uc_databases = {
+        user_code: os.environ.get(
+            user_code_cfg.get("database_env", ""),
+            user_code_cfg.get("database", user_code),
+        )
+        for user_code, user_code_cfg in user_codes_cfg.items()
+    }
     metadata_key = trend_defaults.get("metadata_key", "row_count")
     batch_size = max(
         1, min(int(trend_defaults.get("batch_size", 500)), 1000)
@@ -108,7 +116,7 @@ def asset_row_count_trend_sensor(
             if latest:
                 context.update_cursor(str(latest[0].storage_id))
 
-    observations = []
+    observations = {}
     runs = {}
     for record in records:
         materialization = record.asset_materialization
@@ -121,10 +129,13 @@ def asset_row_count_trend_sensor(
         if record.run_id not in runs:
             runs[record.run_id] = context.instance.get_run_by_id(record.run_id)
         materialized_at = datetime.fromtimestamp(record.timestamp, timezone.utc)
-        observations.append(
+        code_location = _get_code_location(runs[record.run_id], asset_key)
+        if code_location not in uc_databases:
+            continue
+        observations.setdefault(code_location, []).append(
             AssetRowCountObservation(
                 observation_date=materialized_at.date(),
-                code_location=_get_code_location(runs[record.run_id], asset_key),
+                code_location=code_location,
                 asset_key=asset_key.to_user_string(),
                 metadata_key=metadata_key,
                 row_count=row_count,
@@ -134,10 +145,11 @@ def asset_row_count_trend_sensor(
             )
         )
 
-    recorded = (
-        state_store.record_asset_row_counts(observations)
-        if observations
-        else 0
+    recorded = sum(
+        state_store.record_asset_row_counts(
+            uc_databases[user_code], user_code, tenant_observations
+        )
+        for user_code, tenant_observations in observations.items()
     )
     if records:
         context.update_cursor(str(records[-1].storage_id))
@@ -156,18 +168,16 @@ def asset_row_count_trend_sensor(
             "notifications are disabled"
         )
 
-    user_codes_cfg = config.get("user_codes", {})
-    uc_databases = {
-        user_code: os.environ.get(
-            user_code_cfg.get("database_env", ""),
-            user_code_cfg.get("database", user_code),
-        )
-        for user_code, user_code_cfg in user_codes_cfg.items()
-    }
     active_conditions: Dict[str, Dict[str, Any]] = {}
-    for trend in state_store.get_latest_asset_row_count_trends():
-        if trend.code_location not in user_codes_cfg:
-            continue
+    trends = [
+        trend
+        for user_code, database in uc_databases.items()
+        for trend in state_store.get_latest_asset_row_count_trends(
+            database, user_code
+        )
+        if trend.code_location == user_code
+    ]
+    for trend in trends:
         trend_cfg = {
             **trend_defaults,
             **user_codes_cfg[trend.code_location].get(

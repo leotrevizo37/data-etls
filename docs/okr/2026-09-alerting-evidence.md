@@ -8,7 +8,7 @@ Centralizar la deteccion y entrega de alertas de sensores, ingestiones, corridas
 
 ## Entregable
 
-Code location `alerting` con dos sensores habilitados por defecto, consultas de solo lectura a SQL Server, estado de incidencias en PostgreSQL de Dagster, recordatorios agrupados por tenant y envio de correos HTML mediante SMTP.
+Code location `alerting` con dos sensores habilitados por defecto, consultas operativas de solo lectura y persistencia de alertas en SQL Server por tenant, recordatorios agrupados por tenant y envio de correos HTML mediante SMTP.
 
 ## Valor
 
@@ -27,7 +27,7 @@ La separacion en una code location dedicada evita asignar el monitoreo global a 
 | Arranque | `dagster code-server start -h 0.0.0.0 -p 4009 -m alerting.definitions` |
 | Sensor central | `operational_alerts_sensor`, intervalo minimo de 300 segundos |
 | Sensor de tendencias | `asset_row_count_trend_sensor`, intervalo minimo de 21600 segundos |
-| Estado | Esquema `alerting` en PostgreSQL de Dagster |
+| Estado | Esquema `alerting` en la base SQL Server de cada tenant |
 | Correo | SMTP con destinatarios configurables y HTML sin emojis ni iconos por tipo |
 | Recordatorios | Un correo agrupado por tenant y dia, sujeto a horario configurado y horas silenciosas |
 
@@ -65,7 +65,7 @@ La recuperacion de un sensor desconectado requiere evidencia posterior a `Connec
 
 1. El sensor consume incrementalmente eventos `ASSET_MATERIALIZATION` mediante cursor.
 2. Solo registra materializaciones que contienen metadata `row_count`.
-3. Agrega las observaciones en `alerting.asset_row_count_daily` por dia, code location, asset y clave de metadata.
+3. Agrega las observaciones en `alerting.asset_row_count_daily` de la base de su tenant por dia, code location, asset y clave de metadata.
 4. Evalua solamente dias UTC cerrados y requiere 7 de 7 dias y 28 de 28 dias observados.
 5. Abre `WARNING` cuando ambas comparaciones caen al menos 20% y `CRITICAL` cuando ambas caen al menos 40%.
 6. Conserva la incidencia con `notification_count = 0` sin enviar un correo independiente.

@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
 from dagster import AssetKey, DagsterInstance, MetadataValue, build_sensor_context
 
 from alerting.defs.resources.alert_state_store import (
@@ -61,11 +62,17 @@ def test_latest_trends_query_returns_only_closed_days():
         )
     ]
 
-    with patch.object(store, "_get_connection", return_value=connection):
-        trends = store.get_latest_asset_row_count_trends()
+    with patch.object(
+        store, "_get_alert_connection", return_value=connection
+    ) as get_connection:
+        trends = store.get_latest_asset_row_count_trends(
+            "carlsjr_db", "carlsjr"
+        )
 
-    query = cursor.execute.call_args.args[0]
-    assert "observation_date < (NOW() AT TIME ZONE 'UTC')::DATE" in query
+    get_connection.assert_called_once_with("carlsjr_db", "carlsjr")
+    query, user_code = cursor.execute.call_args.args
+    assert "observation_date < CONVERT(DATE, SYSUTCDATETIME())" in query
+    assert user_code == "carlsjr"
     assert trends == [
         AssetRowCountTrend(
             observation_date=date(2026, 8, 26),
@@ -88,6 +95,69 @@ def test_latest_trends_query_returns_only_closed_days():
             ),
         )
     ]
+
+
+def test_row_count_store_writes_to_tenant_mssql_database():
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (1,)
+    connection.cursor.return_value.__enter__.return_value = cursor
+    reader = MagicMock()
+    reader._get_connection.return_value = connection
+    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
+    store._mssql_reader = reader
+    observation = AssetRowCountObservation(
+        observation_date=date(2026, 8, 26),
+        code_location="carlsjr",
+        asset_key="carlsjr/dwh_factlecturas",
+        metadata_key="row_count",
+        row_count=240,
+        event_storage_id=321,
+        run_id="run-1",
+        materialized_at=datetime(
+            2026, 8, 26, 12, 30, tzinfo=timezone.utc
+        ),
+    )
+
+    recorded = store.record_asset_row_counts(
+        "carlsjr_db", "carlsjr", [observation]
+    )
+
+    reader._get_connection.assert_called_once_with(
+        "carlsjr_db", "carlsjr", read_only=False
+    )
+    upsert_query, parameters = cursor.execute.call_args_list[0].args
+    assert "WITH (UPDLOCK, SERIALIZABLE)" in upsert_query
+    assert "SYSUTCDATETIME()" in upsert_query
+    assert "ON CONFLICT" not in upsert_query
+    assert parameters[1] == "carlsjr"
+    assert recorded == 1
+    connection.commit.assert_called_once_with()
+
+
+def test_row_count_store_rejects_cross_tenant_observations():
+    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
+    store._mssql_reader = MagicMock()
+    observation = AssetRowCountObservation(
+        observation_date=date(2026, 8, 26),
+        code_location="emerson",
+        asset_key="emerson/dwh_factlecturas",
+        metadata_key="row_count",
+        row_count=240,
+        event_storage_id=321,
+        run_id="run-1",
+        materialized_at=datetime(
+            2026, 8, 26, 12, 30, tzinfo=timezone.utc
+        ),
+    )
+
+    with pytest.raises(ValueError):
+        store.record_asset_row_counts(
+            "carlsjr_db", "carlsjr", [observation]
+        )
+
+    store._mssql_reader._get_connection.assert_not_called()
 
 
 def test_trend_sensor_records_row_count_materialization():
@@ -114,7 +184,8 @@ def test_trend_sensor_records_row_count_materialization():
                 "backfill_days": 28,
                 "batch_size": 500,
             }
-        }
+        },
+        "user_codes": {"carlsjr": {"database": "carlsjr_db"}},
     }
 
     with (
@@ -142,7 +213,12 @@ def test_trend_sensor_records_row_count_materialization():
     assert event_filter.after_cursor is None
     assert event_filter.after_timestamp is not None
     state.record_asset_row_counts.assert_called_once()
-    observation = state.record_asset_row_counts.call_args.args[0][0]
+    database, user_code, tenant_observations = (
+        state.record_asset_row_counts.call_args.args
+    )
+    assert database == "carlsjr_db"
+    assert user_code == "carlsjr"
+    observation = tenant_observations[0]
     assert observation == AssetRowCountObservation(
         observation_date=date(2026, 8, 26),
         code_location="carlsjr",
