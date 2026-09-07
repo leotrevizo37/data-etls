@@ -3,7 +3,6 @@
 Supports both individual alert emails and consolidated per-tenant
 digest emails with dark-themed HTML."""
 
-import json
 import os
 import smtplib
 from collections import defaultdict
@@ -335,36 +334,13 @@ def _build_alert_card(
 
     metadata_html = ""
     reason = payload.metadata.get("reason")
-    trace_metadata = {
-        key: value
-        for key, value in payload.metadata.items()
-        if key not in {"reason", "context"}
-    }
-    if reason or trace_metadata:
-        reason_html = (
-            f'<strong style="color:{_CLR_TEXT};">Justificaci&oacute;n:</strong> '
-            f"{_esc(str(reason))}<br/><br/>"
-            if reason
-            else ""
-        )
-        trace_html = ""
-        if trace_metadata:
-            serialized = json.dumps(
-                trace_metadata,
-                ensure_ascii=False,
-                indent=2,
-                sort_keys=True,
-            )
-            trace_html = (
-                f'<strong style="color:{_CLR_TEXT};">Trazabilidad:</strong>'
-                f'<pre style="white-space:pre-wrap;color:#334155;'
-                f'font-size:12px;margin:6px 0 0 0;">{_esc(serialized)}</pre>'
-            )
+    if reason:
         metadata_html = (
             f'<table width="100%" cellpadding="0" cellspacing="0" '
             f'style="background-color:{_CLR_DETAIL_BG};margin-top:12px;'
             f'border-radius:6px;"><tr><td style="padding:12px 16px;">'
-            f"{reason_html}{trace_html}</td></tr></table>"
+            f'<strong style="color:{_CLR_TEXT};">Justificaci&oacute;n:</strong> '
+            f"{_esc(str(reason))}</td></tr></table>"
         )
 
     # Notification count for reminders
