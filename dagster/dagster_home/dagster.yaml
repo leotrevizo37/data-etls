@@ -71,17 +71,23 @@ retention:
 
 concurrency:
   runs:
-    max_concurrent_runs: 3
+    max_concurrent_runs: 6
     tag_concurrency_limits:
       - key: dagster/code_location
         value:
           applyLimitPerUniqueValue: true
-        limit: 2
+        limit: 3
       - key: "user_code_run_lane"
-        limit: 1
+        limit: 3
         value:
           applyLimitPerUniqueValue: true
       - key: "job_type"
         value:
           applyLimitPerUniqueValue: true
-        limit: 2
+        limit: 1
+      - key: "api_rate_limit"
+        value: "carlsjr_lecturas_tenant"
+        limit: 3
+      - key: "api_rate_limit"
+        value: "emerson_lecturas_tenant"
+        limit: 3

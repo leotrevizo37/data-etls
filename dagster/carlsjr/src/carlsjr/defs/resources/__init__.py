@@ -11,6 +11,10 @@ from .mantiz_mysql import (
 )
 from .transformation_ops import transformation_ops, TransformationOps
 from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOManager
+from .lecturas_tenant_api import (
+    lecturas_tenant_api_resource,
+    LecturasTenantApiResource,
+)
 
 __all__ = [
     "sqlserver_resource",
@@ -26,5 +30,7 @@ __all__ = [
     "transformation_ops",
     "TransformationOps",
     "SparkDataFrameParquetIOManager",
-    "spark_df_io_manager"
+    "spark_df_io_manager",
+    "lecturas_tenant_api_resource",
+    "LecturasTenantApiResource",
 ]

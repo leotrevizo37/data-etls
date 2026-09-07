@@ -10,6 +10,7 @@ from .factredingsaudits_scheduler import redings_audits_sched_every_10m
 from .cleanup_schedule import cleanup_schedule
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
 from .index_maintenance_schedule import index_maintenance_schedule
+from .factlecturasmqtt_scheduler import factlecturasmqtt_daily_schedule
 
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "sensor_events_sched_every_1h_w",
     "factlecturas_cleanup_schedule",
     "index_maintenance_schedule",
+    "factlecturasmqtt_daily_schedule",
 ]
