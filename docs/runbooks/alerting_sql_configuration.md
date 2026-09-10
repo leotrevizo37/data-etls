@@ -16,11 +16,17 @@ Los scripts globales se aplican en orden numérico a cada base tenant:
 1. `023_alerting_alert_workflow_state.sql` conserva la compatibilidad previa.
 2. `024_alerting_asset_row_count_daily.sql` conserva la historia de volumen.
 3. `025_alerting_alert_config.sql` conserva el modelo de configuración previo.
-4. `026_alerting_signal_model.sql` archiva las tablas previas como `*_legacy` y
-   crea catálogos, configuración, incidencias y bitácoras.
-5. `027_serving_alert_views.sql` crea las vistas, protecciones y el procedimiento
-   de activación.
-6. `028_alerting_legacy_migration.sql` migra únicamente evidencia demostrable.
+4. `026_alerting_catalog_tables.sql` archiva las tablas previas como `*_legacy`
+   y crea las dimensiones.
+5. `027_alerting_catalog_values.sql` carga los GUID estables de los catálogos.
+6. `028_alerting_config_model.sql` crea configuración, reglas y extensiones.
+7. `029_alerting_event_model.sql` crea incidencias y bitácoras append-only.
+8. `030_serving_alert_config_validation.sql` crea la vista de validación.
+9. `031_serving_alert_state.sql` crea la vista consolidada de alertas.
+10. `032_alerting_state_guards.sql` crea protecciones y activación.
+11. `033_alerting_catalog_guards.sql` protege los GUID de catálogo.
+12. `034_alerting_legacy_config_migration.sql` migra configuración efectiva.
+13. `035_alerting_legacy_event_migration.sql` migra evidencia demostrable.
 
 Después se ejecuta
 `sql/user_codes/<user_code>/init/999_zz_alerting_alert_config.sql`. Cada seed
