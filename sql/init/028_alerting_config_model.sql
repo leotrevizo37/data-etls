@@ -42,23 +42,6 @@ IF
     END;
 GO
 
-IF
-    NOT EXISTS (
-        SELECT 1
-        FROM sys.indexes
-        WHERE
-            name = N'ux_alert_config_v2_single_active'
-            AND object_id = OBJECT_ID(N'alerting.alert_config')
-    )
-    BEGIN
-        CREATE UNIQUE INDEX ux_alert_config_v2_single_active
-            ON alerting.alert_config (config_status_id)
-            WHERE
-                config_status_id
-                = '50000000-0000-0000-0000-000000000002';
-    END;
-GO
-
 IF OBJECT_ID(N'alerting.alert_rule', N'U') IS NULL
     BEGIN
         CREATE TABLE alerting.alert_rule (
