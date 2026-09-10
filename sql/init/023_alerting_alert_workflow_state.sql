@@ -13,6 +13,8 @@ IF
 GO
 
 IF OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NULL
+    AND OBJECT_ID(N'alerting.alert_workflow_state_legacy', N'U') IS NULL
+    AND OBJECT_ID(N'alerting.alert_incident', N'U') IS NULL
     BEGIN
         CREATE TABLE alerting.alert_workflow_state (
             alert_key NVARCHAR(450) NOT NULL
@@ -86,7 +88,8 @@ IF OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NULL
 GO
 
 IF
-    NOT EXISTS (
+    OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NOT NULL
+    AND NOT EXISTS (
         SELECT 1
         FROM sys.indexes
         WHERE
@@ -101,7 +104,8 @@ IF
 GO
 
 IF
-    NOT EXISTS (
+    OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NOT NULL
+    AND NOT EXISTS (
         SELECT 1
         FROM sys.indexes
         WHERE
@@ -117,7 +121,8 @@ IF
 GO
 
 IF
-    NOT EXISTS (
+    OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NOT NULL
+    AND NOT EXISTS (
         SELECT 1
         FROM sys.indexes
         WHERE
