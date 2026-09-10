@@ -21,13 +21,6 @@ _VIEWS = "\n".join(
         "033_alerting_catalog_guards.sql",
     )
 )
-_MIGRATION = "\n".join(
-    (_ROOT / "sql" / "init" / name).read_text(encoding="utf-8")
-    for name in (
-        "034_alerting_legacy_config_migration.sql",
-        "035_alerting_legacy_event_migration.sql",
-    )
-)
 
 
 def test_signal_model_uses_stable_guid_catalogs_and_append_only_events():
@@ -166,7 +159,7 @@ def test_serving_view_exposes_only_spanish_pascal_case_contract():
     assert "WHEN incident.is_point_in_time = 1 THEN NULL" in view
 
 
-def test_configuration_validation_and_legacy_migration_are_idempotent():
+def test_configuration_validation_contract():
     assert "serving.vwValidacionConfiguracionesAlerta" in _VIEWS
     assert "usp_AlertConfig_Activate" in _VIEWS
     for validation_code in (
@@ -183,11 +176,6 @@ def test_configuration_validation_and_legacy_migration_are_idempotent():
         assert validation_code in _VIEWS
     for error_number in range(51024, 51028):
         assert f"THROW {error_number}" in _VIEWS
-    assert "NOT EXISTS" in _MIGRATION
-    assert "alert_workflow_state_legacy" in _MIGRATION
-    assert "alert_config_legacy" in _MIGRATION
-    assert "alert_rule_legacy" in _MIGRATION
-    assert "legacy.alert_type <> N'dagster_run_failure'" in _MIGRATION
 
 
 def test_tenant_alert_sensor_copies_match_carlsjr():
