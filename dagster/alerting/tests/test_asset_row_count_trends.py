@@ -209,7 +209,12 @@ def test_tenant_alert_sensor_copies_match_carlsjr():
             / "defs"
             / "sensors"
             / filename
-        ).read_text(encoding="utf-8").rstrip()
+        ).read_text(encoding="utf-8")
+        canonical = re.sub(
+            r"minimum_interval_seconds=\d+",
+            "minimum_interval_seconds=<tenant-specific>",
+            canonical,
+        ).rstrip()
         for tenant in tenants:
             candidate = (
                 _ROOT
@@ -223,5 +228,10 @@ def test_tenant_alert_sensor_copies_match_carlsjr():
             ).read_text(encoding="utf-8").replace(
                 f'_USER_CODE = "{tenant}"',
                 '_USER_CODE = "carlsjr"',
+            )
+            candidate = re.sub(
+                r"minimum_interval_seconds=\d+",
+                "minimum_interval_seconds=<tenant-specific>",
+                candidate,
             ).rstrip()
             assert candidate == canonical

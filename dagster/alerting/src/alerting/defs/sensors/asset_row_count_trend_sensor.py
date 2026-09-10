@@ -3,7 +3,7 @@ from dagster import DefaultSensorStatus, SkipReason, sensor
 
 @sensor(
     name="asset_row_count_trend_sensor",
-    minimum_interval_seconds=30,
+    minimum_interval_seconds=99999,
     default_status=DefaultSensorStatus.STOPPED,
 )
 def asset_row_count_trend_sensor() -> SkipReason:
