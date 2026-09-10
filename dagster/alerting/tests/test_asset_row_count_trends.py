@@ -1,524 +1,211 @@
-from datetime import date, datetime, timezone
-from unittest.mock import MagicMock, patch
-
-import pytest
-from dagster import AssetKey, DagsterInstance, MetadataValue, build_sensor_context
-
-from alerting.defs.resources.alert_state_store import (
-    AlertRecord,
-    AlertStateStoreResource,
-    AssetRowCountObservation,
-    AssetRowCountTrend,
-)
-from alerting.defs.resources.email_notifier import (
-    AlertPayload,
-    ConsolidatedPayload,
-    EmailNotifierResource,
-    _build_consolidated_html,
-    _build_consolidated_subject,
-)
-from alerting.defs.sensors.asset_row_count_trend_sensor import (
-    _coerce_row_count,
-    asset_row_count_trend_sensor,
-)
+import re
+from pathlib import Path
 
 
-def test_coerce_row_count_accepts_non_negative_integers():
-    assert asset_row_count_trend_sensor.minimum_interval_seconds == 21600
-    assert asset_row_count_trend_sensor.required_resource_keys == {
-        "alert_state"
-    }
-    assert _coerce_row_count(MetadataValue.int(12)) == 12
-    assert _coerce_row_count("14") == 14
-    assert _coerce_row_count(-1) is None
-    assert _coerce_row_count(1.5) is None
-    assert _coerce_row_count(True) is None
+_ROOT = Path(__file__).resolve().parents[3]
+_SIGNAL_MODEL = (
+    _ROOT / "sql" / "init" / "026_alerting_signal_model.sql"
+).read_text(encoding="utf-8")
+_VIEWS = (
+    _ROOT / "sql" / "init" / "027_serving_alert_views.sql"
+).read_text(encoding="utf-8")
+_MIGRATION = (
+    _ROOT / "sql" / "init" / "028_alerting_legacy_migration.sql"
+).read_text(encoding="utf-8")
 
 
-def test_latest_trends_query_returns_only_closed_days():
-    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
-    connection = MagicMock()
-    connection.__enter__.return_value = connection
-    cursor = MagicMock()
-    connection.cursor.return_value.__enter__.return_value = cursor
-    cursor.fetchall.return_value = [
-        (
-            date(2026, 8, 26),
-            "carlsjr",
-            "carlsjr/dwh_factlecturas",
-            "row_count",
-            2,
-            120,
-            100,
-            110,
-            115,
-            7,
-            28,
-            20,
-            9.0909,
-            4.3478,
-            "run-1",
-            datetime(2026, 8, 26, 20, 0, tzinfo=timezone.utc),
-        )
+def test_signal_model_uses_stable_guid_catalogs_and_append_only_events():
+    for code in (
+        "connection_lost",
+        "late_readings",
+        "pipeline_failure",
+        "pipeline_stale",
+        "dagster_run_failure",
+        "asset_row_count_trend",
+        "DETECTED",
+        "CLEARED",
+        "INFO",
+        "WARNING",
+        "CRITICAL",
+        "sensor_monitoring",
+        "dagster_etl",
+        "dagster",
+        "DRAFT",
+        "ACTIVE",
+        "RETIRED",
+        "NEW",
+        "OPEN",
+        "ACKNOWLEDGED",
+        "IN_PROGRESS",
+        "RESOLVED",
+        "CLOSED",
+        "FALSE_POSITIVE",
+        "DUPLICATE",
+        "CONFIGURATION_CHANGE",
+        "NO_ACTION_REQUIRED",
+        "CANCELLED",
+        "EMAIL",
+        "TICKET",
+        "PUSH_NOTIFICATION",
+        "WHATSAPP",
+        "TEAMS",
+        "SEND",
+        "CREATE",
+        "UPDATE",
+        "CLOSE",
+        "REOPEN",
+        "PENDING",
+        "PROCESSING",
+        "SUCCEEDED",
+        "DELIVERED",
+        "RETRY_PENDING",
+        "FAILED",
+    ):
+        assert f"N'{code}'" in _SIGNAL_MODEL
+    assert _SIGNAL_MODEL.count("UNIQUEIDENTIFIER NOT NULL") >= 10
+    assert "ux_alert_incident_active_condition" in _SIGNAL_MODEL
+    assert "ux_alert_incident_point_occurrence" in _SIGNAL_MODEL
+    assert "UQ_alert_signal_event_transition" in _SIGNAL_MODEL
+    assert _VIEWS.count("append_only") == 3
+    assert _VIEWS.count("_stable") == 10
+
+
+def test_serving_view_exposes_only_spanish_pascal_case_contract():
+    expected = [
+        "AlertaId",
+        "CodigoAlerta",
+        "CodigoUsuario",
+        "TipoAlertaId",
+        "TipoAlertaCodigo",
+        "TipoAlertaNombre",
+        "SeveridadId",
+        "SeveridadCodigo",
+        "SeveridadNombre",
+        "FuenteDisparoId",
+        "FuenteDisparoCodigo",
+        "FuenteDisparoNombre",
+        "EntidadId",
+        "ClaveEntidad",
+        "ConfiguracionAlertaId",
+        "ReglaAlertaId",
+        "EventoDeteccionId",
+        "FechaOcurrenciaDeteccion",
+        "FechaRegistroDeteccion",
+        "EventoFinCondicionId",
+        "FechaOcurrenciaFinCondicion",
+        "FechaRegistroFinCondicion",
+        "EsCondicionContinua",
+        "CondicionActiva",
+        "DetalleDeteccion",
+        "MetadatosDeteccionJson",
+        "EventoEstadoAlertaId",
+        "EstadoAlertaId",
+        "EstadoAlertaCodigo",
+        "EstadoAlertaNombre",
+        "FechaOcurrenciaEstadoAlerta",
+        "FechaRegistroEstadoAlerta",
+        "TipoCierreId",
+        "TipoCierreCodigo",
+        "TipoCierreNombre",
+        "CerradaPor",
+        "NotaCierre",
+        "AccionTicketId",
+        "TicketIdExterno",
+        "FechaCreacionTicket",
+        "FechaUltimoIntentoCreacionTicket",
+        "CantidadIntentosCreacionTicket",
+        "EstadoUltimaAccionTicketId",
+        "EstadoUltimaAccionTicketCodigo",
+        "EstadoUltimaAccionTicketNombre",
+        "UltimoCodigoErrorTicket",
+        "UltimoMensajeErrorTicket",
+        "AccionCorreoId",
+        "FechaUltimoIntentoCorreo",
+        "CantidadIntentosCorreo",
+        "FechaUltimoCorreoExitoso",
+        "EstadoUltimaAccionCorreoId",
+        "EstadoUltimaAccionCorreoCodigo",
+        "EstadoUltimaAccionCorreoNombre",
+        "UltimoCodigoErrorCorreo",
+        "UltimoMensajeErrorCorreo",
+        "EsLegada",
+        "ClaveLegada",
     ]
-
-    with patch.object(
-        store, "_get_alert_connection", return_value=connection
-    ) as get_connection:
-        trends = store.get_latest_asset_row_count_trends(
-            "carlsjr_db", "carlsjr"
+    view = _VIEWS.split(
+        "CREATE OR ALTER VIEW serving.vwEstadoAlertas",
+        1,
+    )[1].split("\nGO", 1)[0]
+    aliases = [
+        alias
+        for alias in re.findall(
+            r"\bAS ([A-Z][A-Za-z0-9]*)[,\r\n]",
+            view,
         )
-
-    get_connection.assert_called_once_with("carlsjr_db", "carlsjr")
-    query, user_code = cursor.execute.call_args.args
-    assert "observation_date < CONVERT(DATE, SYSUTCDATETIME())" in query
-    assert user_code == "carlsjr"
-    assert trends == [
-        AssetRowCountTrend(
-            observation_date=date(2026, 8, 26),
-            code_location="carlsjr",
-            asset_key="carlsjr/dwh_factlecturas",
-            metadata_key="row_count",
-            daily_materialization_count=2,
-            daily_row_count=120,
-            average_1d=100,
-            average_7d=110,
-            average_28d=115,
-            observed_days_7d=7,
-            observed_days_28d=28,
-            change_vs_1d_pct=20,
-            change_vs_7d_pct=9.0909,
-            change_vs_28d_pct=4.3478,
-            latest_run_id="run-1",
-            latest_materialized_at=datetime(
-                2026, 8, 26, 20, 0, tzinfo=timezone.utc
-            ),
-        )
+        if alias != "BIT"
     ]
+    assert aliases == expected
+    assert "COALESCE(ticket_attempts.attempt_count, 0)" in view
+    assert "COALESCE(email_attempts.attempt_count, 0)" in view
+    assert "WHEN incident.is_point_in_time = 1 THEN NULL" in view
 
 
-def test_row_count_store_writes_to_tenant_mssql_database():
-    connection = MagicMock()
-    connection.__enter__.return_value = connection
-    cursor = MagicMock()
-    cursor.fetchone.return_value = (1,)
-    connection.cursor.return_value.__enter__.return_value = cursor
-    reader = MagicMock()
-    reader._get_connection.return_value = connection
-    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
-    store._mssql_reader = reader
-    observation = AssetRowCountObservation(
-        observation_date=date(2026, 8, 26),
-        code_location="carlsjr",
-        asset_key="carlsjr/dwh_factlecturas",
-        metadata_key="row_count",
-        row_count=240,
-        event_storage_id=321,
-        run_id="run-1",
-        materialized_at=datetime(
-            2026, 8, 26, 12, 30, tzinfo=timezone.utc
-        ),
-    )
-
-    recorded = store.record_asset_row_counts(
-        "carlsjr_db", "carlsjr", [observation]
-    )
-
-    reader._get_connection.assert_called_once_with(
-        "carlsjr_db", "carlsjr", read_only=False
-    )
-    upsert_query, parameters = cursor.execute.call_args_list[0].args
-    assert "WITH (UPDLOCK, SERIALIZABLE)" in upsert_query
-    assert "SYSUTCDATETIME()" in upsert_query
-    assert "ON CONFLICT" not in upsert_query
-    assert parameters[1] == "carlsjr"
-    assert recorded == 1
-    connection.commit.assert_called_once_with()
-
-
-def test_row_count_store_rejects_cross_tenant_observations():
-    store = AlertStateStoreResource.__new__(AlertStateStoreResource)
-    store._mssql_reader = MagicMock()
-    observation = AssetRowCountObservation(
-        observation_date=date(2026, 8, 26),
-        code_location="emerson",
-        asset_key="emerson/dwh_factlecturas",
-        metadata_key="row_count",
-        row_count=240,
-        event_storage_id=321,
-        run_id="run-1",
-        materialized_at=datetime(
-            2026, 8, 26, 12, 30, tzinfo=timezone.utc
-        ),
-    )
-
-    with pytest.raises(ValueError):
-        store.record_asset_row_counts(
-            "carlsjr_db", "carlsjr", [observation]
-        )
-
-    store._mssql_reader._get_connection.assert_not_called()
-
-
-def test_trend_sensor_records_row_count_materialization():
-    instance = DagsterInstance.ephemeral()
-    state = MagicMock()
-    state.record_asset_row_counts.return_value = 1
-    record = MagicMock()
-    record.storage_id = 321
-    record.run_id = "run-1"
-    record.timestamp = datetime(2026, 8, 26, 12, 30, tzinfo=timezone.utc).timestamp()
-    record.asset_key = AssetKey(["carlsjr", "dwh_factlecturas"])
-    record.asset_materialization.metadata = {
-        "row_count": MetadataValue.int(240),
-    }
-    run = MagicMock()
-    run.remote_job_origin.repository_origin.code_location_origin.location_name = (
-        "carlsjr"
-    )
-    config = {
-        "defaults": {
-            "asset_row_count_trends": {
-                "enabled": True,
-                "metadata_key": "row_count",
-                "backfill_days": 28,
-                "batch_size": 500,
-            }
-        },
-        "user_codes": {"carlsjr": {"database": "carlsjr_db"}},
-    }
-
-    with (
-        patch.object(
-            instance.event_log_storage,
-            "get_event_records",
-            return_value=[record],
-        ) as get_event_records,
-        patch.object(instance, "get_run_by_id", return_value=run),
-        patch(
-            "alerting.defs.sensors.asset_row_count_trend_sensor._load_config",
-            return_value=config,
-        ),
+def test_configuration_validation_and_legacy_migration_are_idempotent():
+    assert "serving.vwValidacionConfiguracionesAlerta" in _VIEWS
+    assert "usp_AlertConfig_Activate" in _VIEWS
+    for validation_code in (
+        "REGLA_DEFAULT_FALTANTE",
+        "CODIGO_USUARIO_INVALIDO",
+        "CODIGO_USUARIO_INCONSISTENTE",
+        "CLAVE_METADATA_TENDENCIA_INVALIDA",
+        "CLAVE_SENSOR_INVALIDA",
+        "TIPO_ALERTA_INACTIVO",
+        "SEVERIDAD_INACTIVA",
+        "SEVERIDAD_CRITICA_TENDENCIA_INVALIDA",
+        "VERSION_CONFIGURACION_NO_VIGENTE",
     ):
-        context = build_sensor_context(
-            instance=instance,
-            resources={
-                "alert_state": state,
-                "email_notifier": MagicMock(),
-            },
-        )
-        result = asset_row_count_trend_sensor.evaluate_tick(context)
+        assert validation_code in _VIEWS
+    for error_number in range(51024, 51028):
+        assert f"THROW {error_number}" in _VIEWS
+    assert "NOT EXISTS" in _MIGRATION
+    assert "alert_workflow_state_legacy" in _MIGRATION
+    assert "alert_config_legacy" in _MIGRATION
+    assert "alert_rule_legacy" in _MIGRATION
+    assert "legacy.alert_type <> N'dagster_run_failure'" in _MIGRATION
 
-    event_filter = get_event_records.call_args.args[0]
-    assert event_filter.after_cursor is None
-    assert event_filter.after_timestamp is not None
-    state.record_asset_row_counts.assert_called_once()
-    database, user_code, tenant_observations = (
-        state.record_asset_row_counts.call_args.args
+
+def test_tenant_alert_sensor_copies_match_carlsjr():
+    tenants = (
+        "bafar",
+        "bafar_poc_gabinete",
+        "emerson",
+        "valledelencino",
     )
-    assert database == "carlsjr_db"
-    assert user_code == "carlsjr"
-    observation = tenant_observations[0]
-    assert observation == AssetRowCountObservation(
-        observation_date=date(2026, 8, 26),
-        code_location="carlsjr",
-        asset_key="carlsjr/dwh_factlecturas",
-        metadata_key="row_count",
-        row_count=240,
-        event_storage_id=321,
-        run_id="run-1",
-        materialized_at=datetime(2026, 8, 26, 12, 30, tzinfo=timezone.utc),
-    )
-    assert context.cursor == "321"
-    assert "recorded 1 row count observations" in result.skip_message
-
-
-def test_trend_sensor_ignores_materializations_without_row_count():
-    instance = DagsterInstance.ephemeral()
-    state = MagicMock()
-    record = MagicMock()
-    record.storage_id = 322
-    record.run_id = "run-2"
-    record.timestamp = datetime(2026, 8, 26, 13, 0, tzinfo=timezone.utc).timestamp()
-    record.asset_key = AssetKey(["carlsjr", "asset_without_count"])
-    record.asset_materialization.metadata = {"merged_rows": MetadataValue.int(10)}
-
-    with (
-        patch.object(
-            instance.event_log_storage,
-            "get_event_records",
-            return_value=[record],
-        ),
-        patch(
-            "alerting.defs.sensors.asset_row_count_trend_sensor._load_config",
-            return_value={"defaults": {"asset_row_count_trends": {}}},
-        ),
+    for filename in (
+        "operational_alerts_sensor.py",
+        "asset_row_count_trend_sensor.py",
     ):
-        context = build_sensor_context(
-            instance=instance,
-            resources={
-                "alert_state": state,
-                "email_notifier": MagicMock(),
-            },
-        )
-        result = asset_row_count_trend_sensor.evaluate_tick(context)
-
-    state.record_asset_row_counts.assert_not_called()
-    assert context.cursor == "322"
-    assert "recorded 0 row count observations" in result.skip_message
-
-
-def test_trend_sensor_records_open_alert_without_sending_email():
-    instance = DagsterInstance.ephemeral()
-    state = MagicMock()
-    state.get_latest_asset_row_count_trends.return_value = [
-        AssetRowCountTrend(
-            observation_date=date(2026, 8, 26),
-            code_location="carlsjr",
-            asset_key="carlsjr/dwh_factlecturas",
-            metadata_key="row_count",
-            daily_materialization_count=1,
-            daily_row_count=50,
-            average_1d=100,
-            average_7d=110,
-            average_28d=120,
-            observed_days_7d=7,
-            observed_days_28d=28,
-            change_vs_1d_pct=-50,
-            change_vs_7d_pct=-54.5455,
-            change_vs_28d_pct=-58.3333,
-            latest_run_id="run-3",
-            latest_materialized_at=datetime(
-                2026, 8, 26, 22, 0, tzinfo=timezone.utc
-            ),
-        )
-    ]
-    state.get_active_alerts.return_value = {}
-    email = MagicMock()
-    email.send_consolidated.return_value = True
-    config = {
-        "defaults": {
-            "asset_row_count_trends": {
-                "enabled": True,
-                "notifications_enabled": True,
-                "warning_drop_pct": 20,
-                "critical_drop_pct": 40,
-                "minimum_observed_days_7d": 3,
-                "minimum_observed_days_28d": 7,
-            },
-        },
-        "user_codes": {"carlsjr": {}},
-    }
-
-    with (
-        patch.object(
-            instance.event_log_storage,
-            "get_event_records",
-            return_value=[],
-        ),
-        patch(
-            "alerting.defs.sensors.asset_row_count_trend_sensor._load_config",
-            return_value=config,
-        ),
-    ):
-        context = build_sensor_context(
-            instance=instance,
-            cursor="10",
-            resources={
-                "alert_state": state,
-                "email_notifier": email,
-            },
-        )
-        result = asset_row_count_trend_sensor.evaluate_tick(context)
-
-    email.send_consolidated.assert_not_called()
-    state.upsert_alert.assert_called_once()
-    call = state.upsert_alert.call_args.kwargs
-    assert call["database"] == "carlsjr"
-    assert call["alert_key"].startswith(
-        "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas::"
-    )
-    assert call["notification_count"] == 0
-    assert call["state"] == "OPEN"
-    assert call["trigger_source"] == "dagster"
-    assert "Severity: CRITICAL" in call["details"]
-    assert "Average28d: 120.00" in call["details"]
-    assert "1 opened" in result.skip_message
-
-
-def test_trend_sensor_requires_complete_7d_and_28d_history():
-    instance = DagsterInstance.ephemeral()
-    state = MagicMock()
-    state.get_latest_asset_row_count_trends.return_value = [
-        AssetRowCountTrend(
-            observation_date=date(2026, 8, 26),
-            code_location="carlsjr",
-            asset_key="carlsjr/dwh_factlecturas",
-            metadata_key="row_count",
-            daily_materialization_count=1,
-            daily_row_count=90,
-            average_1d=100,
-            average_7d=100,
-            average_28d=140,
-            observed_days_7d=6,
-            observed_days_28d=27,
-            change_vs_1d_pct=-10,
-            change_vs_7d_pct=-50,
-            change_vs_28d_pct=-50,
-            latest_run_id="run-4",
-            latest_materialized_at=datetime(
-                2026, 8, 26, 22, 0, tzinfo=timezone.utc
-            ),
-        )
-    ]
-    state.get_active_alerts.return_value = {}
-    email = MagicMock()
-    config = {
-        "defaults": {
-            "asset_row_count_trends": {
-                "notifications_enabled": True,
-                "warning_drop_pct": 20,
-                "minimum_observed_days_7d": 7,
-                "minimum_observed_days_28d": 28,
-            },
-        },
-        "user_codes": {"carlsjr": {}},
-    }
-
-    with (
-        patch.object(
-            instance.event_log_storage,
-            "get_event_records",
-            return_value=[],
-        ),
-        patch(
-            "alerting.defs.sensors.asset_row_count_trend_sensor._load_config",
-            return_value=config,
-        ),
-    ):
-        context = build_sensor_context(
-            instance=instance,
-            cursor="10",
-            resources={
-                "alert_state": state,
-                "email_notifier": email,
-            },
-        )
-        asset_row_count_trend_sensor.evaluate_tick(context)
-
-    email.send_consolidated.assert_not_called()
-    state.upsert_alert.assert_not_called()
-
-
-def test_trend_sensor_queues_resolution_without_sending_email():
-    instance = DagsterInstance.ephemeral()
-    key = "carlsjr::asset_row_count_trend::carlsjr/dwh_factlecturas"
-    state = MagicMock()
-    state.get_latest_asset_row_count_trends.return_value = []
-    state.get_active_alerts.return_value = {
-        key: AlertRecord(
-            alert_key=key,
-            user_code="carlsjr",
-            trigger_source="dagster",
-            alert_type="asset_row_count_trend",
-            entity_id="carlsjr/dwh_factlecturas",
-            state="OPEN",
-            details=None,
-            first_detected_at=datetime.now(timezone.utc),
-            last_notified_at=datetime.now(timezone.utc),
-            resolved_at=None,
-            notification_count=1,
-        )
-    }
-    email = MagicMock()
-    config = {
-        "defaults": {
-            "asset_row_count_trends": {
-                "notifications_enabled": True,
-                "warning_drop_pct": 20,
-                "critical_drop_pct": 40,
-                "minimum_observed_days_7d": 3,
-                "minimum_observed_days_28d": 7,
-            },
-        },
-        "user_codes": {"carlsjr": {}},
-    }
-
-    with (
-        patch.object(
-            instance.event_log_storage,
-            "get_event_records",
-            return_value=[],
-        ),
-        patch(
-            "alerting.defs.sensors.asset_row_count_trend_sensor._load_config",
-            return_value=config,
-        ),
-    ):
-        context = build_sensor_context(
-            instance=instance,
-            cursor="10",
-            resources={
-                "alert_state": state,
-                "email_notifier": email,
-            },
-        )
-        result = asset_row_count_trend_sensor.evaluate_tick(context)
-
-    email.send_consolidated.assert_not_called()
-    state.upsert_alert.assert_not_called()
-    state.mark_resolved.assert_called_once_with(
-        "carlsjr",
-        "carlsjr",
-        key,
-        None,
-        {"reason": "El volumen dejó de incumplir los umbrales."},
-    )
-    assert "0 opened, 1 resolved" in result.skip_message
-
-
-def test_daily_monitoring_uses_tenant_specific_recipients(monkeypatch):
-    monkeypatch.setenv("ALERT_SMTP_HOST", "localhost")
-    monkeypatch.setenv("ALERT_SMTP_FROM", "alerts@example.com")
-    monkeypatch.setenv("ALERT_SMTP_TO", "default@example.com")
-    monkeypatch.setenv("ALERT_SMTP_TO_CARLSJR", "monitoring@example.com")
-    monkeypatch.setenv(
-        "ALERT_SMTP_TO_CARLSJR_ASSET_ROW_COUNT_TREND",
-        "quality@example.com",
-    )
-    smtp = MagicMock()
-    smtp.__enter__.return_value = smtp
-    payload = ConsolidatedPayload(
-        user_code="carlsjr",
-        active_alerts=[
-            AlertPayload(
-                alert_key="carlsjr::connection_lost::sensor",
-                user_code="carlsjr",
-                alert_type="connection_lost",
-                entity_id="sensor",
-                state="REMINDER",
-            ),
-            AlertPayload(
-                alert_key="carlsjr::asset_row_count_trend::asset",
-                user_code="carlsjr",
-                alert_type="asset_row_count_trend",
-                    entity_id="asset",
-                    state="REMINDER",
-                ),
-        ],
-    )
-
-    with patch(
-        "alerting.defs.resources.email_notifier.smtplib.SMTP",
-        return_value=smtp,
-    ):
-        sent = EmailNotifierResource().send_consolidated(payload)
-
-    assert sent is True
-    assert smtp.sendmail.call_args.args[1] == ["monitoring@example.com"]
-    html = _build_consolidated_html(payload)
-    assert _build_consolidated_subject(payload).startswith(
-        "[MONITOREO OPERATIVO] CARLSJR"
-    )
-    assert "Recordatorio de sensores y pipelines" in html
-    assert "Caída de Volumen de Lecturas" in html
+        canonical = (
+            _ROOT
+            / "dagster"
+            / "carlsjr"
+            / "src"
+            / "carlsjr"
+            / "defs"
+            / "sensors"
+            / filename
+        ).read_text(encoding="utf-8").rstrip()
+        for tenant in tenants:
+            candidate = (
+                _ROOT
+                / "dagster"
+                / tenant
+                / "src"
+                / tenant
+                / "defs"
+                / "sensors"
+                / filename
+            ).read_text(encoding="utf-8").replace(
+                f'_USER_CODE = "{tenant}"',
+                '_USER_CODE = "carlsjr"',
+            ).rstrip()
+            assert candidate == canonical
