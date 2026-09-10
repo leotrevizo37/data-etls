@@ -62,15 +62,19 @@ class DimStoreSchedulesMergeSqlTests(unittest.TestCase):
         self.connection.cursor.return_value = self.cursor
         self.resource._get_connection = MagicMock(return_value=self.connection)
 
-    def test_merge_sql_is_idempotent_by_store_id(self) -> None:
+    def test_merge_sql_is_idempotent_by_store_and_day(self) -> None:
         sql = self.module.build_dim_store_schedules_merge_sql()
 
         self.assertIn("MERGE dwh.dimStoreSchedules", sql)
         self.assertIn("FROM stg.dimStoreSchedules", sql)
         self.assertIn("WHERE RunId = ?", sql)
         self.assertIn("target.StoreId = source.StoreId", sql)
+        self.assertIn("target.DayNo = source.DayNo", sql)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
-        self.assertIn("WHEN MATCHED THEN", sql)
+        self.assertIn("ClosingDate < CONVERT(DATE, SYSUTCDATETIME())", sql)
+        self.assertNotIn("target.CreatedAt =", sql)
+        self.assertNotIn("WHEN NOT MATCHED BY SOURCE", sql)
+        self.assertIn("WHEN MATCHED AND EXISTS", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
 
     def test_clear_stage_deletes_only_the_requested_run(self) -> None:
@@ -97,6 +101,38 @@ class DimStoreSchedulesMergeSqlTests(unittest.TestCase):
         )
         self.connection.commit.assert_called_once_with()
 
+    def test_stage_writer_uses_normalized_store_day_rows(self) -> None:
+        rows = [
+            {
+                "StoreId": "M017",
+                "CustomerNo": "M017",
+                "StoreName": "Tienda de prueba",
+                "OpeningDate": "2016-01-01",
+                "ClosingDate": "9999-12-31",
+                "IsBlocked": False,
+                "BlockedFrom": None,
+                "BlockedTo": None,
+                "ReceivingId": "003",
+                "DayCode": "MON",
+                "DayNo": 1,
+                "IsClosed": False,
+                "OpeningTime": "06:30:00",
+                "LunchStartTime": None,
+                "LunchEndTime": None,
+                "ClosingTime": "14:30:00",
+            }
+        ]
+
+        written = self.resource.write_dim_store_schedules_stage("run-3", rows)
+
+        self.assertEqual(written, 1)
+        self.cursor.executemany.assert_called_once()
+        self.assertIn(
+            "INSERT INTO stg.dimStoreSchedules",
+            self.cursor.executemany.call_args.args[0],
+        )
+        self.assertEqual(self.cursor.executemany.call_args.args[1][0][0], "run-3")
+        self.connection.commit.assert_called_once_with()
 
 if __name__ == "__main__":
     unittest.main()

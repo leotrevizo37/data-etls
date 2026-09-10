@@ -3,6 +3,7 @@ from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOMan
 from .sql_server import SqlServerResource, sqlserver_resource
 from .sql_server_dimensions import SqlDimServerResource, dim_sqlserver_resource
 from .manager_access_api import ManagerAccessApiResource, manager_access_api_resource
+from .store_schedules_api import StoreSchedulesApiResource, store_schedules_api_resource
 
 __all__ = [
     "SparkResource",
@@ -15,4 +16,6 @@ __all__ = [
     "dim_sqlserver_resource",
     "ManagerAccessApiResource",
     "manager_access_api_resource",
+    "StoreSchedulesApiResource",
+    "store_schedules_api_resource",
 ]

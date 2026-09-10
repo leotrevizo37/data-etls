@@ -7,7 +7,7 @@
 ## Fuentes de datos
 
 - Ventas Bafar desde SQL Server.
-- `dwh.dimStoreSchedules` para el horario vigente por sucursal y dia de la semana.
+- [`dwh.dimStoreSchedules`](dim_store_schedules.md) para el horario vigente por sucursal y dia de la semana.
 - `dwh.dimOutOfHoursTypes` para la descripcion del tipo de desviacion.
 - Control incremental: `ctl.IngestionControl` con `IngestionName = 'FactOutOfHoursSales'`.
 

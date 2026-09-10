@@ -26,6 +26,10 @@ flowchart LR
   mantizInsights --> mantizReview["ctl.MantizTextInsightReviewQueue"]
 
   bafarSales["SQL Server Bafar: ventas"] --> outOfHoursSales["dwh.factOutOfHoursSales"]
+  bafarSchedulesApi["API Bafar: horarios"] --> bafarSchedulesRaw["raw.StoreSchedulesApiPage"]
+  bafarSchedulesApi --> bafarSchedulesValidation["validacion y normalizacion"]
+  bafarSchedulesValidation --> bafarSchedulesStage["stg.dimStoreSchedules"]
+  bafarSchedulesStage --> bafarSchedules["dwh.dimStoreSchedules"]
   bafarSchedules["dwh.dimStoreSchedules"] --> outOfHoursSales
 
   managerAccessApi["API Bafar: ultimo acceso de gerentes"] --> managerAccess["dwh.factManagerAccessDaily"]
@@ -37,6 +41,7 @@ flowchart LR
   control --> smartauditsFact
   control --> mantizLifecycle
   control --> mantizInsights
+  control --> bafarSchedules
   control --> outOfHoursSales
   control --> managerAccess
 ```
@@ -59,7 +64,9 @@ Mantiz tiene dos salidas principales. `dwh.factMantizTicketLifecycle` modela el 
 
 ## Ventas fuera de horario Bafar
 
-El flujo Bafar lee ventas incrementales, las compara contra `dwh.dimStoreSchedules` y conserva en `dwh.factOutOfHoursSales` las ventas antes de apertura, durante comida, despues de cierre o sin horario aplicable. El watermark `FactOutOfHoursSales` solo se actualiza al completar la corrida.
+Los horarios se obtienen diariamente desde la API Bafar. Cada pagina se conserva en `raw.StoreSchedulesApiPage` antes de validarse, la corrida completa se normaliza en `stg.dimStoreSchedules` y el `MERGE` conserva en `dwh.dimStoreSchedules` el ultimo horario valido por sucursal y dia. Un fallo previo al `MERGE` no modifica los horarios vigentes.
+
+El flujo de ventas lee datos incrementales, los compara contra `dwh.dimStoreSchedules` y conserva en `dwh.factOutOfHoursSales` las ventas antes de apertura, durante comida, despues de cierre o sin horario aplicable. El watermark `FactOutOfHoursSales` solo se actualiza al completar la corrida.
 
 ## Acceso de gerentes Bafar
 
