@@ -1,40 +1,40 @@
 IF
     OBJECT_ID(N'dwh.dimStoreSchedules', N'U') IS NOT NULL
     AND COL_LENGTH(N'dwh.dimStoreSchedules', N'DayNo') IS NULL
-        BEGIN
-            BEGIN TRY
-                BEGIN TRANSACTION;
+    BEGIN
+        BEGIN TRY
+            BEGIN TRANSACTION;
 
-                CREATE TABLE dwh.dimStoreSchedulesApiMigration
-                (
-                    StoreId VARCHAR(4) NOT NULL,
-                    CustomerNo VARCHAR(20) NOT NULL,
-                    StoreName NVARCHAR(250) NOT NULL,
-                    OpeningDate DATE NULL,
-                    ClosingDate DATE NULL,
-                    IsBlocked BIT NOT NULL,
-                    BlockedFrom DATE NULL,
-                    BlockedTo DATE NULL,
-                    ReceivingId VARCHAR(20) NULL,
-                    DayCode CHAR(3) NOT NULL,
-                    DayNo TINYINT NOT NULL,
-                    IsClosed BIT NOT NULL,
-                    OpeningTime TIME(0) NULL,
-                    LunchStartTime TIME(0) NULL,
-                    LunchEndTime TIME(0) NULL,
-                    ClosingTime TIME(0) NULL,
-                    IsDeleted BIT NOT NULL,
-                    CreatedAt DATETIME2(0) NOT NULL,
-                    ModifiedAt DATETIME2(0) NOT NULL,
-                    CONSTRAINT PK_dimStoreSchedulesApiMigration
-                    PRIMARY KEY CLUSTERED (StoreId, DayNo),
-                    CONSTRAINT CK_dimStoreSchedulesApiMigration_DayNo
-                    CHECK (DayNo BETWEEN 1 AND 7),
-                    CONSTRAINT CK_dimStoreSchedulesApiMigration_DayCode
-                    CHECK (DayCode IN ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'))
-                );
+            CREATE TABLE dwh.dimStoreSchedulesApiMigration
+            (
+                StoreId VARCHAR(4) NOT NULL,
+                CustomerNo VARCHAR(20) NOT NULL,
+                StoreName NVARCHAR(250) NOT NULL,
+                OpeningDate DATE NULL,
+                ClosingDate DATE NULL,
+                IsBlocked BIT NOT NULL,
+                BlockedFrom DATE NULL,
+                BlockedTo DATE NULL,
+                ReceivingId VARCHAR(20) NULL,
+                DayCode CHAR(3) NOT NULL,
+                DayNo TINYINT NOT NULL,
+                IsClosed BIT NOT NULL,
+                OpeningTime TIME(0) NULL,
+                LunchStartTime TIME(0) NULL,
+                LunchEndTime TIME(0) NULL,
+                ClosingTime TIME(0) NULL,
+                IsDeleted BIT NOT NULL,
+                CreatedAt DATETIME2(0) NOT NULL,
+                ModifiedAt DATETIME2(0) NOT NULL,
+                CONSTRAINT PK_dimStoreSchedulesApiMigration
+                PRIMARY KEY CLUSTERED (StoreId, DayNo),
+                CONSTRAINT CK_dimStoreSchedulesApiMigration_DayNo
+                CHECK (DayNo BETWEEN 1 AND 7),
+                CONSTRAINT CK_dimStoreSchedulesApiMigration_DayCode
+                CHECK (DayCode IN ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'))
+            );
 
-                EXEC sp_executesql N'
+            EXEC sp_executesql N'
             INSERT INTO dwh.dimStoreSchedulesApiMigration
             (
                 StoreId,
@@ -95,17 +95,17 @@ IF
                     (''SUN'', 7, schedules.SundayOpeningTime, schedules.SundayLunchStartTime, schedules.SundayLunchEndTime, schedules.SundayClosingTime)
             ) AS day_schedule (DayCode, DayNo, OpeningTime, LunchStartTime, LunchEndTime, ClosingTime);';
 
-                DROP TABLE dwh.dimStoreSchedules;
-                EXEC sp_rename N'dwh.dimStoreSchedulesApiMigration', N'dimStoreSchedules';
+            DROP TABLE dwh.dimStoreSchedules;
+            EXEC sp_rename N'dwh.dimStoreSchedulesApiMigration', N'dimStoreSchedules';
 
-                COMMIT TRANSACTION;
-            END TRY
-            BEGIN CATCH
-                IF @@TRANCOUNT > 0
-                    ROLLBACK TRANSACTION;
-                THROW;
-            END CATCH;
-        END;
+            COMMIT TRANSACTION;
+        END TRY
+        BEGIN CATCH
+            IF @@TRANCOUNT > 0
+                ROLLBACK TRANSACTION;
+            THROW;
+        END CATCH;
+    END;
 GO
 
 IF OBJECT_ID(N'dwh.PK_dimStoreSchedulesApiMigration', N'PK') IS NOT NULL
@@ -132,14 +132,14 @@ IF
         SELECT 1
         FROM sys.default_constraints
         WHERE
-        parent_object_id = OBJECT_ID(N'dwh.dimStoreSchedules')
+            parent_object_id = OBJECT_ID(N'dwh.dimStoreSchedules')
             AND parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'dwh.dimStoreSchedules'), N'CreatedAt', 'ColumnId')
     )
-        BEGIN
-            ALTER TABLE dwh.dimStoreSchedules
-            ADD CONSTRAINT DF_dimStoreSchedules_CreatedAt
-            DEFAULT (SYSUTCDATETIME()) FOR CreatedAt;
-        END;
+    BEGIN
+        ALTER TABLE dwh.dimStoreSchedules
+        ADD CONSTRAINT DF_dimStoreSchedules_CreatedAt
+        DEFAULT (SYSUTCDATETIME()) FOR CreatedAt;
+    END;
 GO
 
 IF
@@ -148,22 +148,22 @@ IF
         SELECT 1
         FROM sys.default_constraints
         WHERE
-        parent_object_id = OBJECT_ID(N'dwh.dimStoreSchedules')
+            parent_object_id = OBJECT_ID(N'dwh.dimStoreSchedules')
             AND parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'dwh.dimStoreSchedules'), N'ModifiedAt', 'ColumnId')
     )
-        BEGIN
-            ALTER TABLE dwh.dimStoreSchedules
-            ADD CONSTRAINT DF_dimStoreSchedules_ModifiedAt
-            DEFAULT (SYSUTCDATETIME()) FOR ModifiedAt;
-        END;
+    BEGIN
+        ALTER TABLE dwh.dimStoreSchedules
+        ADD CONSTRAINT DF_dimStoreSchedules_ModifiedAt
+        DEFAULT (SYSUTCDATETIME()) FOR ModifiedAt;
+    END;
 GO
 
 IF
     OBJECT_ID(N'stg.dimStoreSchedules', N'U') IS NOT NULL
     AND COL_LENGTH(N'stg.dimStoreSchedules', N'DayNo') IS NULL
-        BEGIN
-            DROP TABLE stg.dimStoreSchedules;
-        END;
+    BEGIN
+        DROP TABLE stg.dimStoreSchedules;
+    END;
 GO
 
 IF OBJECT_ID(N'stg.dimStoreSchedules', N'U') IS NULL
