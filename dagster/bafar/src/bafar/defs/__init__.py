@@ -18,6 +18,10 @@ def _build_defs() -> Any:
         spark_resource,
         sqlserver_resource,
     )
+    from .sensors import (
+        asset_row_count_trend_sensor,
+        operational_alerts_sensor,
+    )
 
     return Definitions(
         resources={
@@ -27,6 +31,10 @@ def _build_defs() -> Any:
             "dim_sqlserver": dim_sqlserver_resource,
             "manager_access_api": manager_access_api_resource,
         },
+        sensors=[
+            asset_row_count_trend_sensor,
+            operational_alerts_sensor,
+        ],
     )
 
 
