@@ -340,6 +340,20 @@ class SparkResourceTests(unittest.TestCase):
             backfill_query,
         )
 
+    def test_store_schedule_reader_maps_iso_days_and_omits_closed_days(self) -> None:
+        spark = MagicMock()
+        sqlserver = MagicMock()
+        sqlserver.get_basic_options.return_value = {"url": "jdbc:test"}
+        self.resource.get_spark = MagicMock(return_value=spark)
+        query_option = spark.read.format.return_value.options.return_value.option
+
+        self.resource.read_store_schedules(sqlserver)
+
+        query = query_option.call_args.args[1]
+        self.assertIn("CASE WHEN DayNo = 7 THEN 1 ELSE DayNo + 1 END", query)
+        self.assertIn("WHERE IsClosed = 0", query)
+        self.assertNotIn("CROSS APPLY", query)
+
     def test_spark_capacity_network_and_port_guards(self) -> None:
         self.resource.master_url = "spark://spark-master:7077"
         self.resource.resource_wait_seconds = 0

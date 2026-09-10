@@ -16,155 +16,129 @@ MERGE dwh.dimStoreSchedules AS target
 USING (
     SELECT
         StoreId,
+        CustomerNo,
+        StoreName,
         OpeningDate,
         ClosingDate,
-        ReceptionHours,
-        MondayOpeningTime,
-        MondayLunchStartTime,
-        MondayLunchEndTime,
-        MondayClosingTime,
-        TuesdayOpeningTime,
-        TuesdayLunchStartTime,
-        TuesdayLunchEndTime,
-        TuesdayClosingTime,
-        WednesdayOpeningTime,
-        WednesdayLunchStartTime,
-        WednesdayLunchEndTime,
-        WednesdayClosingTime,
-        ThursdayOpeningTime,
-        ThursdayLunchStartTime,
-        ThursdayLunchEndTime,
-        ThursdayClosingTime,
-        FridayOpeningTime,
-        FridayLunchStartTime,
-        FridayLunchEndTime,
-        FridayClosingTime,
-        SaturdayOpeningTime,
-        SaturdayLunchStartTime,
-        SaturdayLunchEndTime,
-        SaturdayClosingTime,
-        SundayOpeningTime,
-        SundayLunchStartTime,
-        SundayLunchEndTime,
-        SundayClosingTime,
-        CreatedAt,
-        CreatedBy,
-        SalesOfficeId
+        IsBlocked,
+        BlockedFrom,
+        BlockedTo,
+        ReceivingId,
+        DayCode,
+        DayNo,
+        IsClosed,
+        OpeningTime,
+        LunchStartTime,
+        LunchEndTime,
+        ClosingTime,
+        CAST(
+            CASE
+                WHEN ClosingDate IS NOT NULL
+                    AND ClosingDate < CONVERT(DATE, SYSUTCDATETIME())
+                    THEN 1
+                ELSE 0
+            END
+            AS BIT
+        ) AS IsDeleted
     FROM stg.dimStoreSchedules
     WHERE RunId = ?
 ) AS source
     ON target.StoreId = source.StoreId
-WHEN MATCHED THEN
+    AND target.DayNo = source.DayNo
+WHEN MATCHED AND EXISTS (
+    SELECT
+        source.CustomerNo,
+        source.StoreName,
+        source.OpeningDate,
+        source.ClosingDate,
+        source.IsBlocked,
+        source.BlockedFrom,
+        source.BlockedTo,
+        source.ReceivingId,
+        source.DayCode,
+        source.IsClosed,
+        source.OpeningTime,
+        source.LunchStartTime,
+        source.LunchEndTime,
+        source.ClosingTime,
+        source.IsDeleted
+    EXCEPT
+    SELECT
+        target.CustomerNo,
+        target.StoreName,
+        target.OpeningDate,
+        target.ClosingDate,
+        target.IsBlocked,
+        target.BlockedFrom,
+        target.BlockedTo,
+        target.ReceivingId,
+        target.DayCode,
+        target.IsClosed,
+        target.OpeningTime,
+        target.LunchStartTime,
+        target.LunchEndTime,
+        target.ClosingTime,
+        target.IsDeleted
+) THEN
     UPDATE SET
+        target.CustomerNo = source.CustomerNo,
+        target.StoreName = source.StoreName,
         target.OpeningDate = source.OpeningDate,
         target.ClosingDate = source.ClosingDate,
-        target.ReceptionHours = source.ReceptionHours,
-        target.MondayOpeningTime = source.MondayOpeningTime,
-        target.MondayLunchStartTime = source.MondayLunchStartTime,
-        target.MondayLunchEndTime = source.MondayLunchEndTime,
-        target.MondayClosingTime = source.MondayClosingTime,
-        target.TuesdayOpeningTime = source.TuesdayOpeningTime,
-        target.TuesdayLunchStartTime = source.TuesdayLunchStartTime,
-        target.TuesdayLunchEndTime = source.TuesdayLunchEndTime,
-        target.TuesdayClosingTime = source.TuesdayClosingTime,
-        target.WednesdayOpeningTime = source.WednesdayOpeningTime,
-        target.WednesdayLunchStartTime = source.WednesdayLunchStartTime,
-        target.WednesdayLunchEndTime = source.WednesdayLunchEndTime,
-        target.WednesdayClosingTime = source.WednesdayClosingTime,
-        target.ThursdayOpeningTime = source.ThursdayOpeningTime,
-        target.ThursdayLunchStartTime = source.ThursdayLunchStartTime,
-        target.ThursdayLunchEndTime = source.ThursdayLunchEndTime,
-        target.ThursdayClosingTime = source.ThursdayClosingTime,
-        target.FridayOpeningTime = source.FridayOpeningTime,
-        target.FridayLunchStartTime = source.FridayLunchStartTime,
-        target.FridayLunchEndTime = source.FridayLunchEndTime,
-        target.FridayClosingTime = source.FridayClosingTime,
-        target.SaturdayOpeningTime = source.SaturdayOpeningTime,
-        target.SaturdayLunchStartTime = source.SaturdayLunchStartTime,
-        target.SaturdayLunchEndTime = source.SaturdayLunchEndTime,
-        target.SaturdayClosingTime = source.SaturdayClosingTime,
-        target.SundayOpeningTime = source.SundayOpeningTime,
-        target.SundayLunchStartTime = source.SundayLunchStartTime,
-        target.SundayLunchEndTime = source.SundayLunchEndTime,
-        target.SundayClosingTime = source.SundayClosingTime,
-        target.CreatedAt = source.CreatedAt,
-        target.CreatedBy = source.CreatedBy,
-        target.SalesOfficeId = source.SalesOfficeId,
+        target.IsBlocked = source.IsBlocked,
+        target.BlockedFrom = source.BlockedFrom,
+        target.BlockedTo = source.BlockedTo,
+        target.ReceivingId = source.ReceivingId,
+        target.DayCode = source.DayCode,
+        target.IsClosed = source.IsClosed,
+        target.OpeningTime = source.OpeningTime,
+        target.LunchStartTime = source.LunchStartTime,
+        target.LunchEndTime = source.LunchEndTime,
+        target.ClosingTime = source.ClosingTime,
+        target.IsDeleted = source.IsDeleted,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
         StoreId,
+        CustomerNo,
+        StoreName,
         OpeningDate,
         ClosingDate,
-        ReceptionHours,
-        MondayOpeningTime,
-        MondayLunchStartTime,
-        MondayLunchEndTime,
-        MondayClosingTime,
-        TuesdayOpeningTime,
-        TuesdayLunchStartTime,
-        TuesdayLunchEndTime,
-        TuesdayClosingTime,
-        WednesdayOpeningTime,
-        WednesdayLunchStartTime,
-        WednesdayLunchEndTime,
-        WednesdayClosingTime,
-        ThursdayOpeningTime,
-        ThursdayLunchStartTime,
-        ThursdayLunchEndTime,
-        ThursdayClosingTime,
-        FridayOpeningTime,
-        FridayLunchStartTime,
-        FridayLunchEndTime,
-        FridayClosingTime,
-        SaturdayOpeningTime,
-        SaturdayLunchStartTime,
-        SaturdayLunchEndTime,
-        SaturdayClosingTime,
-        SundayOpeningTime,
-        SundayLunchStartTime,
-        SundayLunchEndTime,
-        SundayClosingTime,
+        IsBlocked,
+        BlockedFrom,
+        BlockedTo,
+        ReceivingId,
+        DayCode,
+        DayNo,
+        IsClosed,
+        OpeningTime,
+        LunchStartTime,
+        LunchEndTime,
+        ClosingTime,
+        IsDeleted,
         CreatedAt,
-        CreatedBy,
-        SalesOfficeId
+        ModifiedAt
     )
     VALUES (
         source.StoreId,
+        source.CustomerNo,
+        source.StoreName,
         source.OpeningDate,
         source.ClosingDate,
-        source.ReceptionHours,
-        source.MondayOpeningTime,
-        source.MondayLunchStartTime,
-        source.MondayLunchEndTime,
-        source.MondayClosingTime,
-        source.TuesdayOpeningTime,
-        source.TuesdayLunchStartTime,
-        source.TuesdayLunchEndTime,
-        source.TuesdayClosingTime,
-        source.WednesdayOpeningTime,
-        source.WednesdayLunchStartTime,
-        source.WednesdayLunchEndTime,
-        source.WednesdayClosingTime,
-        source.ThursdayOpeningTime,
-        source.ThursdayLunchStartTime,
-        source.ThursdayLunchEndTime,
-        source.ThursdayClosingTime,
-        source.FridayOpeningTime,
-        source.FridayLunchStartTime,
-        source.FridayLunchEndTime,
-        source.FridayClosingTime,
-        source.SaturdayOpeningTime,
-        source.SaturdayLunchStartTime,
-        source.SaturdayLunchEndTime,
-        source.SaturdayClosingTime,
-        source.SundayOpeningTime,
-        source.SundayLunchStartTime,
-        source.SundayLunchEndTime,
-        source.SundayClosingTime,
-        source.CreatedAt,
-        source.CreatedBy,
-        source.SalesOfficeId
+        source.IsBlocked,
+        source.BlockedFrom,
+        source.BlockedTo,
+        source.ReceivingId,
+        source.DayCode,
+        source.DayNo,
+        source.IsClosed,
+        source.OpeningTime,
+        source.LunchStartTime,
+        source.LunchEndTime,
+        source.ClosingTime,
+        source.IsDeleted,
+        SYSUTCDATETIME(),
+        SYSUTCDATETIME()
     )
 OUTPUT $action INTO @MergeActions;
 
@@ -489,6 +463,111 @@ class SqlServerResource:
                 deleted = cursor.rowcount
                 conn.commit()
                 return int(deleted or 0)
+
+    def write_dim_store_schedules_raw_page(
+        self,
+        run_id: str,
+        attempt_number: int,
+        page_number: int,
+        request_cursor: Optional[str],
+        payload_json: str,
+    ) -> None:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+INSERT INTO raw.StoreSchedulesApiPage (
+    RunId,
+    AttemptNumber,
+    PageNumber,
+    RequestCursor,
+    PayloadJson
+)
+VALUES (?, ?, ?, ?, ?)
+""",
+                    run_id,
+                    attempt_number,
+                    page_number,
+                    request_cursor,
+                    payload_json,
+                )
+                conn.commit()
+
+    def write_dim_store_schedules_stage(
+        self,
+        run_id: str,
+        rows: list[Dict[str, Any]],
+    ) -> int:
+        values = [
+            (
+                run_id,
+                row["StoreId"],
+                row["CustomerNo"],
+                row["StoreName"],
+                date.fromisoformat(row["OpeningDate"])
+                if row["OpeningDate"] is not None
+                else None,
+                date.fromisoformat(row["ClosingDate"])
+                if row["ClosingDate"] is not None
+                else None,
+                row["IsBlocked"],
+                date.fromisoformat(row["BlockedFrom"])
+                if row["BlockedFrom"] is not None
+                else None,
+                date.fromisoformat(row["BlockedTo"])
+                if row["BlockedTo"] is not None
+                else None,
+                row["ReceivingId"],
+                row["DayCode"],
+                row["DayNo"],
+                row["IsClosed"],
+                datetime.strptime(row["OpeningTime"], "%H:%M:%S").time()
+                if row["OpeningTime"] is not None
+                else None,
+                datetime.strptime(row["LunchStartTime"], "%H:%M:%S").time()
+                if row["LunchStartTime"] is not None
+                else None,
+                datetime.strptime(row["LunchEndTime"], "%H:%M:%S").time()
+                if row["LunchEndTime"] is not None
+                else None,
+                datetime.strptime(row["ClosingTime"], "%H:%M:%S").time()
+                if row["ClosingTime"] is not None
+                else None,
+            )
+            for row in rows
+        ]
+        if not values:
+            return 0
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.fast_executemany = True
+                cursor.executemany(
+                    """
+INSERT INTO stg.dimStoreSchedules (
+    RunId,
+    StoreId,
+    CustomerNo,
+    StoreName,
+    OpeningDate,
+    ClosingDate,
+    IsBlocked,
+    BlockedFrom,
+    BlockedTo,
+    ReceivingId,
+    DayCode,
+    DayNo,
+    IsClosed,
+    OpeningTime,
+    LunchStartTime,
+    LunchEndTime,
+    ClosingTime
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+""",
+                    values,
+                )
+                conn.commit()
+                return len(values)
 
     def merge_dim_store_schedules(self, run_id: str) -> int:
         with self._get_connection() as conn:

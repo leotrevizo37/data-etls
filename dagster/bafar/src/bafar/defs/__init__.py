@@ -17,6 +17,7 @@ def _build_defs() -> Any:
         spark_df_io_manager,
         spark_resource,
         sqlserver_resource,
+        store_schedules_api_resource,
     )
 
     return Definitions(
@@ -26,6 +27,7 @@ def _build_defs() -> Any:
             "sqlserver": sqlserver_resource,
             "dim_sqlserver": dim_sqlserver_resource,
             "manager_access_api": manager_access_api_resource,
+            "store_schedules_api": store_schedules_api_resource,
         },
     )
 

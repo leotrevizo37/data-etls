@@ -245,40 +245,21 @@ def _build_spark_app_context(
 
 DIM_STORE_SCHEDULE_COLUMNS = (
     "StoreId",
+    "CustomerNo",
+    "StoreName",
     "OpeningDate",
     "ClosingDate",
-    "ReceptionHours",
-    "MondayOpeningTime",
-    "MondayLunchStartTime",
-    "MondayLunchEndTime",
-    "MondayClosingTime",
-    "TuesdayOpeningTime",
-    "TuesdayLunchStartTime",
-    "TuesdayLunchEndTime",
-    "TuesdayClosingTime",
-    "WednesdayOpeningTime",
-    "WednesdayLunchStartTime",
-    "WednesdayLunchEndTime",
-    "WednesdayClosingTime",
-    "ThursdayOpeningTime",
-    "ThursdayLunchStartTime",
-    "ThursdayLunchEndTime",
-    "ThursdayClosingTime",
-    "FridayOpeningTime",
-    "FridayLunchStartTime",
-    "FridayLunchEndTime",
-    "FridayClosingTime",
-    "SaturdayOpeningTime",
-    "SaturdayLunchStartTime",
-    "SaturdayLunchEndTime",
-    "SaturdayClosingTime",
-    "SundayOpeningTime",
-    "SundayLunchStartTime",
-    "SundayLunchEndTime",
-    "SundayClosingTime",
-    "CreatedAt",
-    "CreatedBy",
-    "SalesOfficeId",
+    "IsBlocked",
+    "BlockedFrom",
+    "BlockedTo",
+    "ReceivingId",
+    "DayCode",
+    "DayNo",
+    "IsClosed",
+    "OpeningTime",
+    "LunchStartTime",
+    "LunchEndTime",
+    "ClosingTime",
 )
 FACT_OUT_OF_HOURS_SALES_COLUMNS = (
     "SaleId",
@@ -639,25 +620,16 @@ WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126){to_filter}
                 "query",
                 """
 SELECT
-    schedules.StoreId,
-    schedules.OpeningDate,
-    schedules.ClosingDate,
-    schedule.DayOfWeek,
-    CONVERT(VARCHAR(8), schedule.OpeningTime, 108) AS OpeningTime,
-    CONVERT(VARCHAR(8), schedule.LunchStartTime, 108) AS LunchStartTime,
-    CONVERT(VARCHAR(8), schedule.LunchEndTime, 108) AS LunchEndTime,
-    CONVERT(VARCHAR(8), schedule.ClosingTime, 108) AS ClosingTime
+    StoreId,
+    OpeningDate,
+    ClosingDate,
+    CASE WHEN DayNo = 7 THEN 1 ELSE DayNo + 1 END AS DayOfWeek,
+    CONVERT(VARCHAR(8), OpeningTime, 108) AS OpeningTime,
+    CONVERT(VARCHAR(8), LunchStartTime, 108) AS LunchStartTime,
+    CONVERT(VARCHAR(8), LunchEndTime, 108) AS LunchEndTime,
+    CONVERT(VARCHAR(8), ClosingTime, 108) AS ClosingTime
 FROM dwh.dimStoreSchedules AS schedules
-CROSS APPLY (
-    VALUES
-        (1, SundayOpeningTime, SundayLunchStartTime, SundayLunchEndTime, SundayClosingTime),
-        (2, MondayOpeningTime, MondayLunchStartTime, MondayLunchEndTime, MondayClosingTime),
-        (3, TuesdayOpeningTime, TuesdayLunchStartTime, TuesdayLunchEndTime, TuesdayClosingTime),
-        (4, WednesdayOpeningTime, WednesdayLunchStartTime, WednesdayLunchEndTime, WednesdayClosingTime),
-        (5, ThursdayOpeningTime, ThursdayLunchStartTime, ThursdayLunchEndTime, ThursdayClosingTime),
-        (6, FridayOpeningTime, FridayLunchStartTime, FridayLunchEndTime, FridayClosingTime),
-        (7, SaturdayOpeningTime, SaturdayLunchStartTime, SaturdayLunchEndTime, SaturdayClosingTime)
-) AS schedule (DayOfWeek, OpeningTime, LunchStartTime, LunchEndTime, ClosingTime)
+WHERE IsClosed = 0
 """,
             )
             .load()
