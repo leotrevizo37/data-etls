@@ -25,8 +25,6 @@ Los scripts globales se aplican en orden numérico a cada base tenant:
 9. `031_serving_alert_state.sql` crea la vista consolidada de alertas.
 10. `032_alerting_state_guards.sql` crea protecciones y activación.
 11. `033_alerting_catalog_guards.sql` protege los GUID de catálogo.
-12. `034_alerting_legacy_config_migration.sql` migra configuración efectiva.
-13. `035_alerting_legacy_event_migration.sql` migra evidencia demostrable.
 
 Después se ejecuta
 `sql/user_codes/<user_code>/init/999_zz_alerting_alert_config.sql`. Cada seed
