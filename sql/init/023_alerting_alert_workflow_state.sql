@@ -12,7 +12,8 @@ IF
     END;
 GO
 
-IF OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NULL
+IF
+    OBJECT_ID(N'alerting.alert_workflow_state', N'U') IS NULL
     AND OBJECT_ID(N'alerting.alert_workflow_state_legacy', N'U') IS NULL
     AND OBJECT_ID(N'alerting.alert_incident', N'U') IS NULL
     BEGIN

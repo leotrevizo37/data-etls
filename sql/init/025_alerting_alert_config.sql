@@ -1,7 +1,11 @@
 SET QUOTED_IDENTIFIER ON;
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'alerting')
+IF
+    NOT EXISTS (
+        SELECT 1 FROM sys.schemas
+        WHERE name = N'alerting'
+    )
     BEGIN
         EXEC ('CREATE SCHEMA alerting');
     END;
@@ -113,7 +117,7 @@ GO
 IF OBJECT_ID(N'alerting.alert_rule', N'U') IS NULL
     BEGIN
         CREATE TABLE alerting.alert_rule (
-            rule_id INT IDENTITY(1, 1) NOT NULL
+            rule_id INT IDENTITY (1, 1) NOT NULL
             CONSTRAINT PK_alert_rule PRIMARY KEY,
             alert_type NVARCHAR(50) COLLATE Latin1_General_100_BIN2 NOT NULL,
             entity_id NVARCHAR(250) COLLATE Latin1_General_100_BIN2 NOT NULL
