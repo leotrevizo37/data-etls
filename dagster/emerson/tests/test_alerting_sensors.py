@@ -1,19 +1,39 @@
 import importlib
 import re
+import sys
 import uuid
 from datetime import date, datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from dagster import AssetKey, DefaultSensorStatus, build_sensor_context
 
-trend_module = importlib.import_module(
-    "emerson.defs.sensors.asset_row_count_trend_sensor"
-)
-sensor_module = importlib.import_module(
-    "emerson.defs.sensors.operational_alerts_sensor"
-)
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+REPOSITORY_ROOT = PROJECT_SRC.parents[2]
+original_sys_path = list(sys.path)
+sys.path[:] = [
+    str(PROJECT_SRC),
+    *[
+        path
+        for path in original_sys_path
+        if Path(path or ".").resolve() != REPOSITORY_ROOT
+    ],
+]
+original_dagster_module = sys.modules.pop("dagster", None)
+try:
+    from dagster import AssetKey, DefaultSensorStatus
+
+    trend_module = importlib.import_module(
+        "emerson.defs.sensors.asset_row_count_trend_sensor"
+    )
+    sensor_module = importlib.import_module(
+        "emerson.defs.sensors.operational_alerts_sensor"
+    )
+finally:
+    if original_dagster_module is not None:
+        sys.modules["dagster"] = original_dagster_module
+    sys.path[:] = original_sys_path
 
 
 class _RecordingCursor:
@@ -190,10 +210,13 @@ def test_missing_or_invalid_configuration_skips_without_signals(
 ):
     record = Mock(side_effect=AssertionError("unexpected signal"))
     monkeypatch.setattr(sensor_module, "_record_detected", record)
-    context = build_sensor_context(
-        resources={"sqlserver": _SqlResource(mode)}
+    context = SimpleNamespace(
+        resources=SimpleNamespace(sqlserver=_SqlResource(mode)),
+        cursor=None,
+        update_cursor=Mock(),
+        log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor.evaluate_tick(context)
+    result = sensor_module.operational_alerts_sensor._raw_fn(context)
     assert result.skip_message
     record.assert_not_called()
 
@@ -393,5 +416,4 @@ def test_row_count_capture_preserves_daily_history_contract():
     assert "latest_event_storage_id < ?" in statement
     assert "average_7d" in statement
     assert "average_28d" in statement
-
 

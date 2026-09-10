@@ -1,24 +1,39 @@
 import importlib
 import re
+import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from dagster import (
-    AssetKey,
-    DagsterInstance,
-    DefaultSensorStatus,
-    build_sensor_context,
-)
 
-trend_module = importlib.import_module(
-    "carlsjr.defs.sensors.asset_row_count_trend_sensor"
-)
-sensor_module = importlib.import_module(
-    "carlsjr.defs.sensors.operational_alerts_sensor"
-)
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+REPOSITORY_ROOT = PROJECT_SRC.parents[2]
+original_sys_path = list(sys.path)
+sys.path[:] = [
+    str(PROJECT_SRC),
+    *[
+        path
+        for path in original_sys_path
+        if Path(path or ".").resolve() != REPOSITORY_ROOT
+    ],
+]
+original_dagster_module = sys.modules.pop("dagster", None)
+try:
+    from dagster import AssetKey, DefaultSensorStatus
+
+    trend_module = importlib.import_module(
+        "carlsjr.defs.sensors.asset_row_count_trend_sensor"
+    )
+    sensor_module = importlib.import_module(
+        "carlsjr.defs.sensors.operational_alerts_sensor"
+    )
+finally:
+    if original_dagster_module is not None:
+        sys.modules["dagster"] = original_dagster_module
+    sys.path[:] = original_sys_path
 
 
 class _RecordingCursor:
@@ -236,10 +251,13 @@ def test_missing_or_invalid_configuration_skips_without_signals(
 ):
     record = Mock(side_effect=AssertionError("unexpected signal"))
     monkeypatch.setattr(sensor_module, "_record_detected", record)
-    context = build_sensor_context(
-        resources={"sqlserver": _SqlResource(mode)}
+    context = SimpleNamespace(
+        resources=SimpleNamespace(sqlserver=_SqlResource(mode)),
+        cursor=None,
+        update_cursor=Mock(),
+        log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor.evaluate_tick(context)
+    result = sensor_module.operational_alerts_sensor._raw_fn(context)
     assert result.skip_message
     record.assert_not_called()
 
@@ -445,10 +463,13 @@ def test_sensor_applies_exact_threshold_and_default(monkeypatch):
         }],
     )
     monkeypatch.setattr(sensor_module, "_record_detected", detected)
-    context = build_sensor_context(
-        resources={"sqlserver": _SqlResource("missing")}
+    context = SimpleNamespace(
+        resources=SimpleNamespace(sqlserver=_SqlResource("missing")),
+        cursor=None,
+        update_cursor=Mock(),
+        log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor.evaluate_tick(context)
+    result = sensor_module.operational_alerts_sensor._raw_fn(context)
     detected.assert_called_once()
     parameters = detected.call_args.args
     assert parameters[4] == sensor_20
@@ -538,10 +559,13 @@ def test_recovery_requires_later_evidence_and_enabled_rule(
         lambda _connection: [],
     )
     monkeypatch.setattr(sensor_module, "_record_cleared", cleared)
-    context = build_sensor_context(
-        resources={"sqlserver": _SqlResource("missing")}
+    context = SimpleNamespace(
+        resources=SimpleNamespace(sqlserver=_SqlResource("missing")),
+        cursor=None,
+        update_cursor=Mock(),
+        log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor.evaluate_tick(context)
+    result = sensor_module.operational_alerts_sensor._raw_fn(context)
     if should_clear:
         cleared.assert_called_once()
         assert cleared.call_args.args[2] == status["last_reading_at"]
@@ -663,18 +687,17 @@ def test_row_count_capture_skips_event_without_timestamp(monkeypatch):
         "_latest_trends",
         lambda _connection, _metadata_key: [],
     )
-    with DagsterInstance.ephemeral() as instance:
-        monkeypatch.setattr(
-            instance.event_log_storage,
-            "get_event_records",
-            lambda *_args, **_kwargs: [record],
-        )
-        context = build_sensor_context(
-            instance=instance,
-            resources={"sqlserver": _SqlResource("missing")},
-        )
-        result = trend_module.asset_row_count_trend_sensor.evaluate_tick(
-            context
-        )
+    context = SimpleNamespace(
+        instance=SimpleNamespace(
+            event_log_storage=SimpleNamespace(
+                get_event_records=Mock(return_value=[record]),
+            ),
+        ),
+        resources=SimpleNamespace(sqlserver=_SqlResource("missing")),
+        cursor=None,
+        update_cursor=Mock(),
+        log=Mock(),
+    )
+    result = trend_module.asset_row_count_trend_sensor._raw_fn(context)
     recorded.assert_not_called()
     assert "observaciones registradas: 0" in result.skip_message

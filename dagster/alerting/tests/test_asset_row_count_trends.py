@@ -3,15 +3,31 @@ from pathlib import Path
 
 
 _ROOT = Path(__file__).resolve().parents[3]
-_SIGNAL_MODEL = (
-    _ROOT / "sql" / "init" / "026_alerting_signal_model.sql"
-).read_text(encoding="utf-8")
-_VIEWS = (
-    _ROOT / "sql" / "init" / "027_serving_alert_views.sql"
-).read_text(encoding="utf-8")
-_MIGRATION = (
-    _ROOT / "sql" / "init" / "028_alerting_legacy_migration.sql"
-).read_text(encoding="utf-8")
+_SIGNAL_MODEL = "\n".join(
+    (_ROOT / "sql" / "init" / name).read_text(encoding="utf-8")
+    for name in (
+        "026_alerting_catalog_tables.sql",
+        "027_alerting_catalog_values.sql",
+        "028_alerting_config_model.sql",
+        "029_alerting_event_model.sql",
+    )
+)
+_VIEWS = "\n".join(
+    (_ROOT / "sql" / "init" / name).read_text(encoding="utf-8")
+    for name in (
+        "030_serving_alert_config_validation.sql",
+        "031_serving_alert_state.sql",
+        "032_alerting_state_guards.sql",
+        "033_alerting_catalog_guards.sql",
+    )
+)
+_MIGRATION = "\n".join(
+    (_ROOT / "sql" / "init" / name).read_text(encoding="utf-8")
+    for name in (
+        "034_alerting_legacy_config_migration.sql",
+        "035_alerting_legacy_event_migration.sql",
+    )
+)
 
 
 def test_signal_model_uses_stable_guid_catalogs_and_append_only_events():
