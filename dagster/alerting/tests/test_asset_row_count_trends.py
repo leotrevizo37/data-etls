@@ -160,8 +160,9 @@ def test_serving_view_exposes_only_spanish_pascal_case_contract():
         if alias != "BIT"
     ]
     assert aliases == expected
-    assert "COALESCE(ticket_attempts.attempt_count, 0)" in view
-    assert "COALESCE(email_attempts.attempt_count, 0)" in view
+    assert "COUNT(*) AS attempt_count" in view
+    assert "ticket_attempts.attempt_count AS CantidadIntentosCreacionTicket" in view
+    assert "email_attempts.attempt_count AS CantidadIntentosCorreo" in view
     assert "WHEN incident.is_point_in_time = 1 THEN NULL" in view
 
 
