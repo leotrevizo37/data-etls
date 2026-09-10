@@ -88,8 +88,8 @@ La recuperacion de un sensor desconectado requiere evidencia posterior a `Connec
 |---|---|
 | `alerting.alert_workflow_state` | Estado, detalle, timestamps y contador de notificaciones por incidencia |
 | `alerting.asset_row_count_daily` | Agregados diarios, promedios 1/7/28 dias y cambios porcentuales |
-| `ux_alert_state_active_condition` | Limita a una incidencia activa por tenant, tipo y entidad |
-| Estados | `OPEN`, `REMINDER`, `RESOLVED_PENDING`, `RESOLVED` |
+| `ux_alert_workflow_state_active_condition` | Limita a una incidencia activa por tenant, tipo y entidad |
+| Estados | `OPEN`, `RESOLVED_PENDING`, `RESOLVED` |
 
 `RESOLVED_PENDING` permite conservar una resolucion hasta que pueda acompañar un correo valido. Solo despues de ese envio pasa a `RESOLVED`.
 

@@ -103,12 +103,12 @@ Si no existe metadata descriptiva, se usa entity_key.
 
 ## Migración
 
-026_alerting_signal_model.sql archiva las tablas anteriores como
-alert_workflow_state_legacy, alert_config_legacy y alert_rule_legacy, y crea el
-modelo nuevo. 027_serving_alert_views.sql crea las vistas, protecciones y el
-procedimiento de activación. 028_alerting_legacy_migration.sql materializa la
-configuración efectiva anterior y migra únicamente evidencia histórica
-demostrable.
+Los scripts 026 a 029 archivan las tablas anteriores como
+alert_workflow_state_legacy, alert_config_legacy y alert_rule_legacy, y crean
+catálogos, configuración, incidencias y eventos. Los scripts 030 a 033 crean
+las vistas, protecciones y el procedimiento de activación. Los scripts 034 y
+035 materializan la configuración efectiva anterior y migran únicamente
+evidencia histórica demostrable.
 
 Los scripts son repetibles. Los seeds 999_zz_alerting_alert_config.sql solo
 crean una primera versión cuando alerting.alert_config está vacía y nunca
