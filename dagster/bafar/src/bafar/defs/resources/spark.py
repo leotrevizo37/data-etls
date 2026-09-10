@@ -243,24 +243,6 @@ def _build_spark_app_context(
     }
 
 
-DIM_STORE_SCHEDULE_COLUMNS = (
-    "StoreId",
-    "CustomerNo",
-    "StoreName",
-    "OpeningDate",
-    "ClosingDate",
-    "IsBlocked",
-    "BlockedFrom",
-    "BlockedTo",
-    "ReceivingId",
-    "DayCode",
-    "DayNo",
-    "IsClosed",
-    "OpeningTime",
-    "LunchStartTime",
-    "LunchEndTime",
-    "ClosingTime",
-)
 FACT_OUT_OF_HOURS_SALES_COLUMNS = (
     "SaleId",
     "SaleNumber",
@@ -716,37 +698,6 @@ WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126)
             df_chunked.unpersist()
 
         return row_count
-
-    def write_dim_store_schedules_stage(self, df: DataFrame, run_id: str) -> int:
-        df_stage = (
-            df
-            .select(*DIM_STORE_SCHEDULE_COLUMNS)
-            .dropDuplicates(["StoreId"])
-            .withColumn("RunId", lit(run_id))
-            .select("RunId", *DIM_STORE_SCHEDULE_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
-        )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.dimStoreSchedules")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
 
     def write_fact_out_of_hours_sales_stage(
         self,

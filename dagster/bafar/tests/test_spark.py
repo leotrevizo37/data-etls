@@ -425,13 +425,6 @@ class SparkResourceTests(unittest.TestCase):
     def test_stage_writes_add_run_id_and_use_the_matching_tables(self) -> None:
         cases = [
             (
-                "write_dim_store_schedules_stage",
-                ["StoreId"],
-                "stg.dimStoreSchedules",
-                self.module.DIM_STORE_SCHEDULE_COLUMNS,
-                1,
-            ),
-            (
                 "write_fact_out_of_hours_sales_stage",
                 ["SaleId"],
                 "stg.factOutOfHoursSales",
