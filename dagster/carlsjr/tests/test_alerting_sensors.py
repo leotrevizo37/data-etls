@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -22,7 +22,19 @@ sys.path[:] = [
 ]
 original_dagster_module = sys.modules.pop("dagster", None)
 try:
-    from dagster import AssetKey, DefaultSensorStatus
+    from dagster import (
+        AssetKey,
+        AssetOut,
+        DagsterInstance,
+        DefaultSensorStatus,
+        Failure,
+        Out,
+        Output,
+        asset,
+        graph_multi_asset,
+        materialize,
+        op,
+    )
 
     trend_module = importlib.import_module(
         "carlsjr.defs.sensors.asset_row_count_trend_sensor"
@@ -296,6 +308,8 @@ def test_dagster_failures_require_origin_and_provable_assets():
         execution_plan_snapshot_id="missing-snapshot",
     )
     local_snapshot = SimpleNamespace(
+        step_keys_to_execute=["multi_asset_step", "unmapped_step"],
+        step_deps={"multi_asset_step": set(), "unmapped_step": set()},
         steps=[
             SimpleNamespace(
                 key="multi_asset_step",
@@ -371,7 +385,11 @@ def test_dagster_failures_require_origin_and_provable_assets():
             "foreign-snapshot": foreign_snapshot,
             "missing-snapshot": None,
         }[snapshot_id],
-        get_records_for_run=lambda run_id, **_: entries[run_id],
+        get_records_for_run=lambda run_id, of_type: (
+            entries[run_id]
+            if of_type == sensor_module.DagsterEventType.STEP_FAILURE
+            else SimpleNamespace(records=[])
+        ),
     )
     failures = sensor_module._failed_run_assets(
         SimpleNamespace(instance=instance),
@@ -388,6 +406,85 @@ def test_dagster_failures_require_origin_and_provable_assets():
     }
     assert {failure["occurred_at"].timestamp() for failure in failures} == {
         101.0
+    }
+
+
+@pytest.mark.parametrize(
+    "user_code",
+    ("bafar", "bafar_poc_gabinete", "carlsjr", "emerson", "valledelencino"),
+)
+@pytest.mark.parametrize("failure_point", ("direct", "intermediate"))
+def test_dagster_failures_follow_real_asset_dependencies(
+    user_code, failure_point, monkeypatch
+):
+    module = importlib.import_module(
+        f"{user_code}.defs.sensors.operational_alerts_sensor"
+    )
+
+    @op(out={"asset": Out(), "result": Out()})
+    def start():
+        yield Output(1, "asset")
+        if failure_point == "direct":
+            raise Failure("Direct failure after partial materialization")
+        yield Output(1, "result")
+
+    @op
+    def intermediate(value):
+        raise Failure("Intermediate failure")
+
+    @op
+    def finish(value):
+        return value
+
+    @op
+    def finalize(left, right):
+        return left + right
+
+    @graph_multi_asset(
+        outs={name: AssetOut() for name in ("completed", "target", "control")}
+    )
+    def grouped_assets():
+        initial = start()
+        blocked = intermediate(initial.result)
+        target = finish(blocked)
+        control = finalize(target, blocked)
+        return {"completed": initial.asset, "target": target, "control": control}
+
+    @asset
+    def dependent(target):
+        return target
+
+    @asset
+    def independent():
+        return 1
+
+    monkeypatch.setattr(module, "_code_location", lambda _run: user_code)
+    with DagsterInstance.ephemeral() as instance:
+        result = materialize(
+            [grouped_assets, dependent, independent],
+            instance=instance,
+            raise_on_error=False,
+        )
+        assert not result.success
+        assert {
+            event.asset_key.to_user_string()
+            for event in result.get_asset_materialization_events()
+        } == {"completed", "independent"}
+        failures = module._failed_run_assets(
+            SimpleNamespace(instance=instance),
+            120,
+            200,
+            datetime.now(timezone.utc),
+        )
+
+    assert len(failures) == 3
+    assert {failure["asset_key"] for failure in failures} == {
+        "target", "control", "dependent"
+    }
+    assert {failure["run_id"] for failure in failures} == {result.run_id}
+    expected_step = "start" if failure_point == "direct" else "intermediate"
+    assert {failure["step_key"] for failure in failures} == {
+        f"grouped_assets.{expected_step}"
     }
 
 
@@ -575,6 +672,100 @@ def test_recovery_requires_later_evidence_and_enabled_rule(
         assert "señales finalizadas: 0" in result.skip_message
 
 
+@pytest.mark.parametrize(
+    "user_code",
+    ("bafar", "bafar_poc_gabinete", "carlsjr", "emerson", "valledelencino"),
+)
+@pytest.mark.parametrize("enabled", (True, False))
+def test_dagster_recovery_clears_each_older_incident(
+    user_code, enabled, monkeypatch
+):
+    module = importlib.import_module(
+        f"{user_code}.defs.sensors.operational_alerts_sensor"
+    )
+    now = datetime.now(timezone.utc)
+    recovered_at = now - timedelta(days=1)
+    incidents = [
+        {
+            "alert_id": f"incident-{index}",
+            "entity_id": f"failed-run-{index}",
+            "entity_key": f"{user_code}/asset",
+            "detected_at": now - timedelta(days=days),
+        }
+        for index, days in enumerate((3, 2, 0.5))
+    ]
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.description = [(key,) for key in incidents[0]]
+    cursor.fetchall.return_value = [tuple(row.values()) for row in incidents]
+    rule = {**_rule("dagster_run_failure"), "is_enabled": enabled}
+    config = {
+        "version_token": "config-1",
+        "dagster_failure_batch_size": 10,
+        "rules": {("dagster_run_failure", None): rule},
+    }
+    instance = Mock()
+    instance.get_run_by_id.side_effect = lambda run_id: (
+        None if run_id == "missing" else SimpleNamespace(
+            remote_job_origin=SimpleNamespace(
+                repository_origin=SimpleNamespace(
+                    code_location_origin=SimpleNamespace(
+                        location_name="another_tenant" if run_id == "foreign"
+                        else user_code
+                    )
+                )
+            ),
+            status=module.DagsterRunStatus.FAILURE,
+        )
+    )
+
+    def materializations(records_filter, limit, cursor, ascending):
+        assert limit == 10
+        assert ascending
+        assert records_filter.asset_key == AssetKey([user_code, "asset"])
+        assert records_filter.before_timestamp == now.timestamp()
+        incident = next(
+            row for row in incidents
+            if row["detected_at"].timestamp() == records_filter.after_timestamp
+        )
+        candidates = (
+            [("foreign", recovered_at), ("missing", recovered_at),
+             (incident["entity_id"], now - timedelta(minutes=1)),
+             ("recovery", incident["detected_at"]),
+             ("recovery", now + timedelta(minutes=1))]
+            if cursor is None else [("recovery", recovered_at)]
+        )
+        return SimpleNamespace(
+            records=[
+                SimpleNamespace(run_id=run_id, timestamp=at.timestamp(), storage_id=7)
+                for run_id, at in candidates
+            ],
+            has_more=cursor is None,
+            cursor="next-page",
+        )
+
+    instance.fetch_materializations.side_effect = materializations
+    record_cleared = Mock(return_value=True)
+    monkeypatch.setattr(module, "_record_cleared", record_cleared)
+    context = SimpleNamespace(instance=instance)
+    checks = {}
+    assert module._clear_dagster_failures(
+        context, connection, config, checks, now
+    ) == (2 if enabled else 0)
+    assert [call.args[1]["alert_id"] for call in record_cleared.call_args_list] == (
+        ["incident-0", "incident-1"] if enabled else []
+    )
+    for call in record_cleared.call_args_list:
+        assert call.args[2] == recovered_at
+        assert call.args[4]["evidence"]["recovery_run_id"] == "recovery"
+        assert call.args[4]["evidence"]["failed_run_id"] == call.args[1]["entity_id"]
+    if not enabled:
+        instance.fetch_materializations.assert_not_called()
+    assert module._clear_dagster_failures(
+        context, connection, config, checks, now
+    ) == 0
+
+
 def test_detected_and_cleared_events_keep_unique_guid_correlation():
     connection = _RecordingConnection()
     rule = _rule("dagster_run_failure")
@@ -588,9 +779,11 @@ def test_detected_and_cleared_events_keep_unique_guid_correlation():
         occurred_at,
         "detalle",
         {},
-        is_point_in_time=True,
     )
     parameters = connection.cursor_value.parameters
+    assert parameters[0] == 1
+    assert parameters[5] == 1
+    assert parameters[26] == 0
     alert_id = parameters[13]
     event_id = parameters[27]
     assert uuid.UUID(alert_id)

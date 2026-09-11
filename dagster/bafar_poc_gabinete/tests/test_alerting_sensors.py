@@ -249,6 +249,8 @@ def test_dagster_failures_require_origin_and_provable_assets():
         execution_plan_snapshot_id="foreign-snapshot",
     )
     local_snapshot = SimpleNamespace(
+        step_keys_to_execute=["multi_asset_step", "unmapped_step"],
+        step_deps={"multi_asset_step": set(), "unmapped_step": set()},
         steps=[
             SimpleNamespace(
                 key="multi_asset_step",
@@ -322,7 +324,11 @@ def test_dagster_failures_require_origin_and_provable_assets():
             "local-snapshot": local_snapshot,
             "foreign-snapshot": foreign_snapshot,
         }[snapshot_id],
-        get_records_for_run=lambda run_id, **_: entries[run_id],
+        get_records_for_run=lambda run_id, of_type: (
+            entries[run_id]
+            if of_type == sensor_module.DagsterEventType.STEP_FAILURE
+            else SimpleNamespace(records=[])
+        ),
     )
     failures = sensor_module._failed_run_assets(
         SimpleNamespace(instance=instance),

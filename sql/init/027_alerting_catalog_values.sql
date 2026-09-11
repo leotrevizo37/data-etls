@@ -8,7 +8,7 @@ USING (
     ('10000000-0000-0000-0000-000000000002', N'late_readings', N'Lecturas retrasadas', N'El sensor superó el umbral configurado para lecturas retrasadas.', 1, 1, 20),
     ('10000000-0000-0000-0000-000000000003', N'pipeline_failure', N'Fallo de ingesta', N'La última ejecución terminal de una ingesta terminó con error.', 1, 1, 30),
     ('10000000-0000-0000-0000-000000000004', N'pipeline_stale', N'Ingesta atrasada', N'La última ejecución exitosa superó su intervalo esperado.', 1, 1, 40),
-    ('10000000-0000-0000-0000-000000000005', N'dagster_run_failure', N'Fallo de ejecución Dagster', N'Una corrida Dagster falló mientras materializaba un asset comprobable.', 0, 1, 50),
+    ('10000000-0000-0000-0000-000000000005', N'dagster_run_failure', N'Fallo de ejecución Dagster', N'Una corrida Dagster falló mientras materializaba un asset comprobable.', 1, 1, 50),
     ('10000000-0000-0000-0000-000000000006', N'asset_row_count_trend', N'Caída de volumen del asset', N'El volumen materializado cayó frente a los promedios configurados.', 1, 1, 60)
 )
     AS source (
@@ -22,7 +22,10 @@ WHEN MATCHED AND target.code = source.code
         SET
             name_es = source.name_es,
             description_es = source.description_es,
-            is_continuous = source.is_continuous,
+            is_continuous = CASE
+                WHEN target.code = N'dagster_run_failure' THEN target.is_continuous
+                ELSE source.is_continuous
+            END,
             is_active = source.is_active,
             sort_order = source.sort_order
 WHEN NOT MATCHED

@@ -8,6 +8,7 @@ from typing import Any
 import pyodbc
 from dagster import (
     AssetKey,
+    AssetRecordsFilter,
     DagsterEventType,
     DagsterRunStatus,
     DefaultSensorStatus,
@@ -274,6 +275,7 @@ def _record_detected(
 ) -> bool:
     alert_id = str(uuid.uuid4())
     event_id = str(uuid.uuid4())
+    is_occurrence = is_point_in_time or rule["alert_type"] == "dagster_run_failure"
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -293,7 +295,6 @@ def _record_detected(
                         AND alert_type_id = ?
                         AND entity_id = ?
                         AND entity_key = ?
-                        AND is_point_in_time = 1
                 )
             )
             OR (
@@ -355,12 +356,12 @@ def _record_detected(
             COMMIT TRANSACTION;
             SELECT @inserted;
             """,
-            int(is_point_in_time),
+            int(is_occurrence),
             _USER_CODE,
             rule["alert_type_id"],
             entity_id,
             entity_key,
-            int(is_point_in_time),
+            int(is_occurrence),
             _USER_CODE,
             rule["alert_type_id"],
             entity_key,
@@ -574,7 +575,24 @@ def _failed_run_assets(
         snapshot = context.instance.get_execution_plan_snapshot(snapshot_id)
         if snapshot is None:
             continue
-        steps = {step.key: step for step in snapshot.steps}
+        step_keys = set(snapshot.step_keys_to_execute)
+        steps = {
+            step.key: step for step in snapshot.steps if step.key in step_keys
+        }
+        downstream = {step_key: set() for step_key in steps}
+        for step_key, upstream_steps in snapshot.step_deps.items():
+            if step_key not in steps:
+                continue
+            for upstream_step in upstream_steps:
+                if upstream_step in downstream:
+                    downstream[upstream_step].add(step_key)
+        materialized = {
+            record.asset_key
+            for record in context.instance.get_records_for_run(
+                run.run_id,
+                of_type=DagsterEventType.ASSET_MATERIALIZATION,
+            ).records
+        }
         records = context.instance.get_records_for_run(
             run.run_id,
             of_type=DagsterEventType.STEP_FAILURE,
@@ -585,19 +603,120 @@ def _failed_run_assets(
             if step is None or entry.timestamp is None:
                 continue
             occurred_at = datetime.fromtimestamp(entry.timestamp, timezone.utc)
-            for output in step.outputs:
-                entity_key = output.entity_key
-                if not isinstance(entity_key, AssetKey):
+            pending = [step.key]
+            visited = set()
+            while pending:
+                step_key = pending.pop()
+                if step_key in visited:
                     continue
-                asset_key = entity_key.to_user_string()
-                failures[(run.run_id, asset_key)] = {
-                    "run_id": run.run_id,
-                    "job_name": run.job_name,
-                    "step_key": entry.step_key,
-                    "asset_key": asset_key,
-                    "occurred_at": occurred_at,
-                }
+                visited.add(step_key)
+                pending.extend(sorted(downstream[step_key] - visited))
+                for output in steps[step_key].outputs:
+                    entity_key = output.entity_key
+                    if (
+                        not isinstance(entity_key, AssetKey)
+                        or entity_key in materialized
+                    ):
+                        continue
+                    asset_key = entity_key.to_user_string()
+                    failures[(run.run_id, asset_key)] = {
+                        "run_id": run.run_id,
+                        "job_name": run.job_name,
+                        "step_key": entry.step_key,
+                        "asset_key": asset_key,
+                        "occurred_at": occurred_at,
+                    }
     return list(failures.values())
+
+
+def _clear_dagster_failures(
+    context: SensorEvaluationContext,
+    connection,
+    config: dict[str, Any],
+    checks: dict[str, Any],
+    now: datetime,
+) -> int:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                incident.alert_id,
+                incident.entity_id,
+                incident.entity_key,
+                incident.detected_at
+            FROM alerting.alert_incident AS incident
+            INNER JOIN alerting.dim_alert_type AS alert_type
+                ON alert_type.alert_type_id = incident.alert_type_id
+            WHERE
+                incident.user_code = ?
+                AND alert_type.code = N'dagster_run_failure'
+                AND incident.cleared_at IS NULL
+                AND incident.entity_key IS NOT NULL
+            """,
+            _USER_CODE,
+        )
+        incidents = _rows(cursor)
+    cleared = 0
+    for incident in incidents:
+        entity_key = incident["entity_key"]
+        rule = _select_rule(config, "dagster_run_failure", entity_key)
+        recovery_key = f"recovery::{incident['alert_id']}"
+        if not rule["is_enabled"] or not _is_due(
+            config, rule, recovery_key, checks, now
+        ):
+            continue
+        detected_at = _utc(incident["detected_at"])
+        records_filter = AssetRecordsFilter(
+            asset_key=AssetKey.from_user_string(entity_key),
+            after_timestamp=detected_at.timestamp(),
+            before_timestamp=now.timestamp(),
+        )
+        cursor = None
+        recovered = False
+        while not recovered:
+            page = context.instance.fetch_materializations(
+                records_filter,
+                limit=config["dagster_failure_batch_size"],
+                cursor=cursor,
+                ascending=True,
+            )
+            for record in page.records:
+                occurred_at = datetime.fromtimestamp(record.timestamp, timezone.utc)
+                if (
+                    record.run_id == incident["entity_id"]
+                    or occurred_at <= detected_at
+                    or occurred_at > now
+                ):
+                    continue
+                run = context.instance.get_run_by_id(record.run_id)
+                if _code_location(run) != _USER_CODE:
+                    continue
+                metadata = {
+                    "evidence": {
+                        "failed_run_id": incident["entity_id"],
+                        "recovery_run_id": record.run_id,
+                        "asset_key": entity_key,
+                        "materialization_storage_id": record.storage_id,
+                    }
+                }
+                if _record_cleared(
+                    connection,
+                    incident,
+                    occurred_at,
+                    (
+                        "Una materialización exitosa posterior confirmó "
+                        f"la recuperación de {entity_key}."
+                    ),
+                    metadata,
+                ):
+                    cleared += 1
+                recovered = True
+                break
+            if not page.has_more:
+                break
+            cursor = page.cursor
+        _mark_checked(config, rule, recovery_key, checks, now)
+    return cleared
 
 
 @sensor(
@@ -881,13 +1000,15 @@ def operational_alerts_sensor(
                         entity_key,
                         failure["occurred_at"],
                         (
-                            f"Falló el paso {failure['step_key']} mientras "
-                            f"materializaba {entity_key}."
+                            f"El fallo del paso {failure['step_key']} impidió "
+                            f"materializar {entity_key}."
                         ),
                         metadata,
-                        is_point_in_time=True,
                     ):
                         detected += 1
+                cleared += _clear_dagster_failures(
+                    context, connection, config, checks, now
+                )
     except pyodbc.Error:
         return SkipReason("No fue posible consultar la configuración local.")
 

@@ -55,6 +55,20 @@ IF OBJECT_ID(N'alerting.alert_incident', N'U') IS NULL
     END;
 GO
 
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+
+IF
+    EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            name = N'ux_alert_incident_active_condition'
+            AND object_id = OBJECT_ID(N'alerting.alert_incident')
+            AND filter_definition NOT LIKE N'%alert_type_id%'
+    )
+    DROP INDEX ux_alert_incident_active_condition ON alerting.alert_incident;
+
 IF
     NOT EXISTS (
         SELECT 1
@@ -66,7 +80,10 @@ IF
     BEGIN
         CREATE UNIQUE INDEX ux_alert_incident_active_condition
             ON alerting.alert_incident (user_code, alert_type_id, entity_key)
-            WHERE is_point_in_time = 0 AND cleared_at IS NULL;
+            WHERE
+                is_point_in_time = 0
+                AND cleared_at IS NULL
+                AND alert_type_id <> '10000000-0000-0000-0000-000000000005';
     END;
 GO
 
@@ -88,6 +105,61 @@ IF
             )
             WHERE is_point_in_time = 1 AND entity_key IS NOT NULL;
     END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            name = N'ux_alert_incident_dagster_occurrence'
+            AND object_id = OBJECT_ID(N'alerting.alert_incident')
+    )
+    CREATE UNIQUE INDEX ux_alert_incident_dagster_occurrence
+        ON alerting.alert_incident (user_code, entity_id, entity_key)
+        WHERE
+            alert_type_id = '10000000-0000-0000-0000-000000000005'
+            AND entity_key IS NOT NULL;
+
+IF
+    EXISTS (
+        SELECT 1
+        FROM alerting.dim_alert_type
+        WHERE
+            alert_type_id = '10000000-0000-0000-0000-000000000005'
+            AND code = N'dagster_run_failure'
+            AND is_continuous = 0
+    )
+    BEGIN
+        DECLARE @restore_type_guard BIT = 0;
+        IF
+            EXISTS (
+                SELECT 1
+                FROM sys.triggers
+                WHERE
+                    object_id = OBJECT_ID(N'alerting.tr_dim_alert_type_stable')
+                    AND is_disabled = 0
+            )
+            BEGIN
+                SET @restore_type_guard = 1;
+                EXEC (N'DISABLE TRIGGER alerting.tr_dim_alert_type_stable ON alerting.dim_alert_type');
+            END;
+
+        UPDATE alerting.dim_alert_type
+        SET is_continuous = 1
+        WHERE alert_type_id = '10000000-0000-0000-0000-000000000005';
+
+        IF @restore_type_guard = 1
+            EXEC (N'ENABLE TRIGGER alerting.tr_dim_alert_type_stable ON alerting.dim_alert_type');
+    END;
+
+UPDATE alerting.alert_incident
+SET is_point_in_time = 0
+WHERE
+    alert_type_id = '10000000-0000-0000-0000-000000000005'
+    AND is_point_in_time = 1;
+
+COMMIT TRANSACTION;
 GO
 
 IF
