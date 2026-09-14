@@ -208,6 +208,68 @@ BEGIN
 END;
 GO
 
+CREATE OR ALTER TRIGGER alerting.tr_alert_rule_sensor_guard
+ON alerting.alert_rule
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF
+        EXISTS (
+            SELECT 1
+            FROM inserted AS current_row
+            INNER JOIN alerting.dim_alert_type AS alert_type
+                ON current_row.alert_type_id = alert_type.alert_type_id
+            WHERE
+                alert_type.code IN (N'connection_lost', N'late_readings')
+                AND current_row.entity_key IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM dwh.dimSidonProdDimensions AS dimension
+                    WHERE
+                        current_row.entity_key
+                        = LOWER(CAST(dimension.SensorId AS NVARCHAR(36)))
+                        COLLATE Latin1_General_100_BIN2
+                        AND DATALENGTH(current_row.entity_key) = 72
+                        AND dimension.Active = 1
+                )
+        )
+        THROW 51028, 'Sensor rules must reference an existing active SensorId using its canonical lowercase GUID.', 1;
+END;
+GO
+
+CREATE OR ALTER TRIGGER alerting.tr_alert_rule_ingestion_guard
+ON alerting.alert_rule
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF
+        EXISTS (
+            SELECT 1
+            FROM inserted AS current_row
+            INNER JOIN alerting.dim_alert_type AS alert_type
+                ON current_row.alert_type_id = alert_type.alert_type_id
+            WHERE
+                alert_type.code IN (N'pipeline_failure', N'pipeline_stale')
+                AND current_row.entity_key IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM ctl.IngestionControl AS ingestion
+                    WHERE
+                        current_row.entity_key
+                        = ingestion.IngestionName COLLATE Latin1_General_100_BIN2
+                        AND DATALENGTH(current_row.entity_key)
+                        = DATALENGTH(ingestion.IngestionName)
+                        AND ingestion.IsActive = 1
+                )
+        )
+        THROW 51029, 'Pipeline rules must reference an existing active IngestionName.', 1;
+END;
+GO
+
 CREATE OR ALTER TRIGGER alerting.tr_alert_rule_no_readings_guard
 ON alerting.alert_rule_no_readings
 AFTER INSERT, UPDATE, DELETE
