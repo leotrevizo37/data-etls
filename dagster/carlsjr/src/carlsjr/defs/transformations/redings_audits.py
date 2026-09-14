@@ -4,8 +4,10 @@ from typing import Optional
 from pyspark.sql import DataFrame
 from pyspark.sql import Window
 from pyspark.sql.functions import (
+    avg,
     col,
     count,
+    count_distinct,
     date_trunc,
     explode,
     expr,
@@ -28,6 +30,7 @@ from pyspark.sql.functions import (
 
 LATE_READINGS_THRESHOLD_MINUTES = 15
 CONNECTION_LOST_THRESHOLD_MINUTES = 60
+READING_BLOCK_MINUTES = 5
 
 
 def redings_audits(
@@ -103,6 +106,16 @@ def redings_audits(
             / lit(60),
         )
         .withColumn("TimeSpan", date_trunc("hour", col("_ReadingAt")))
+        .withColumn(
+            "_ReadingBlock",
+            floor(
+                (
+                    unix_timestamp(col("_ReadingAt"))
+                    - unix_timestamp(col("TimeSpan"))
+                )
+                / lit(READING_BLOCK_MINUTES * 60)
+            ),
+        )
     )
     hourly_readings_df = (
         readings_base_df
@@ -111,7 +124,13 @@ def redings_audits(
             count("*").cast("integer").alias("ReadingsCount"),
             spark_min("_ReadingAt").alias("_HourFirstReadingAt"),
             spark_max("_ReadingAt").alias("_HourLastReadingAt"),
+            avg("_GapMinutes").alias("_AverageGapMinutes"),
+            count("_GapMinutes").cast("integer").alias("_GapCount"),
             spark_max("_GapMinutes").alias("_MaxGapMinutes"),
+            spark_min("_GapMinutes").alias("_MinGapMinutes"),
+            count_distinct("_ReadingBlock")
+            .cast("integer")
+            .alias("CoveredReadingBlocks"),
         )
     )
 
@@ -172,15 +191,39 @@ def redings_audits(
             ),
         )
         .withColumn(
-            "_MaxGapMinutes",
-            greatest(
-                col("_MaxGapMinutes"),
+            "_BoundaryGapMinutes",
+            when(
+                col("_GapCount") < col("ReadingsCount"),
                 (
                     unix_timestamp(col("_HourFirstReadingAt"))
                     - unix_timestamp(col("_PriorLastReadingAt"))
                 )
                 / lit(60),
             ),
+        )
+        .withColumn(
+            "AverageGapMinutes",
+            when(
+                col("_BoundaryGapMinutes").isNotNull(),
+                when(
+                    col("_GapCount") == 0,
+                    col("_BoundaryGapMinutes"),
+                ).otherwise(
+                    (
+                        col("_AverageGapMinutes") * col("_GapCount")
+                        + col("_BoundaryGapMinutes")
+                    )
+                    / (col("_GapCount") + lit(1))
+                ),
+            ).otherwise(col("_AverageGapMinutes")),
+        )
+        .withColumn(
+            "MaximumGapMinutes",
+            greatest(col("_MaxGapMinutes"), col("_BoundaryGapMinutes")),
+        )
+        .withColumn(
+            "MinimumGapMinutes",
+            least(col("_MinGapMinutes"), col("_BoundaryGapMinutes")),
         )
         .withColumn(
             "_CandidateLastReadingAt",
@@ -227,7 +270,7 @@ def redings_audits(
                     >= lit(LATE_READINGS_THRESHOLD_MINUTES)
                 )
                 | (
-                    col("_MaxGapMinutes")
+                    col("MaximumGapMinutes")
                     >= lit(LATE_READINGS_THRESHOLD_MINUTES)
                 ),
                 lit(True),
@@ -255,7 +298,15 @@ def redings_audits(
                 ),
             ).otherwise(lit(None).cast("timestamp")),
         )
-        .fillna({"ReadingsCount": 0})
+        .fillna({"ReadingsCount": 0, "CoveredReadingBlocks": 0})
+        .withColumn(
+            "ReadingsCoveragePercentage",
+            (
+                col("CoveredReadingBlocks")
+                / lit(60 // READING_BLOCK_MINUTES)
+                * lit(100)
+            ).cast("decimal(7,4)"),
+        )
         .withColumn(
             "LocalTimeSpan",
             from_utc_timestamp(col("TimeSpan"), col("TimeZone")),
@@ -265,6 +316,17 @@ def redings_audits(
             "TimeSpan",
             "LocalTimeSpan",
             col("ReadingsCount").cast("integer").alias("ReadingsCount"),
+            col("AverageGapMinutes")
+            .cast("decimal(18,6)")
+            .alias("AverageGapMinutes"),
+            col("MaximumGapMinutes")
+            .cast("decimal(18,6)")
+            .alias("MaximumGapMinutes"),
+            col("MinimumGapMinutes")
+            .cast("decimal(18,6)")
+            .alias("MinimumGapMinutes"),
+            "ReadingsCoveragePercentage",
+            "CoveredReadingBlocks",
             "HasLateReadings",
             "IsConnectionLost",
             "LastReadingAt",

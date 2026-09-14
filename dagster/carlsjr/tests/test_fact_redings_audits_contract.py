@@ -72,6 +72,15 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             'dropDuplicates(["SensorId", "TimeSpan"])',
             spark,
         )
+        for column in (
+            "AverageGapMinutes",
+            "MaximumGapMinutes",
+            "MinimumGapMinutes",
+            "ReadingsCoveragePercentage",
+            "CoveredReadingBlocks",
+        ):
+            self.assertIn(column, merge)
+            self.assertIn(f'"{column}"', spark)
         self.assertIn(
             '"(SELECT SensorId, TimeSpan, LastReadingAt "',
             spark,
@@ -138,6 +147,35 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
         self.assertIn(
             'name="observability_factredingsaudits"',
             asset,
+        )
+
+    def test_carlsjr_schema_adds_reading_coverage_metrics(self) -> None:
+        sql = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "user_codes"
+            / "carlsjr"
+            / "init"
+            / "015_observability_factRedingsAudits.sql"
+        ).read_text()
+
+        self.assertIn("AverageGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn("MaximumGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn("MinimumGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn(
+            "ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL",
+            sql,
+        )
+        self.assertIn("CoveredReadingBlocks INT NOT NULL", sql)
+        self.assertIn(
+            "COL_LENGTH(N'observability.factRedingsAudits', "
+            "N'ReadingsCoveragePercentage') IS NULL",
+            sql,
+        )
+        self.assertIn(
+            "COL_LENGTH(N'stg.factRedingsAudits', "
+            "N'CoveredReadingBlocks') IS NULL",
+            sql,
         )
 
 
