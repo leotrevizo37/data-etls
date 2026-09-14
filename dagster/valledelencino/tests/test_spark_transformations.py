@@ -635,7 +635,13 @@ class SparkTransformationsTests(unittest.TestCase):
                     self.assertIsNotNone(row["MeasurementValue"])
                     self.assertIsNotNone(row["MeasurementStdDev"])
                     self.assertEqual(row["ReadingsCount"], len(values))
-                    self.assertEqual(row["Anomalies"], 0)
+                    expected_anomalies = (
+                        len(values)
+                        if method_name == "destilados"
+                        and sensor_type == "Temperatura"
+                        else 0
+                    )
+                    self.assertEqual(row["Anomalies"], expected_anomalies)
                     self.assertAlmostEqual(
                         row["MeasurementValue"],
                         sum(values) / len(values),
@@ -693,7 +699,20 @@ class SparkTransformationsTests(unittest.TestCase):
                     self.assertIsNotNone(row["MeasurementValue"])
                     self.assertIsNotNone(row["MeasurementStdDev"])
                     self.assertEqual(row["ReadingsCount"], len(expected_values))
-                    self.assertEqual(row["Anomalies"], 0)
+                    sensor_id, _hour_start = key
+                    expected_anomalies = (
+                        len(expected_values)
+                        if method_name == "destilados"
+                        and sensor_id.endswith("-1")
+                        else sum(
+                            value < 0 or value > 1
+                            for value in expected_values
+                        )
+                        if method_name == "puerta"
+                        and sensor_id.endswith("-3")
+                        else 0
+                    )
+                    self.assertEqual(row["Anomalies"], expected_anomalies)
                     self.assertAlmostEqual(
                         row["MeasurementValue"],
                         sum(expected_values) / len(expected_values),
