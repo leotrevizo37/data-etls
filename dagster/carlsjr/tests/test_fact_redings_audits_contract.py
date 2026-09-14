@@ -51,6 +51,10 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             / "resources"
             / "spark.py"
         ).read_text()
+        stage_writer = spark.split(
+            "    def write_fact_redings_audits_stage(",
+            1,
+        )[1].split("\n    def ", 1)[0]
 
         self.assertIn("MERGE observability.factRedingsAudits", merge)
         self.assertIn("FROM stg.factRedingsAudits", merge)
@@ -72,6 +76,15 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             'dropDuplicates(["SensorId", "TimeSpan"])',
             spark,
         )
+        for column in (
+            "AverageGapMinutes",
+            "MaximumGapMinutes",
+            "MinimumGapMinutes",
+            "ReadingsCoveragePercentage",
+            "CoveredReadingBlocks",
+        ):
+            self.assertIn(column, merge)
+            self.assertIn(f'"{column}"', stage_writer)
         self.assertIn(
             '"(SELECT SensorId, TimeSpan, LastReadingAt "',
             spark,
@@ -138,6 +151,33 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
         self.assertIn(
             'name="observability_factredingsaudits"',
             asset,
+        )
+
+    def test_global_schema_adds_reading_coverage_metrics(self) -> None:
+        sql = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "init"
+            / "014_observability_factRedingsAudits.sql"
+        ).read_text()
+
+        self.assertIn("AverageGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn("MaximumGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn("MinimumGapMinutes DECIMAL(18, 6) NULL", sql)
+        self.assertIn(
+            "ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL",
+            sql,
+        )
+        self.assertIn("CoveredReadingBlocks INT NOT NULL", sql)
+        self.assertIn(
+            "COL_LENGTH(N'observability.factRedingsAudits', "
+            "N'ReadingsCoveragePercentage') IS NULL",
+            sql,
+        )
+        self.assertIn(
+            "COL_LENGTH(N'stg.factRedingsAudits', "
+            "N'CoveredReadingBlocks') IS NULL",
+            sql,
         )
 
 
