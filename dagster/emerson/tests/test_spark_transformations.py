@@ -240,7 +240,8 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(len(rows), 6)
         self.assertEqual({row["SensorId"] for row in rows}, expected_sensor_ids)
         self.assertEqual({row["ReadingsCount"] for row in rows}, {0})
-        self.assertEqual({row["Anomalies"] for row in rows}, {1})
+        self.assertEqual({row["Anomalies"] for row in rows}, {0})
+        self.assertEqual({row["HasAnomalies"] for row in rows}, {False})
         self.assertTrue(all(row["MeasurementValue"] is None for row in rows))
 
     def test_operations_device_transformations_are_wired_and_covered(self) -> None:
@@ -316,6 +317,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertIn("read_lecturas_range(", datalake_source)
         self.assertIn("read_lecturas_local_range", datalake_source)
         self.assertIn("use_utc_range=True", operations_source)
+        self.assertIn('col("sensor_name").alias("SensorName")', operations_source)
         self.assertIn('spark_max("TimeSpan")', operations_source)
         self.assertIn('get_max_time_span(devices_df, "TimeSpan")', operations_source)
         self.assertNotIn('spark_max("LocalTimeSpan")', operations_source)

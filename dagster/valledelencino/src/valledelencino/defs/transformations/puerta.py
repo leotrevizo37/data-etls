@@ -39,7 +39,12 @@ def puerta(
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
-            .withColumn("Anomalies", lit(1).cast("integer"))
+            .withColumn("Min", lit(None))
+            .withColumn("Max", lit(None))
+            .withColumn("Anomalies", lit(0).cast("integer"))
+            .withColumn("HasAnomalies", lit(False))
+            .withColumn("CorrectReadingsJson", lit("[]"))
+            .withColumn("AnomalousReadingsJson", lit("[]"))
             .withColumn("MeasurementValue", lit(None))
             .withColumn("MeasurementStdDev", lit(None))
         )
@@ -51,8 +56,8 @@ def puerta(
     state_stats_df = stats_calculator(
         base,
         "Temperatura",
-        None,
-        None
+        -50,
+        100
     )
     if state_stats_df is not None:
         state_stats_df = (
@@ -65,7 +70,12 @@ def puerta(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -89,7 +99,12 @@ def puerta(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -99,8 +114,8 @@ def puerta(
     status_stats_df = stats_calculator(
         base,
         "Estado",
-        None,
-        None
+        0,
+        1
     )
     if status_stats_df is not None:
         status_stats_df = (
@@ -113,7 +128,12 @@ def puerta(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -143,8 +163,13 @@ def puerta(
             "SensorId",
             "TimeSpan",
             "MeasurementValue",
-            "MeasurementStdDev",
-            "Anomalies",
+                "MeasurementStdDev",
+                "Min",
+                "Max",
+                "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
             "sensor_type",
             "ReadingsCount",
             "device_type",
@@ -170,7 +195,13 @@ def puerta(
         )
     )
 
-    scaffold_enriched = scaffold_df.fillna({"ReadingsCount": 0, "Anomalies": -1})
+    scaffold_enriched = scaffold_df.fillna({
+        "ReadingsCount": 0,
+        "Anomalies": 0,
+        "HasAnomalies": False,
+        "CorrectReadingsJson": "[]",
+        "AnomalousReadingsJson": "[]",
+    })
 
     group_with_guid_df = (
         scaffold_enriched
