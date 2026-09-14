@@ -334,7 +334,13 @@ USING (
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
+        [Min],
+        [Max],
+        SensorName,
         Anomalies,
+        HasAnomalies,
+        CorrectReadingsJson,
+        AnomalousReadingsJson,
         ReadingsCount
     FROM stg.factReadingsMeasurement
     WHERE RunId = ?
@@ -352,7 +358,13 @@ WHEN MATCHED THEN
         target.LocalTimeSpan = source.LocalTimeSpan,
         target.MeasurementValue = source.MeasurementValue,
         target.MeasurementStdDev = source.MeasurementStdDev,
+        target.[Min] = source.[Min],
+        target.[Max] = source.[Max],
+        target.SensorName = source.SensorName,
         target.Anomalies = source.Anomalies,
+        target.HasAnomalies = source.HasAnomalies,
+        target.CorrectReadingsJson = source.CorrectReadingsJson,
+        target.AnomalousReadingsJson = source.AnomalousReadingsJson,
         target.ReadingsCount = source.ReadingsCount,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -368,7 +380,13 @@ WHEN NOT MATCHED BY TARGET THEN
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
+        [Min],
+        [Max],
+        SensorName,
         Anomalies,
+        HasAnomalies,
+        CorrectReadingsJson,
+        AnomalousReadingsJson,
         ReadingsCount
     )
     VALUES (
@@ -383,7 +401,13 @@ WHEN NOT MATCHED BY TARGET THEN
         source.LocalTimeSpan,
         source.MeasurementValue,
         source.MeasurementStdDev,
+        source.[Min],
+        source.[Max],
+        source.SensorName,
         source.Anomalies,
+        source.HasAnomalies,
+        source.CorrectReadingsJson,
+        source.AnomalousReadingsJson,
         source.ReadingsCount
     )
 OUTPUT $action INTO @MergeActions;
