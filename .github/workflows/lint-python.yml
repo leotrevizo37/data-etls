@@ -1,13 +1,16 @@
 name: ci-python.yml
 
 on:
+  push:
+    branches:
+      - development
   pull_request:
     types: [ opened, synchronize, reopened ]
 
 jobs:
   python:
     runs-on: ubuntu-latest
-    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || github.head_ref == 'stage'
+    if: github.event_name == 'push' || startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || github.head_ref == 'stage'
     defaults:
       run:
         working-directory: dagster
