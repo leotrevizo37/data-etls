@@ -58,8 +58,8 @@ def presencia(
         stats_calculator(
             base,
             None,
-            None,
-            None
+            0,
+            1
         )
     )
 
