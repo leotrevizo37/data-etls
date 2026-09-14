@@ -153,14 +153,12 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             asset,
         )
 
-    def test_carlsjr_schema_adds_reading_coverage_metrics(self) -> None:
+    def test_global_schema_adds_reading_coverage_metrics(self) -> None:
         sql = (
             REPOSITORY_ROOT
             / "sql"
-            / "user_codes"
-            / "carlsjr"
             / "init"
-            / "015_observability_factRedingsAudits.sql"
+            / "014_observability_factRedingsAudits.sql"
         ).read_text()
 
         self.assertIn("AverageGapMinutes DECIMAL(18, 6) NULL", sql)

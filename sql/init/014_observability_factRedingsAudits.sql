@@ -28,6 +28,11 @@ IF OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NULL
             TimeSpan DATETIME2(0) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             ReadingsCount INT NOT NULL,
+            AverageGapMinutes DECIMAL(18, 6) NULL,
+            MaximumGapMinutes DECIMAL(18, 6) NULL,
+            MinimumGapMinutes DECIMAL(18, 6) NULL,
+            ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL,
+            CoveredReadingBlocks INT NOT NULL,
             HasLateReadings BIT NOT NULL,
             IsConnectionLost BIT NOT NULL,
             LastReadingAt DATETIME2(0) NULL,
@@ -51,12 +56,115 @@ IF OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NULL
             TimeSpan DATETIME2(0) NOT NULL,
             LocalTimeSpan DATETIME2(0) NOT NULL,
             ReadingsCount INT NOT NULL,
+            AverageGapMinutes DECIMAL(18, 6) NULL,
+            MaximumGapMinutes DECIMAL(18, 6) NULL,
+            MinimumGapMinutes DECIMAL(18, 6) NULL,
+            ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL,
+            CoveredReadingBlocks INT NOT NULL,
             HasLateReadings BIT NOT NULL,
             IsConnectionLost BIT NOT NULL,
             LastReadingAt DATETIME2(0) NULL,
             ConnectionLostAt DATETIME2(0) NULL,
             MinutesWithoutReadings INT NULL
         );
+    END;
+GO
+
+IF
+    OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'observability.factRedingsAudits', N'AverageGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE observability.factRedingsAudits
+        ADD AverageGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'observability.factRedingsAudits', N'MaximumGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE observability.factRedingsAudits
+        ADD MaximumGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'observability.factRedingsAudits', N'MinimumGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE observability.factRedingsAudits
+        ADD MinimumGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'observability.factRedingsAudits', N'ReadingsCoveragePercentage') IS NULL
+    BEGIN
+        ALTER TABLE observability.factRedingsAudits
+        ADD ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL
+            CONSTRAINT DF_factRedingsAudits_ReadingsCoveragePercentage
+            DEFAULT (0);
+    END;
+GO
+
+IF
+    OBJECT_ID(N'observability.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'observability.factRedingsAudits', N'CoveredReadingBlocks') IS NULL
+    BEGIN
+        ALTER TABLE observability.factRedingsAudits
+        ADD CoveredReadingBlocks INT NOT NULL
+            CONSTRAINT DF_factRedingsAudits_CoveredReadingBlocks
+            DEFAULT (0);
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factRedingsAudits', N'AverageGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE stg.factRedingsAudits
+        ADD AverageGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factRedingsAudits', N'MaximumGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE stg.factRedingsAudits
+        ADD MaximumGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factRedingsAudits', N'MinimumGapMinutes') IS NULL
+    BEGIN
+        ALTER TABLE stg.factRedingsAudits
+        ADD MinimumGapMinutes DECIMAL(18, 6) NULL;
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factRedingsAudits', N'ReadingsCoveragePercentage') IS NULL
+    BEGIN
+        ALTER TABLE stg.factRedingsAudits
+        ADD ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL
+            CONSTRAINT DF_stg_factRedingsAudits_ReadingsCoveragePercentage
+            DEFAULT (0);
+    END;
+GO
+
+IF
+    OBJECT_ID(N'stg.factRedingsAudits', N'U') IS NOT NULL
+    AND COL_LENGTH(N'stg.factRedingsAudits', N'CoveredReadingBlocks') IS NULL
+    BEGIN
+        ALTER TABLE stg.factRedingsAudits
+        ADD CoveredReadingBlocks INT NOT NULL
+            CONSTRAINT DF_stg_factRedingsAudits_CoveredReadingBlocks
+            DEFAULT (0);
     END;
 GO
 
