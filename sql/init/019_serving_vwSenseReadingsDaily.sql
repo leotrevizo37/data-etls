@@ -58,7 +58,7 @@ AS
 SELECT
     SensorId,
     LocalDate,
-    MeasurementValueSum / NULLIF(MeasurementValueCount, 0) AS AverageValue,
-    AnomaliesSum
+    AnomaliesSum,
+    MeasurementValueSum / NULLIF(MeasurementValueCount, 0) AS AverageValue
 FROM dwh.vwFactReadingsMeasurementDaily;
 GO
