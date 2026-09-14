@@ -123,8 +123,8 @@ def cuartos_refrigeracion(
     current_stats_df = stats_calculator(
         base,
         "Corriente",
-        None,
-        None
+        0,
+        30
     )
     if current_stats_df is not None:
         current_stats_df = (
