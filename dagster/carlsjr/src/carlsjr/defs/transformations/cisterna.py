@@ -63,7 +63,7 @@ def cisterna(
         base,
         "nivel de cisterna porcentaje",
         10,
-        115
+        100
     )
     if state_stats_df is not None:
         state_stats_df = (
