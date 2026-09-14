@@ -104,7 +104,7 @@ IF
         ALTER TABLE observability.factRedingsAudits
         ADD ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL
             CONSTRAINT DF_factRedingsAudits_ReadingsCoveragePercentage
-            DEFAULT (0) WITH VALUES;
+            DEFAULT (0);
     END;
 GO
 
@@ -115,7 +115,7 @@ IF
         ALTER TABLE observability.factRedingsAudits
         ADD CoveredReadingBlocks INT NOT NULL
             CONSTRAINT DF_factRedingsAudits_CoveredReadingBlocks
-            DEFAULT (0) WITH VALUES;
+            DEFAULT (0);
     END;
 GO
 
@@ -153,7 +153,7 @@ IF
         ALTER TABLE stg.factRedingsAudits
         ADD ReadingsCoveragePercentage DECIMAL(7, 4) NOT NULL
             CONSTRAINT DF_stg_factRedingsAudits_ReadingsCoveragePercentage
-            DEFAULT (0) WITH VALUES;
+            DEFAULT (0);
     END;
 GO
 
@@ -164,7 +164,7 @@ IF
         ALTER TABLE stg.factRedingsAudits
         ADD CoveredReadingBlocks INT NOT NULL
             CONSTRAINT DF_stg_factRedingsAudits_CoveredReadingBlocks
-            DEFAULT (0) WITH VALUES;
+            DEFAULT (0);
     END;
 GO
 
