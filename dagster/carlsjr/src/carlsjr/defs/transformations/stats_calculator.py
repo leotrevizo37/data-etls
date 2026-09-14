@@ -3,11 +3,17 @@ from typing import Optional
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col,
+    collect_list,
     date_trunc,
     avg,
     lit,
+    max as spark_max,
+    min as spark_min,
+    sort_array,
+    struct,
     sum as spark_sum,
     count,
+    to_json,
     when as spark_when,
     stddev)
 
@@ -25,6 +31,8 @@ def stats_calculator(
 
     agg_exprs = [
         avg("Value").alias("Val_dummy"),
+        spark_min("Value").alias("Min"),
+        spark_max("Value").alias("Max"),
         count("*").alias("total_readings"),
         stddev("Value").alias("Val_std"),
     ]
@@ -39,10 +47,34 @@ def stats_calculator(
         else:
             anomaly_cond = max_cond
 
-    if anomaly_cond is not None:
-        agg_exprs.append(
-            spark_sum(spark_when(anomaly_cond, 1).otherwise(0)).alias("out_of_range_count")
-        )
+    if anomaly_cond is None:
+        anomaly_cond = lit(False)
+
+    reading_data = struct(
+        col("TimeSpan").alias("timestamp"),
+        col("Value").alias("value"),
+    )
+    agg_exprs.extend(
+        [
+            spark_sum(spark_when(anomaly_cond, 1).otherwise(0))
+            .cast("integer")
+            .alias("Anomalies"),
+            to_json(
+                sort_array(
+                    collect_list(
+                        spark_when(~anomaly_cond, reading_data)
+                    )
+                )
+            ).alias("CorrectReadingsJson"),
+            to_json(
+                sort_array(
+                    collect_list(
+                        spark_when(anomaly_cond, reading_data)
+                    )
+                )
+            ).alias("AnomalousReadingsJson"),
+        ]
+    )
 
     stats_df = (
         base
@@ -59,13 +91,10 @@ def stats_calculator(
         .withColumnRenamed("total_readings", "ReadingsCount")
     )
 
-    if anomaly_cond is not None:
-        stats_df = stats_df.withColumn(
-            "Anomalies",
-            spark_when(col("out_of_range_count") > 0, lit(1)).otherwise(lit(0))
-        ).drop("out_of_range_count")
-    else:
-        stats_df = stats_df.withColumn("Anomalies", lit(0).cast("integer"))
+    stats_df = stats_df.withColumn(
+        "HasAnomalies",
+        col("Anomalies") > lit(0),
+    )
 
     stats_current_df = (
         stats_df
