@@ -120,7 +120,7 @@ class RedingsAuditsTests(unittest.TestCase):
         self.assertIsNone(rows[first_sensor]["MinimumGapMinutes"])
         self.assertEqual(
             float(rows[first_sensor]["ReadingsCoveragePercentage"]),
-            16.6667,
+            8.3333,
         )
         self.assertEqual(rows[first_sensor]["CoveredReadingBlocks"], 1)
         self.assertEqual(rows[first_sensor]["MinutesWithoutReadings"], 15)
@@ -201,7 +201,7 @@ class RedingsAuditsTests(unittest.TestCase):
         self.assertEqual(float(row["AverageGapMinutes"]), 20.0)
         self.assertEqual(float(row["MaximumGapMinutes"]), 20.0)
         self.assertEqual(float(row["MinimumGapMinutes"]), 20.0)
-        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 16.6667)
+        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 8.3333)
         self.assertEqual(row["CoveredReadingBlocks"], 1)
         self.assertEqual(row["MinutesWithoutReadings"], 1)
         self.assertTrue(row["HasLateReadings"])
@@ -252,8 +252,8 @@ class RedingsAuditsTests(unittest.TestCase):
         self.assertEqual(float(row["AverageGapMinutes"]), 14.5)
         self.assertEqual(float(row["MaximumGapMinutes"]), 44.0)
         self.assertEqual(float(row["MinimumGapMinutes"]), 1.0)
-        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 50.0)
-        self.assertEqual(row["CoveredReadingBlocks"], 3)
+        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 33.3333)
+        self.assertEqual(row["CoveredReadingBlocks"], 4)
 
     def test_keeps_repeated_local_hour_separate_by_utc_time_span(self) -> None:
         sensor_id = "11111111-1111-1111-1111-111111111111"
