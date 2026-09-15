@@ -48,6 +48,19 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         self.assertIn("target.TimeSpan = source.TimeSpan", sql)
         self.assertIn("source.TimeSpan", sql)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
+        self.assertIn("target.[Min] = source.[Min]", sql)
+        self.assertIn("target.[Max] = source.[Max]", sql)
+        self.assertIn("target.SensorName = source.SensorName", sql)
+        self.assertIn("target.Anomalies = source.Anomalies", sql)
+        self.assertIn("target.HasAnomalies = source.HasAnomalies", sql)
+        self.assertIn(
+            "target.CorrectReadingsJson = source.CorrectReadingsJson",
+            sql,
+        )
+        self.assertIn(
+            "target.AnomalousReadingsJson = source.AnomalousReadingsJson",
+            sql,
+        )
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
 

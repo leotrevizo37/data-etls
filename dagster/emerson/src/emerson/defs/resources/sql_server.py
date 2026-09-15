@@ -334,7 +334,13 @@ USING (
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
+        [Min],
+        [Max],
+        SensorName,
         Anomalies,
+        HasAnomalies,
+        CorrectReadingsJson,
+        AnomalousReadingsJson,
         ReadingsCount
     FROM stg.factReadingsMeasurement
     WHERE RunId = ?
@@ -352,7 +358,13 @@ WHEN MATCHED THEN
         target.LocalTimeSpan = source.LocalTimeSpan,
         target.MeasurementValue = source.MeasurementValue,
         target.MeasurementStdDev = source.MeasurementStdDev,
+        target.[Min] = source.[Min],
+        target.[Max] = source.[Max],
+        target.SensorName = source.SensorName,
         target.Anomalies = source.Anomalies,
+        target.HasAnomalies = source.HasAnomalies,
+        target.CorrectReadingsJson = source.CorrectReadingsJson,
+        target.AnomalousReadingsJson = source.AnomalousReadingsJson,
         target.ReadingsCount = source.ReadingsCount,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -368,7 +380,13 @@ WHEN NOT MATCHED BY TARGET THEN
         LocalTimeSpan,
         MeasurementValue,
         MeasurementStdDev,
+        [Min],
+        [Max],
+        SensorName,
         Anomalies,
+        HasAnomalies,
+        CorrectReadingsJson,
+        AnomalousReadingsJson,
         ReadingsCount
     )
     VALUES (
@@ -383,7 +401,13 @@ WHEN NOT MATCHED BY TARGET THEN
         source.LocalTimeSpan,
         source.MeasurementValue,
         source.MeasurementStdDev,
+        source.[Min],
+        source.[Max],
+        source.SensorName,
         source.Anomalies,
+        source.HasAnomalies,
+        source.CorrectReadingsJson,
+        source.AnomalousReadingsJson,
         source.ReadingsCount
     )
 OUTPUT $action INTO @MergeActions;
@@ -496,6 +520,11 @@ USING (
         TimeSpan,
         LocalTimeSpan,
         ReadingsCount,
+        AverageGapMinutes,
+        MaximumGapMinutes,
+        MinimumGapMinutes,
+        ReadingsCoveragePercentage,
+        CoveredReadingBlocks,
         HasLateReadings,
         IsConnectionLost,
         LastReadingAt,
@@ -510,6 +539,11 @@ WHEN MATCHED THEN
     UPDATE SET
         target.LocalTimeSpan = source.LocalTimeSpan,
         target.ReadingsCount = source.ReadingsCount,
+        target.AverageGapMinutes = source.AverageGapMinutes,
+        target.MaximumGapMinutes = source.MaximumGapMinutes,
+        target.MinimumGapMinutes = source.MinimumGapMinutes,
+        target.ReadingsCoveragePercentage = source.ReadingsCoveragePercentage,
+        target.CoveredReadingBlocks = source.CoveredReadingBlocks,
         target.HasLateReadings = CASE
             WHEN target.HasLateReadings = 1 OR source.HasLateReadings = 1 THEN 1
             ELSE 0
@@ -525,6 +559,11 @@ WHEN NOT MATCHED BY TARGET THEN
         TimeSpan,
         LocalTimeSpan,
         ReadingsCount,
+        AverageGapMinutes,
+        MaximumGapMinutes,
+        MinimumGapMinutes,
+        ReadingsCoveragePercentage,
+        CoveredReadingBlocks,
         HasLateReadings,
         IsConnectionLost,
         LastReadingAt,
@@ -536,6 +575,11 @@ WHEN NOT MATCHED BY TARGET THEN
         source.TimeSpan,
         source.LocalTimeSpan,
         source.ReadingsCount,
+        source.AverageGapMinutes,
+        source.MaximumGapMinutes,
+        source.MinimumGapMinutes,
+        source.ReadingsCoveragePercentage,
+        source.CoveredReadingBlocks,
         source.HasLateReadings,
         source.IsConnectionLost,
         source.LastReadingAt,

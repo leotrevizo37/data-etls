@@ -51,6 +51,10 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             / "resources"
             / "spark.py"
         ).read_text()
+        stage_writer = spark.split(
+            "    def write_fact_redings_audits_stage(",
+            1,
+        )[1].split("\n    def ", 1)[0]
 
         self.assertIn("MERGE observability.factRedingsAudits", merge)
         self.assertIn("FROM stg.factRedingsAudits", merge)
@@ -72,6 +76,15 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             'dropDuplicates(["SensorId", "TimeSpan"])',
             spark,
         )
+        for column in (
+            "AverageGapMinutes",
+            "MaximumGapMinutes",
+            "MinimumGapMinutes",
+            "ReadingsCoveragePercentage",
+            "CoveredReadingBlocks",
+        ):
+            self.assertIn(column, merge)
+            self.assertIn(f'"{column}"', stage_writer)
         self.assertIn(
             '"(SELECT SensorId, TimeSpan, LastReadingAt "',
             spark,
