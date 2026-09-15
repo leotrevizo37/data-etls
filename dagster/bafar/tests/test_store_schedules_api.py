@@ -124,7 +124,7 @@ class FakeResponse:
 class StoreSchedulesApiContractTests(unittest.TestCase):
     def setUp(self):
         self.resource = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/neptune/api/RT_STORE_INF/horarios",
+            url="https://api.example.test/neptune/api/RT_STORE_INF/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -185,8 +185,15 @@ class StoreSchedulesApiContractTests(unittest.TestCase):
         invalid_time["result"]["RESPONSE_HORARIO"]["STORES"][0]["SCHEDULE"][0][
             "SLOTS"
         ][0]["FROM"] = "25:00:00"
+        invalid_blocked_dates = build_payload()
+        invalid_blocked_dates["result"]["RESPONSE_HORARIO"]["STORES"][0][
+            "BLOCKED_FROM"
+        ] = "2026-09-20"
+        invalid_blocked_dates["result"]["RESPONSE_HORARIO"]["STORES"][0][
+            "BLOCKED_TO"
+        ] = "2026-09-10"
 
-        for payload in (invalid_date, invalid_time):
+        for payload in (invalid_date, invalid_time, invalid_blocked_dates):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 self.resource.validate_page(payload)
 
@@ -236,6 +243,17 @@ class StoreSchedulesApiContractTests(unittest.TestCase):
         ):
             self.resource.fetch_page()
 
+    def test_fetch_rejects_non_https_url(self):
+        self.resource.url = "http://api.example.test/horarios"
+
+        with (
+            patch.object(api_module, "urlopen") as urlopen,
+            self.assertRaisesRegex(RuntimeError, "must use HTTPS"),
+        ):
+            self.resource.fetch_page()
+
+        urlopen.assert_not_called()
+
     def test_fetch_uses_full_catalog_closed_days_and_cursor(self):
         payload = build_payload()
 
@@ -266,7 +284,7 @@ class StoreSchedulesApiContractTests(unittest.TestCase):
 class StoreSchedulesAssetTests(unittest.TestCase):
     def test_asset_merges_only_after_every_page_is_valid(self):
         api = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/horarios",
+            url="https://api.example.test/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -315,7 +333,7 @@ class StoreSchedulesAssetTests(unittest.TestCase):
 
     def test_page_failure_preserves_last_dwh_snapshot(self):
         api = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/horarios",
+            url="https://api.example.test/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -354,7 +372,7 @@ class StoreSchedulesAssetTests(unittest.TestCase):
 
     def test_duplicate_store_across_pages_preserves_last_dwh_snapshot(self):
         api = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/horarios",
+            url="https://api.example.test/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -385,7 +403,7 @@ class StoreSchedulesAssetTests(unittest.TestCase):
 
     def test_repeated_cursor_preserves_last_dwh_snapshot(self):
         api = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/horarios",
+            url="https://api.example.test/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -416,7 +434,7 @@ class StoreSchedulesAssetTests(unittest.TestCase):
 
     def test_network_failure_on_later_page_preserves_last_dwh_snapshot(self):
         api = api_module.StoreSchedulesApiResource(
-            url="http://api.example.test/horarios",
+            url="https://api.example.test/horarios",
             user="test-user",
             password="test-password",
             timeout_seconds=30,
@@ -461,7 +479,7 @@ class StoreSchedulesAssetTests(unittest.TestCase):
                     else f"{failing_step} failed"
                 )
                 api = api_module.StoreSchedulesApiResource(
-                    url="http://api.example.test/horarios",
+                    url="https://api.example.test/horarios",
                     user="test-user",
                     password="test-password",
                     timeout_seconds=30,
