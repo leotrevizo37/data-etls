@@ -636,7 +636,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     self.assertIsNotNone(row["MeasurementStdDev"])
                     self.assertEqual(row["ReadingsCount"], len(values))
                     expected_anomalies = (
-                        len(values)
+                        sum(value < -50 or value > 100 for value in values)
                         if method_name == "destilados"
                         and sensor_type == "Temperatura"
                         else 0
@@ -701,7 +701,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     self.assertEqual(row["ReadingsCount"], len(expected_values))
                     sensor_id, _hour_start = key
                     expected_anomalies = (
-                        len(expected_values)
+                        sum(value < -50 or value > 100 for value in expected_values)
                         if method_name == "destilados"
                         and sensor_id.endswith("-1")
                         else sum(
