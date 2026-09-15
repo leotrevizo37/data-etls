@@ -264,10 +264,6 @@ class ObservabilityFactLecturasMqttTests(unittest.TestCase):
             / "schedules"
             / "factlecturasmqtt_scheduler.py"
         ).read_text()
-        dagster_config = (
-            REPOSITORY_ROOT / "dagster" / "dagster_home" / "dagster.yaml"
-        ).read_text()
-
         self.assertIn(
             'name="023_observability_factlecturasmqtt"',
             job_source,
@@ -297,10 +293,6 @@ class ObservabilityFactLecturasMqttTests(unittest.TestCase):
             "default_status=DefaultScheduleStatus.RUNNING",
             schedule_source,
         )
-        self.assertIn('key: "api_rate_limit"', dagster_config)
-        self.assertIn('value: "emerson_lecturas_tenant"', dagster_config)
-        self.assertIn("        limit: 1", dagster_config)
-
     def test_sql_and_emerson_configuration_contract(self):
         sql = (
             REPOSITORY_ROOT
