@@ -5,6 +5,7 @@ import re
 from datetime import date, time
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from dagster import resource
@@ -71,6 +72,8 @@ class StoreSchedulesApiResource:
             or not 1 <= self.page_size <= 500
         ):
             raise RuntimeError("Store schedules API configuration is incomplete.")
+        if urlparse(self.url).scheme.casefold() != "https":
+            raise RuntimeError("Store schedules API URL must use HTTPS.")
         body = {
             "prefix": "9999",
             "includeClosed": True,
@@ -217,6 +220,14 @@ class StoreSchedulesApiResource:
         ):
             raise ValueError(
                 f"Store schedules API store {store_index} operating dates are invalid."
+            )
+        if (
+            parsed_dates["BLOCKED_FROM"] is not None
+            and parsed_dates["BLOCKED_TO"] is not None
+            and parsed_dates["BLOCKED_FROM"] > parsed_dates["BLOCKED_TO"]
+        ):
+            raise ValueError(
+                f"Store schedules API store {store_index} blocked dates are invalid."
             )
 
         day_numbers = set()
