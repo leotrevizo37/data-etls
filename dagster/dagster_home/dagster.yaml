@@ -84,4 +84,9 @@ concurrency:
       - key: "job_type"
         value:
           applyLimitPerUniqueValue: true
-        limit: 2
+        limit: 1
+      - key: "api_rate_limit"
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
+

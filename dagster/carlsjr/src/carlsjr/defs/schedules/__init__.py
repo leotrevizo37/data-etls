@@ -18,6 +18,7 @@ from .factmantiztickets_scheduler import mantiz_tickets_sched_every_6h
 from .cleanup_schedule import cleanup_schedule
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
 from .index_maintenance_schedule import index_maintenance_schedule
+from .factlecturasmqtt_scheduler import factlecturasmqtt_daily_schedule
 
 __all__ = [
     "fact_lecturas_sched_every_6h",
@@ -38,4 +39,5 @@ __all__ = [
     "cleanup_schedule",
     "factlecturas_cleanup_schedule",
     "index_maintenance_schedule",
+    "factlecturasmqtt_daily_schedule",
 ]
