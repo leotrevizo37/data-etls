@@ -56,8 +56,8 @@ def destilados(
     state_stats_df = stats_calculator(
         base,
         "Temperatura",
-        99,
-        -50
+        -50,
+        100
     )
     if state_stats_df is not None:
         state_stats_df = (
