@@ -65,7 +65,7 @@ class LecturasTenantApiTests(unittest.TestCase):
     def payload(self):
         return {
             "ok": True,
-            "tenant": "carlsjr",
+            "tenant": "carls",
             "fecha_inicio": "2026-08-30T00:00:00Z",
             "fecha_fin": "2026-08-30T00:01:00Z",
             "total": 9,
@@ -74,7 +74,7 @@ class LecturasTenantApiTests(unittest.TestCase):
                     "id": "11111111-1111-1111-1111-111111111111",
                     "fecha": "2026-08-30T00:00:00.100000",
                     "deveui": "device-1",
-                    "tenant": "carlsjr",
+                    "tenant": "carls",
                     "dispositivo": "device",
                     "aplicacion": "application",
                     "sucursal": None,
@@ -346,7 +346,7 @@ class LecturasTenantApiTests(unittest.TestCase):
 
         request = mocked.call_args.args[0]
         query = parse_qs(urlparse(request.full_url).query)
-        self.assertEqual(query["tenant"], ["carlsjr"])
+        self.assertEqual(query["tenant"], ["carls"])
         self.assertEqual(query["fechaInicio"], ["2026-08-30T00:00:00.000000Z"])
         self.assertEqual(query["fechaFin"], ["2026-08-30T00:01:00.000000Z"])
         self.assertEqual(query["limit"], ["2"])
