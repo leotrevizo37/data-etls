@@ -142,7 +142,16 @@ class LecturasTenantApiResource:
         normalized_rows = []
         ids = set()
         for index, row in enumerate(payload["data"]):
-            if type(row) is not dict or set(row) != ROW_FIELDS:
+            if type(row) is not dict:
+                raise ValueError(
+                    f"Lecturas tenant API row {index} does not match the contract."
+                )
+            if (
+                not isinstance(row.get("deveui"), str)
+                or re.fullmatch(r"[0-9A-Fa-f]{16}", row["deveui"]) is None
+            ):
+                continue
+            if set(row) != ROW_FIELDS:
                 raise ValueError(
                     f"Lecturas tenant API row {index} does not match the contract."
                 )
@@ -163,11 +172,7 @@ class LecturasTenantApiResource:
                 raise ValueError(
                     f"Lecturas tenant API row {index} has a different tenant."
                 )
-            if not isinstance(row["deveui"], str) or not row["deveui"].strip():
-                raise ValueError(
-                    f"Lecturas tenant API row {index} has an invalid deveui."
-                )
-            if len(row["deveui"]) > 64 or len(row["tenant"]) > 100:
+            if len(row["tenant"]) > 100:
                 raise ValueError(
                     f"Lecturas tenant API row {index} exceeds a persisted string limit."
                 )
@@ -296,7 +301,12 @@ class LecturasTenantApiResource:
                     if response.headers.get_content_type() != "application/json":
                         raise RuntimeError("Lecturas tenant API did not return JSON.")
                     payload = json.loads(response.read().decode("utf-8"))
-                return self.validate_payload(payload, from_local, to_local)
+                rows = self.validate_payload(payload, from_local, to_local)
+                if len(payload["data"]) == self.limit:
+                    raise LecturasTenantWindowTooLarge(
+                        "Lecturas tenant API response reached the requested limit."
+                    )
+                return rows
             except HTTPError as exc:
                 if exc.code == 504:
                     raise LecturasTenantWindowTooLarge(

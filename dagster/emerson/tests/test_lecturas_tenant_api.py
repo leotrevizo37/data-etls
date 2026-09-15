@@ -73,7 +73,7 @@ class LecturasTenantApiTests(unittest.TestCase):
                 {
                     "id": "11111111-1111-1111-1111-111111111111",
                     "fecha": "2026-08-30T00:00:00.100000",
-                    "deveui": "device-1",
+                    "deveui": "0102030405060708",
                     "tenant": "emerson",
                     "dispositivo": "device",
                     "aplicacion": "application",
@@ -268,9 +268,6 @@ class LecturasTenantApiTests(unittest.TestCase):
             ("fecha", "2026-08-30 00:00:00"),
             ("fecha", "2026-08-30T00:00:00.1234567890"),
             ("fecha", "2026-08-30T00:00:00+00:00"),
-            ("deveui", None),
-            ("deveui", ""),
-            ("deveui", "d" * 65),
             ("tenant", 1),
             ("tenant", "other"),
             ("dispositivo", 1),
@@ -308,6 +305,34 @@ class LecturasTenantApiTests(unittest.TestCase):
                 self.from_local,
                 self.to_local,
             )
+
+    def test_discards_rows_without_a_valid_deveui(self) -> None:
+        for value in (None, "", "UNKNOWN", "010203040506070", "010203040506070G", 1):
+            with self.subTest(value=value):
+                payload = self.payload()
+                payload["data"][0]["deveui"] = value
+                payload["data"][0]["mensaje_raw"] = json.dumps(
+                    {"eventType": "locationFullSync", "data": []}
+                )
+                self.assertEqual(
+                    self.resource.validate_payload(
+                        payload,
+                        self.from_local,
+                        self.to_local,
+                    ),
+                    [],
+                )
+
+        payload = self.payload()
+        payload["data"][0].pop("deveui")
+        self.assertEqual(
+            self.resource.validate_payload(
+                payload,
+                self.from_local,
+                self.to_local,
+            ),
+            [],
+        )
 
     def test_rejects_invalid_raw_message_time_types_and_formats(self) -> None:
         invalid_raw_messages = (
@@ -368,6 +393,17 @@ class LecturasTenantApiTests(unittest.TestCase):
         self.assertEqual(mocked.call_args_list[1].args, (self.from_local, midpoint))
         self.assertEqual(mocked.call_args_list[2].args, (midpoint, self.to_local))
         self.assertEqual(rows, left + right)
+
+    def test_raw_response_count_controls_saturation_after_discarding_rows(self) -> None:
+        payload = self.payload()
+        payload["data"] = [dict(payload["data"][0]), dict(payload["data"][0])]
+        payload["data"][0]["deveui"] = "UNKNOWN"
+        payload["data"][1]["id"] = "22222222-2222-2222-2222-222222222222"
+        response = JsonResponse(json.dumps(payload).encode("utf-8"))
+
+        with patch.object(api_module, "urlopen", return_value=response):
+            with self.assertRaises(LecturasTenantWindowTooLarge):
+                self.resource._request_window(self.from_local, self.to_local)
 
     def test_504_is_split_and_minimum_saturation_fails_closed(self) -> None:
         with patch.object(
