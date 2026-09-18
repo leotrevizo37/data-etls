@@ -100,7 +100,19 @@ IF
     END;
 GO
 
-CREATE OR ALTER VIEW serving.vwSenseSensorHealthDaily
+CREATE OR ALTER VIEW serving.vwSenseSensorCoverageHourly
+AS
+SELECT
+    SensorId,
+    TimeSpan,
+    LocalTimeSpan,
+    ReadingsCount,
+    AverageGapMinutes,
+    ReadingsCoveragePercentage AS CoveragePercentage
+FROM observability.factRedingsAudits;
+GO
+
+CREATE OR ALTER VIEW serving.vwSenseSensorCoverageDaily
 AS
 SELECT
     SensorId,
@@ -111,7 +123,7 @@ SELECT
 FROM observability.vwFactRedingsAuditsDaily;
 GO
 
-CREATE OR ALTER VIEW serving.vwSenseSensorHealthWeekly
+CREATE OR ALTER VIEW serving.vwSenseSensorCoverageWeekly
 AS
 SELECT
     SensorId,
@@ -121,4 +133,16 @@ SELECT
     AverageGapMinutesSum / NULLIF(AverageGapMinutesCount, 0) AS AverageGapMinutes,
     ReadingsCoveragePercentageSum / NULLIF([RowCount], 0) AS CoveragePercentage
 FROM observability.vwFactRedingsAuditsWeekly;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorHealthDaily', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorHealthDaily;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorHealthWeekly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorHealthWeekly;
+    END;
 GO
