@@ -1,3 +1,64 @@
+IF OBJECT_ID(N'serving.vwSenseSensorCommunicationHealthWeekly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCommunicationHealthWeekly;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorCommunicationHealthDaily', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCommunicationHealthDaily;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorCommunicationHealthHourly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCommunicationHealthHourly;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseGatewayHealthHourly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseGatewayHealthHourly;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.vwChirpStackTenantGatewayHealthHourly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW observability.vwChirpStackTenantGatewayHealthHourly;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factChirpStackDeviceMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factChirpStackGatewayMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factChirpStackDeviceMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factChirpStackGatewayMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'ctl.IngestionControl', N'U') IS NOT NULL
+    BEGIN
+        DELETE FROM ctl.IngestionControl
+        WHERE IngestionName = N'factChirpStackMetrics';
+    END;
+GO
+
 IF OBJECT_ID(N'serving.vwSenseSensorHealthDaily', N'V') IS NOT NULL
     BEGIN
         DROP VIEW serving.vwSenseSensorHealthDaily;
