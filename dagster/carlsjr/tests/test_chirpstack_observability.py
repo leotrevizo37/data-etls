@@ -12,13 +12,15 @@ from urllib.parse import parse_qs, urlparse
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = PROJECT_ROOT.parents[1]
 PROJECT_SRC = PROJECT_ROOT / "src"
-sys.path.insert(0, str(PROJECT_SRC))
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
 
-from carlsjr.defs.transformations.chirpstack_metrics import (
-    build_device_metric_row,
-    build_gateway_metric_row,
-    normalize_dev_eui,
+chirpstack_metrics = importlib.import_module(
+    "carlsjr.defs.transformations.chirpstack_metrics"
 )
+build_device_metric_row = chirpstack_metrics.build_device_metric_row
+build_gateway_metric_row = chirpstack_metrics.build_gateway_metric_row
+normalize_dev_eui = chirpstack_metrics.normalize_dev_eui
 
 
 def _chart(label, value, timestamp="2026-09-17T10:00:00Z"):
