@@ -63,7 +63,9 @@ def _build_defs() -> Any:
         chirpstack_metrics_sched_every_30m,
     )
     from .sensors import (
+        asset_row_count_trend_sensor,
         dwh_dimsidonproddimensions_sensor,
+        operational_alerts_sensor,
     )
 
     return Definitions(
@@ -104,7 +106,9 @@ def _build_defs() -> Any:
             index_maintenance_schedule,
         ],
         sensors=[
+            asset_row_count_trend_sensor,
             dwh_dimsidonproddimensions_sensor,
+            operational_alerts_sensor,
         ],
         assets=[
             dbo_sensors,

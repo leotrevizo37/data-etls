@@ -136,7 +136,7 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             "CARLSJR_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS=1",
             example,
         )
-        self.assertIn('cron_schedule="*/30 * * * *"', schedule)
+        self.assertIn('cron_schedule="*/10 * * * *"', schedule)
         self.assertIn("DefaultScheduleStatus.RUNNING", schedule)
         self.assertIn('name="022_sense_redings_audits"', job)
         self.assertIn(

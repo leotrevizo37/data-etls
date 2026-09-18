@@ -1,175 +1,115 @@
-# Code location `alerting`
+# Señales y estado de alertas
 
-## Proposito
+## Responsabilidades
 
-`alerting` es una code location de Dagster dedicada al alertamiento de sensores, ingestiones, corridas de Dagster y tendencias de volumen. No ejecuta pipelines de datos: contiene dos sensores y los recursos necesarios para consultar señales, conservar el estado de cada incidencia y enviar correos.
+El flujo separa tres responsabilidades:
 
-## Integracion con Dagster
+1. Dagster detecta el inicio o fin comprobable de una condición.
+2. El sistema externo de alertamiento administra el ciclo de vida.
+3. El sistema externo ejecuta correo, tickets y otros canales.
 
-| Elemento | Configuracion actual |
+Dagster solo escribe eventos DETECTED y CLEARED en
+alerting.alert_signal_event. No crea tickets, no envía correo y no asigna
+estados de workflow.
+
+## Topología
+
+Cada code location de bafar, bafar_poc_gabinete, carlsjr, emerson y
+valledelencino registra copias independientes de:
+
+- operational_alerts_sensor.
+- asset_row_count_trend_sensor.
+
+Ambos usan exclusivamente el recurso sqlserver del tenant y se registran en
+estado inicial STOPPED.
+
+La code location alerting conserva esos dos nombres para compatibilidad. Sus
+sensores también están STOPPED, no solicitan recursos y siempre devuelven
+SkipReason. La ruta central no contiene entrega por correo, estado mutable ni
+lectura multitenant.
+
+## Modelo SQL
+
+Cada base tenant conserva su propio modelo:
+
+| Objeto | Responsabilidad |
 |---|---|
-| Servicio Compose | `dagster-user-code-alerting` |
-| Contenedor | `alerting-dagster-user-code` |
-| Location name | `alerting` |
-| Puerto gRPC interno | `4009` |
-| Puerto publicado | `ALERTING_USER_CODE_PORT`, con `4009` como valor por defecto |
-| Modulo de definiciones | `alerting.definitions` |
-| Comando | `dagster code-server start -h 0.0.0.0 -p 4009 -m alerting.definitions` |
-| Healthcheck | `dagster api grpc-health-check -p 4009 -h 127.0.0.1` |
+| alerting.alert_incident | Identidad y evidencia raíz de una incidencia |
+| alerting.alert_signal_event | Transiciones de detección append-only |
+| alerting.alert_workflow_event | Cambios de ciclo de vida del sistema externo |
+| alerting.alert_action_event | Intentos y resultados de acciones externas |
+| alerting.asset_row_count_daily | Historia diaria de metadata row_count |
+| alerting.alert_config | Versiones de configuración por tenant |
+| alerting.alert_rule | Reglas default y overrides exactos |
+| serving.vwEstadoAlertas | Una fila de reporteo por incidencia |
+| serving.vwValidacionConfiguracionesAlerta | Errores bloqueantes de configuración |
 
-El servicio usa el mismo `dagster/Dockerfile` que las demas code locations. Espera que `dagster-postgres` este saludable y que `sql-init` termine correctamente. El `dagster-daemon` espera a su vez que `dagster-user-code-alerting` este saludable antes de iniciar.
+Los catálogos usan GUID explícitos y estables. Sus códigos e identificadores
+no se eliminan ni cambian; nombre, descripción e indicador de activo sí
+pueden corregirse. Las bitácoras no admiten actualización ni eliminación.
 
-La instancia cargada por Compose usa el `workspace.yaml` de la raiz, donde `alerting-dagster-user-code:4009` esta registrado como `alerting`.
+serving.vwEstadoAlertas tiene nombre y columnas en español PascalCase. Sin un
+evento de workflow conserva esas columnas en NULL; sin acciones conserva IDs,
+fechas y estados en NULL, y contadores en cero.
 
-## Definiciones
+## Configuración
 
-La code location registra estos recursos:
+Una versión sigue DRAFT → ACTIVE → RETIRED. Existe como máximo una versión
+activa por tenant. alerting.usp_AlertConfig_Activate valida el borrador, retira
+la versión vigente y activa la nueva dentro de una transacción.
 
-| Recurso | Responsabilidad |
-|---|---|
-| `mssql_reader` | Consultas de solo lectura a las bases SQL Server de cada tenant |
-| `alert_state` | Estado de entrega e historial diario de `row_count` en PostgreSQL de Dagster |
-| `email_notifier` | Construccion y envio de correo HTML mediante SMTP |
+Cada versión válida contiene exactamente una regla default por cada uno de
+los seis tipos. Puede agregar overrides completos por entity_key; la
+coincidencia exacta gana y, si no existe, se usa el default. En
+connection_lost y late_readings, entity_key es el SensorId canónico.
 
-Tambien registra dos sensores, ambos habilitados por defecto.
+Las políticas de entrega, reintentos, tickets y horarios silenciosos no forman
+parte de la configuración nueva. Permanecen preservadas en las tablas
+*_legacy.
 
-## `operational_alerts_sensor`
+## Semántica de señales
 
-Se evalua con un intervalo minimo de 300 segundos. Consulta las condiciones configuradas para cada `user_code` y consolida el envio por tenant.
+Las condiciones continuas emiten solo transiciones. La apertura crea una
+incidencia y un evento DETECTED con GUID distintos y correlacionados. La
+recuperación actualiza cleared_at y agrega un evento CLEARED únicamente cuando
+existe evidencia posterior a la detección:
 
-| Tipo interno | Fuente | Condicion actual |
-|---|---|---|
-| `connection_lost` | `observability.factRedingsAudits` | Ultimo estado del sensor dentro del lookback con `IsConnectionLost = 1` |
-| `late_readings` | `observability.factRedingsAudits` | `HasLateReadings = 1` e `IsConnectionLost = 0` dentro del lookback |
-| `pipeline_failure` | `ctl.IngestionControl` | Ingestion activa con `LastRunStatus = 'FAILED'` |
-| `pipeline_stale` | `ctl.IngestionControl` | Ingestion activa, terminada y no fallida cuyo ultimo termino excede su cadencia configurada |
-| `dagster_run_failure` | Tabla `runs` de PostgreSQL de Dagster | Corrida con estado `FAILURE` durante las ultimas dos horas y code location monitoreada |
+- Una lectura nueva para sensores.
+- Una ejecución terminal exitosa posterior para ingestiones.
+- Una materialización posterior con volumen saludable para tendencias.
 
-Las alertas de sensores se enriquecen, cuando existe coincidencia, con sucursal, sububicacion, dispositivo y sensor desde `dwh.dimSidonProdDimensions`.
+La ausencia de datos, una fuente obsoleta, un cambio de configuración o una
+regla deshabilitada no producen CLEARED.
 
-Una desconexion no se considera resuelta solo porque desaparezca del lookback. La recuperacion requiere que el ultimo audit indique comunicacion activa y que exista una lectura en `dwh.factReadingsMeasurement` posterior a `ConnectionLostAt`. El correo puede incluir `CommunicationResumedAt` y `LastReadingAt` como evidencia.
+dagster_run_failure es puntual y solo produce DETECTED. El detector usa las
+APIs públicas de Dagster, exige el origen de la code location y relaciona cada
+paso fallido con los assets declarados en el execution plan. Un paso
+multi-asset produce una incidencia por asset; sin asset comprobable no produce
+señal. En este tipo, entity_id es el run_id y entity_key es el asset afectado.
 
-## `asset_row_count_trend_sensor`
+## Códigos de alerta
 
-Se evalua con un intervalo minimo de 21600 segundos, equivalente a seis horas. Lee incrementalmente eventos `ASSET_MATERIALIZATION` del event log de Dagster y procesa solamente materializaciones que incluyan metadata `row_count`.
+alert_code es una etiqueta histórica no única, en minúsculas ASCII y
+kebab-case:
 
-El cursor guarda el ultimo `storage_id` procesado. En ausencia de cursor, el backfill actual cubre 28 dias. Cada tick procesa 500 eventos y limita el valor configurable a un maximo de 1000. Si quedan eventos pendientes, registra el avance y difiere la evaluacion de alertas hasta completar el backlog.
+- sin-senal-{tipo-sensor}-{sublocacion}
+- lecturas-retrasadas-{tipo-sensor}-{sublocacion}
+- fallo-ingesta-{entity-key}
+- ingesta-atrasada-{entity-key}
+- fallo-dagster-{asset-key}
+- caida-volumen-{asset-key}
 
-Las observaciones se agregan por dia, code location, asset y clave de metadata. La evaluacion usa solamente dias UTC cerrados; el dia actual no participa.
+Si no existe metadata descriptiva, se usa entity_key.
 
-Una condicion de tendencia requiere simultaneamente:
+## Migración
 
-- 7 dias observados en la ventana de 7 dias.
-- 28 dias observados en la ventana de 28 dias.
-- Caida contra ambos promedios de al menos 20% para `WARNING`.
-- Caida contra ambos promedios de al menos 40% para `CRITICAL`.
+Los scripts 026 a 029 archivan las tablas anteriores como
+alert_workflow_state_legacy, alert_config_legacy y alert_rule_legacy, y crean
+catálogos, configuración, incidencias y eventos. Los scripts 030 a 033 crean
+las vistas, protecciones y el procedimiento de activación. Los scripts 034 y
+035 materializan la configuración efectiva anterior y migran únicamente
+evidencia histórica demostrable.
 
-Este sensor no envia correo directamente. Una incidencia nueva se conserva con `notification_count = 0` y solo se incorpora cuando el tenant ya tiene un recordatorio normal que enviar.
-
-## Configuracion monitoreada
-
-La configuracion vive en `dagster/alerting/src/alerting/alert_config.yaml`. Actualmente contiene cinco tenants:
-
-| User code | Base por defecto | Alertas de conexion | Ingestiones con cadencia explicita |
-|---|---|---|---|
-| `bafar_poc_gabinete` | `cdp` | Deshabilitadas | `FactLecturas`: 3600 min |
-| `carlsjr` | `carlsjr` | Habilitadas | `factRedingsAudits`: 45 min; `FactLecturas`: 1500 min; `FactSensorEvents`: 400 min; `factReadingsMeasurement`: 400 min; `factSmartauditsCategories`: 1500 min; `factUrlAvailabilityDaily`: 140 min |
-| `valledelencino` | `valledelencino` | Habilitadas | `factRedingsAudits`: 60 min; `FactSensorEvents`: 400 min; `factReadingsMeasurement`: 400 min |
-| `emerson` | `emerson` | Habilitadas | `factRedingsAudits`: 45 min; `FactSensorEvents`: 400 min; `factReadingsMeasurement`: 400 min |
-| `bafar` | `bafar` | Deshabilitadas | `FactOutOfHoursSales`: 900 min; `FactStoreSalesDaily`: 1700 min; `FactManagerAccessDaily`: 1460 min |
-
-`late_readings` esta deshabilitado por defecto para todos. La deteccion de fallos de `ctl.IngestionControl`, corridas fallidas de Dagster y pipelines atrasados esta habilitada por defecto. Las ingestiones sin cadencia explicita usan 720 minutos.
-
-La base de cada tenant puede reemplazarse con su variable `database_env`. La conexion SQL Server tambien admite variables con prefijo por tenant y usa las variables `MSSQL_*` como fallback.
-
-## Ciclo de vida
-
-El estado se conserva en PostgreSQL de Dagster bajo el esquema `alerting`.
-
-| Estado | Significado |
-|---|---|
-| `OPEN` | Incidencia activa; las tendencias pueden permanecer en este estado sin haber enviado correo |
-| `REMINDER` | Incidencia activa incluida en un recordatorio aceptado |
-| `RESOLVED_PENDING` | Condicion cerrada, pendiente de comunicar junto con otro envio valido |
-| `RESOLVED` | Resolucion incluida en un correo aceptado |
-
-Cada nueva ocurrencia usa una clave formada por la condicion y un UUID. Una incidencia resuelta no se reutiliza si la misma condicion reaparece. Un indice unico parcial permite solamente una incidencia `OPEN` o `REMINDER` por combinacion de tenant, tipo y entidad.
-
-En el sensor central, las aperturas, recordatorios y resoluciones notificadas se actualizan despues de que el servidor SMTP acepta el correo. Si el envio falla, permanecen disponibles para una evaluacion posterior. El sensor de tendencias persiste aperturas con `notification_count = 0` y resoluciones pendientes sin realizar un envio directo.
-
-## Agrupacion de correos
-
-- Las aperturas nuevas del sensor central se envian inmediatamente y no quedan bloqueadas por las horas silenciosas.
-- Los recordatorios se agrupan en un solo correo por tenant y dia.
-- La hora configurada actualmente es `07:30` en `America/Mexico_City`.
-- Las horas silenciosas actuales son de `18:00` a `08:00` en `America/Mexico_City`; solo suprimen recordatorios.
-- Una tendencia nunca genera un correo independiente. Solo acompana un recordatorio normal del mismo tenant.
-- Una resolucion nunca genera un correo independiente. Puede acompanar una apertura nueva o el recordatorio diario del tenant.
-- Si una apertura y un recordatorio coinciden para el mismo tenant, la resolucion pendiente se incluye una sola vez.
-
-Los asuntos implementados dependen del contenido:
-
-| Contenido | Prefijo |
-|---|---|
-| Sensores | `[ALERTAS DE SENSORES]` |
-| Fallos de ingesta | `[MONITOREO INGESTA DE DATOS]` |
-| Pipelines atrasados | `[ALERTAS PIPELINES DE DATOS]` |
-| Corridas Dagster fallidas | `[ALERTAS DAGSTER]` |
-| Tendencias | `[TENDENCIAS DE LECTURAS]` |
-| Tipos mezclados | `[MONITOREO DE DATOS]` |
-| Recordatorio diario | `[MONITOREO OPERATIVO]` |
-
-El HTML actual no incorpora emojis ni iconos por tipo de alerta.
-
-## Destinatarios y SMTP
-
-El recurso SMTP usa `ALERT_SMTP_HOST`, `ALERT_SMTP_PORT`, `ALERT_SMTP_FROM` y `ALERT_SMTP_USE_TLS`. La autenticacion se realiza cuando existen `ALERT_SMTP_USER` y `ALERT_SMTP_PASSWORD`.
-
-La resolucion de destinatarios soporta esta precedencia:
-
-1. `ALERT_SMTP_TO_<TENANT>_<TIPO>`.
-2. `ALERT_SMTP_TO_<TENANT>`.
-3. `ALERT_SMTP_TO_<TIPO>`.
-4. `ALERT_SMTP_TO`.
-
-En el flujo consolidado actual, `operational_alerts_sensor` no establece `recipient_alert_type`; por lo tanto, la seleccion efectiva es `ALERT_SMTP_TO_<TENANT>` y despues `ALERT_SMTP_TO`. Las variables por tipo siguen disponibles en el recurso, pero no son seleccionadas por este sensor.
-
-Los nombres y valores de ejemplo permitidos estan en `compose-data_etls/.env.example`. Los archivos `.env` reales no forman parte de la documentacion.
-
-## Persistencia
-
-`alert_state` crea de forma idempotente el esquema y sus objetos al inicializarse:
-
-| Objeto | Uso |
-|---|---|
-| `alerting.alert_delivery_state` | Ciclo de vida, detalle, timestamps y contador de notificaciones |
-| `alerting.asset_row_count_daily` | Agregados diarios, promedios 1/7/28 dias, cambios porcentuales y cursor de materializacion |
-| `ix_alert_state_active` | Consulta de incidencias activas |
-| `ux_alert_state_active_condition` | Una sola incidencia activa por condicion |
-| `ix_asset_row_count_daily_asset` | Consulta historica por code location, asset y metadata |
-
-## Validacion
-
-Desde `dagster/alerting`, las validaciones focalizadas son:
-
-```text
-PYTHONPATH=src python -m pytest tests -q --import-mode=importlib
-PYTHONPATH=src python -m dagster definitions validate -d src -m alerting.definitions
-ruff check src/alerting tests
-```
-
-La suite actual contiene una prueba SMTP real deshabilitada por defecto. Solo se ejecuta cuando `RUN_LIVE_SMTP_TEST=true` y requiere `ALERT_SMTP_TEST_TO`, ademas de la configuracion SMTP normal. Las pruebas unitarias y la validacion de definiciones no demuestran conectividad real con SMTP, SQL Server, PostgreSQL ni el arranque completo de Compose.
-
-## Archivos principales
-
-| Archivo | Responsabilidad |
-|---|---|
-| `dagster/alerting/src/alerting/defs/__init__.py` | Registro de sensores y recursos |
-| `dagster/alerting/src/alerting/defs/sensors/operational_alerts_sensor.py` | Deteccion, reconciliacion y envio consolidado |
-| `dagster/alerting/src/alerting/defs/sensors/asset_row_count_trend_sensor.py` | Captura y evaluacion de tendencias `row_count` |
-| `dagster/alerting/src/alerting/defs/resources/mssql_reader.py` | Consultas SQL Server de solo lectura |
-| `dagster/alerting/src/alerting/defs/resources/alert_state_store.py` | Persistencia PostgreSQL |
-| `dagster/alerting/src/alerting/defs/resources/email_notifier.py` | Asuntos, HTML, destinatarios y SMTP |
-| `dagster/alerting/src/alerting/alert_config.yaml` | Tenants, señales, cadencias, recordatorios y umbrales |
-| `compose-data_etls/docker-compose.yml` | Servicio, dependencias, variables, volumenes y healthcheck |
-| `workspace.yaml` | Registro gRPC de la code location usada por Compose |
+Los scripts son repetibles. Los seeds 999_zz_alerting_alert_config.sql solo
+crean una primera versión cuando alerting.alert_config está vacía y nunca
+sobrescriben una configuración existente.
