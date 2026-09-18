@@ -12,6 +12,7 @@ from .factlecturas_backfill_jobs import (
 )
 from .factsensorevents_job import fact_sensor_events_job
 from .factredingsaudits_job import fact_redings_audits_job
+from .chirpstack_metrics_job import chirpstack_metrics_job
 from .factsmartauditscategories_job import fact_smartaudits_categories_job
 from .factmantiztickets_job import fact_mantiz_tickets_job
 from .mantiz_text_classifier_training_job import mantiz_text_classifier_training_job
@@ -33,6 +34,7 @@ __all__ = [
     "fact_lecturas_sensor_backfill_job",
     "fact_sensor_events_job",
     "fact_redings_audits_job",
+    "chirpstack_metrics_job",
     "fact_smartaudits_categories_job",
     "fact_mantiz_tickets_job",
     "mantiz_text_classifier_training_job",
