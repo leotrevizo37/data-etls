@@ -340,20 +340,23 @@ class ChirpStackContractTests(unittest.TestCase):
         sql_directory = (
             REPOSITORY_ROOT
             / "sql"
-            / "user_codes"
-            / "carlsjr"
             / "init"
         )
         ddl_paths = [
-            sql_directory / "019_observability_factChirpStackDeviceMetrics.sql",
-            sql_directory / "020_observability_factChirpStackGatewayMetrics.sql",
-            sql_directory / "021_observability_chirpstackGatewayViews.sql",
-            sql_directory / "022_serving_sensorCommunicationHealthViews.sql",
+            sql_directory / "024_observability_factChirpStackDeviceMetrics.sql",
+            sql_directory / "025_observability_factChirpStackGatewayMetrics.sql",
+            sql_directory / "026_observability_chirpstackGatewayViews.sql",
+            sql_directory / "027_serving_sensorCommunicationHealthViews.sql",
         ]
         sql = "\n".join(path.read_text(encoding="utf-8") for path in ddl_paths)
 
         self.assertTrue(all(path.is_file() for path in ddl_paths))
-        self.assertFalse((sql_directory / "019_observability_chirpstack.sql").exists())
+        carlsjr_sql_directory = (
+            REPOSITORY_ROOT / "sql" / "user_codes" / "carlsjr" / "init"
+        )
+        self.assertFalse(any(
+            carlsjr_sql_directory.glob("*ChirpStack*.sql")
+        ))
         self.assertIn("PRIMARY KEY CLUSTERED (DevEui, TimeSpan)", sql)
         self.assertIn("PRIMARY KEY CLUSTERED (GatewayId, TimeSpan)", sql)
         self.assertIn("GatewayState NVARCHAR(20) NOT NULL", sql)
@@ -372,66 +375,121 @@ class ChirpStackContractTests(unittest.TestCase):
             "CREATE TABLE observability.factChirpStackDeviceMetrics",
             1,
         )[1].split("CREATE TABLE stg.factChirpStackDeviceMetrics", 1)[0])
-
-    def test_registration_and_configuration_are_scoped_to_carlsjr(self) -> None:
-        defs_source = (
-            PROJECT_SRC / "carlsjr" / "defs" / "__init__.py"
+        bafar_cleanup = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "user_codes"
+            / "bafar"
+            / "init"
+            / "000_stg_ctl_dwh_dropUnusedTables.sql"
         ).read_text(encoding="utf-8")
+        for object_name in (
+            "serving.vwSenseSensorCommunicationHealthWeekly",
+            "serving.vwSenseSensorCommunicationHealthDaily",
+            "serving.vwSenseSensorCommunicationHealthHourly",
+            "serving.vwSenseGatewayHealthHourly",
+            "observability.vwChirpStackTenantGatewayHealthHourly",
+            "stg.factChirpStackDeviceMetrics",
+            "stg.factChirpStackGatewayMetrics",
+            "observability.factChirpStackDeviceMetrics",
+            "observability.factChirpStackGatewayMetrics",
+        ):
+            self.assertIn(object_name, bafar_cleanup)
+        self.assertIn(
+            "WHERE IngestionName = N'factChirpStackMetrics'",
+            bafar_cleanup,
+        )
+
+    def test_registration_and_configuration_are_scoped_to_supported_locations(self) -> None:
         compose = (
             REPOSITORY_ROOT / "compose-data_etls" / "docker-compose.yml"
         ).read_text(encoding="utf-8")
-        asset = (
-            PROJECT_SRC
-            / "carlsjr"
-            / "defs"
-            / "assets"
-            / "observability_chirpstack_metrics.py"
-        ).read_text(encoding="utf-8")
+        for location in ("carlsjr", "emerson", "valledelencino"):
+            location_src = REPOSITORY_ROOT / "dagster" / location / "src"
+            defs_source = (
+                location_src / location / "defs" / "__init__.py"
+            ).read_text(encoding="utf-8")
+            asset = (
+                location_src
+                / location
+                / "defs"
+                / "assets"
+                / "observability_chirpstack_metrics.py"
+            ).read_text(encoding="utf-8")
 
-        self.assertIn('"chirpstack_api": chirpstack_api_resource', defs_source)
-        self.assertIn("observability_chirpstackmetrics", defs_source)
-        self.assertIn("CARLSJR_CHIRPSTACK_API_URL", compose)
-        self.assertEqual(compose.count("      CHIRPSTACK_API_URL:"), 1)
-        self.assertIn("to_utc = extracted_at.replace", asset)
-        self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
-        self.assertNotIn("overlap", asset.lower())
-        self.assertNotIn("backfill", asset.lower())
+            self.assertIn('"chirpstack_api": chirpstack_api_resource', defs_source)
+            self.assertIn("observability_chirpstackmetrics", defs_source)
+            self.assertIn(f"{location.upper()}_CHIRPSTACK_API_URL", compose)
+            self.assertIn("to_utc = extracted_at.replace", asset)
+            self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
+            self.assertIn(f'group_name="{location}"', asset)
+            self.assertIn(f'key_prefix=["{location}"]', asset)
+            self.assertNotIn("overlap", asset.lower())
+            self.assertNotIn("backfill", asset.lower())
+        self.assertEqual(compose.count("      CHIRPSTACK_API_URL:"), 3)
+        self.assertNotIn("BAFAR_CHIRPSTACK_API_URL", compose)
+
+    def test_supported_locations_share_the_validated_chirpstack_logic(self) -> None:
+        for relative_path in (
+            Path("defs/transformations/chirpstack_metrics.py"),
+            Path("defs/resources/chirpstack.py"),
+            Path("defs/schedules/chirpstack_metrics_scheduler.py"),
+        ):
+            reference = (
+                PROJECT_SRC / "carlsjr" / relative_path
+            ).read_text(encoding="utf-8")
+            for location in ("emerson", "valledelencino"):
+                location_path = (
+                    REPOSITORY_ROOT
+                    / "dagster"
+                    / location
+                    / "src"
+                    / location
+                    / relative_path
+                )
+                self.assertEqual(
+                    location_path.read_text(encoding="utf-8"),
+                    reference,
+                )
 
     def test_staging_and_merges_are_run_scoped(self) -> None:
-        sql_resource = (
-            PROJECT_SRC
-            / "carlsjr"
-            / "defs"
-            / "resources"
-            / "sql_server.py"
-        ).read_text(encoding="utf-8")
-        spark_resource = (
-            PROJECT_SRC
-            / "carlsjr"
-            / "defs"
-            / "resources"
-            / "spark.py"
-        ).read_text(encoding="utf-8")
+        for location in ("carlsjr", "emerson", "valledelencino"):
+            location_src = REPOSITORY_ROOT / "dagster" / location / "src"
+            sql_resource = (
+                location_src
+                / location
+                / "defs"
+                / "resources"
+                / "sql_server.py"
+            ).read_text(encoding="utf-8")
+            spark_resource = (
+                location_src
+                / location
+                / "defs"
+                / "resources"
+                / "spark.py"
+            ).read_text(encoding="utf-8")
 
-        self.assertIn("FROM stg.factChirpStackDeviceMetrics", sql_resource)
-        self.assertIn("FROM stg.factChirpStackGatewayMetrics", sql_resource)
-        self.assertGreaterEqual(sql_resource.count("WHERE RunId = ?"), 2)
-        self.assertIn("def merge_chirpstack_metrics", sql_resource)
-        self.assertIn("conn.rollback()", sql_resource)
-        self.assertEqual(
-            sql_resource.count(
-                "target.MetricsAvailable = 0\n    OR source.MetricsAvailable = 1"
-            ),
-            2,
-        )
-        self.assertIn(
-            '.dropDuplicates(["DevEui", "TimeSpan"])',
-            spark_resource,
-        )
-        self.assertIn(
-            '.dropDuplicates(["GatewayId", "TimeSpan"])',
-            spark_resource,
-        )
+            self.assertIn("FROM stg.factChirpStackDeviceMetrics", sql_resource)
+            self.assertIn("FROM stg.factChirpStackGatewayMetrics", sql_resource)
+            self.assertGreaterEqual(sql_resource.count("WHERE RunId = ?"), 2)
+            self.assertIn("def merge_chirpstack_metrics", sql_resource)
+            self.assertIn("conn.rollback()", sql_resource)
+            self.assertEqual(
+                sql_resource.count(
+                    "target.MetricsAvailable = 0\n"
+                    "    OR source.MetricsAvailable = 1"
+                ),
+                2,
+            )
+            self.assertIn(
+                '.dropDuplicates(["DevEui", "TimeSpan"])',
+                spark_resource,
+            )
+            self.assertIn(
+                '.dropDuplicates(["GatewayId", "TimeSpan"])',
+                spark_resource,
+            )
 
 
 if __name__ == "__main__":
