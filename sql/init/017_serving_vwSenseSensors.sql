@@ -13,6 +13,7 @@ CREATE OR ALTER VIEW serving.vwSenseSensors
 AS
 SELECT
     SensorId,
+    PhysicalIdentifier,
     sensor_name AS SensorName,
     sensor_type AS SensorType,
     model_name AS ModelName,
