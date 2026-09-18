@@ -1181,6 +1181,78 @@ class SparkResource:
             chunk_column="SensorId",
         )
 
+    def write_chirpstack_device_metrics_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "DevEui",
+            "TimeSpan",
+            "TenantId",
+            "ApplicationId",
+            "DeviceProfileId",
+            "UplinkIntervalSeconds",
+            "ExpectedUplinkCount",
+            "ReceivedUplinkCount",
+            "AverageRssi",
+            "AverageSnr",
+            "LinkErrorCount",
+            "BatteryLevel",
+            "ExternalPowerSource",
+            "BatteryLevelSource",
+            "BatteryObservedAt",
+            "MetricsAvailable",
+            "ExtractedAt",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["DevEui", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factChirpStackDeviceMetrics",
+            chunk_column="DevEui",
+        )
+
+    def write_chirpstack_gateway_metrics_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "GatewayId",
+            "TimeSpan",
+            "TenantId",
+            "GatewayName",
+            "ReceivedPacketCount",
+            "TransmittedPacketCount",
+            "TxOkCount",
+            "TxErrorCount",
+            "GatewayState",
+            "GatewayLastSeenAt",
+            "StatsIntervalSeconds",
+            "MetricsAvailable",
+            "ExtractedAt",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["GatewayId", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factChirpStackGatewayMetrics",
+            chunk_column="GatewayId",
+        )
+
     def write_fact_smartaudits_categories_stage(
         self,
         df: DataFrame,

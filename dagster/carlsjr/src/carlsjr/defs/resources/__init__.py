@@ -11,6 +11,7 @@ from .mantiz_mysql import (
 )
 from .transformation_ops import transformation_ops, TransformationOps
 from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOManager
+from .chirpstack import chirpstack_api_resource, ChirpStackApiResource
 
 __all__ = [
     "sqlserver_resource",
@@ -26,5 +27,7 @@ __all__ = [
     "transformation_ops",
     "TransformationOps",
     "SparkDataFrameParquetIOManager",
-    "spark_df_io_manager"
+    "spark_df_io_manager",
+    "chirpstack_api_resource",
+    "ChirpStackApiResource",
 ]
