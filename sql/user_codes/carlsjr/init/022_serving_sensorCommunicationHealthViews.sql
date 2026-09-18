@@ -15,24 +15,6 @@ SELECT
     device.UplinkIntervalSeconds,
     device.ExpectedUplinkCount,
     device.ReceivedUplinkCount,
-    CASE
-        WHEN device.ExpectedUplinkCount > 0 AND device.ReceivedUplinkCount IS NOT NULL
-            THEN CONVERT(
-                DECIMAL(18, 6),
-                device.ReceivedUplinkCount * CONVERT(DECIMAL(18, 6), 100)
-                / NULLIF(device.ExpectedUplinkCount, 0)
-            )
-        ELSE NULL
-    END AS ChirpStackReceiptCoveragePercentage,
-    CASE
-        WHEN device.ReceivedUplinkCount > 0
-            THEN CONVERT(
-                DECIMAL(18, 6),
-                audit.ReadingsCount * CONVERT(DECIMAL(18, 6), 1)
-                / NULLIF(device.ReceivedUplinkCount, 0)
-            )
-        ELSE NULL
-    END AS DataReadingsPerReceivedUplink,
     device.AverageRssi,
     device.AverageSnr,
     device.LinkErrorCount,
@@ -40,7 +22,6 @@ SELECT
     device.ExternalPowerSource,
     device.BatteryLevelSource,
     device.BatteryObservedAt,
-    ISNULL(device.MetricsAvailable, 0) AS ChirpStackMetricsAvailable,
     gateway.GatewayCount,
     gateway.OnlineGatewayCount,
     gateway.OfflineGatewayCount,
@@ -51,6 +32,23 @@ SELECT
     gateway.TxOkCount AS GatewayTxOkCount,
     gateway.TxErrorCount AS GatewayTxErrorCount,
     gateway.LatestGatewaySeenAt,
+    CASE
+        WHEN device.ExpectedUplinkCount > 0 AND device.ReceivedUplinkCount IS NOT NULL
+            THEN CONVERT(
+                DECIMAL(18, 6),
+                device.ReceivedUplinkCount * CONVERT(DECIMAL(18, 6), 100)
+                / NULLIF(device.ExpectedUplinkCount, 0)
+            )
+    END AS ChirpStackReceiptCoveragePercentage,
+    CASE
+        WHEN device.ReceivedUplinkCount > 0
+            THEN CONVERT(
+                DECIMAL(18, 6),
+                audit.ReadingsCount * CONVERT(DECIMAL(18, 6), 1)
+                / NULLIF(device.ReceivedUplinkCount, 0)
+            )
+    END AS DataReadingsPerReceivedUplink,
+    ISNULL(device.MetricsAvailable, 0) AS ChirpStackMetricsAvailable,
     CASE
         WHEN audit.ReadingsCount > 0 THEN N'OK'
         WHEN dimensions.PerEvent IS NULL OR dimensions.PerEvent = 1 THEN N'UNKNOWN'
@@ -69,13 +67,15 @@ SELECT
     END AS CommunicationStatus
 FROM observability.factRedingsAudits AS audit
 INNER JOIN dwh.dimSidonProdDimensions AS dimensions
-    ON dimensions.SensorId = audit.SensorId
+    ON audit.SensorId = dimensions.SensorId
 LEFT JOIN observability.factChirpStackDeviceMetrics AS device
-    ON device.DevEui = LOWER(LTRIM(RTRIM(dimensions.PhysicalIdentifier)))
-    AND device.TimeSpan = audit.TimeSpan
+    ON
+        LOWER(LTRIM(RTRIM(dimensions.PhysicalIdentifier))) = device.DevEui
+        AND audit.TimeSpan = device.TimeSpan
 LEFT JOIN observability.vwChirpStackTenantGatewayHealthHourly AS gateway
-    ON gateway.TenantId = device.TenantId
-    AND gateway.TimeSpan = audit.TimeSpan;
+    ON
+        device.TenantId = gateway.TenantId
+        AND audit.TimeSpan = gateway.TimeSpan;
 GO
 
 CREATE OR ALTER VIEW serving.vwSenseSensorCommunicationHealthDaily
@@ -95,7 +95,6 @@ SELECT
                 SUM(ReceivedUplinkCount) * CONVERT(DECIMAL(18, 6), 100)
                 / NULLIF(SUM(ExpectedUplinkCount), 0)
             )
-        ELSE NULL
     END AS ChirpStackReceiptCoveragePercentage,
     CASE
         WHEN SUM(ReceivedUplinkCount) > 0
@@ -104,7 +103,6 @@ SELECT
                 SUM(CONVERT(BIGINT, ReadingsCount)) * CONVERT(DECIMAL(18, 6), 1)
                 / NULLIF(SUM(ReceivedUplinkCount), 0)
             )
-        ELSE NULL
     END AS DataReadingsPerReceivedUplink,
     SUM(CONVERT(INT, CASE WHEN ReadingsCount > 0 THEN 1 ELSE 0 END)) AS HoursWithData,
     SUM(CONVERT(INT, CASE WHEN ReceivedUplinkCount > 0 THEN 1 ELSE 0 END)) AS HoursWithChirpStackUplinks,
@@ -145,7 +143,6 @@ SELECT
                 SUM(ReceivedUplinkCount) * CONVERT(DECIMAL(18, 6), 100)
                 / NULLIF(SUM(ExpectedUplinkCount), 0)
             )
-        ELSE NULL
     END AS ChirpStackReceiptCoveragePercentage,
     CASE
         WHEN SUM(ReceivedUplinkCount) > 0
@@ -154,7 +151,6 @@ SELECT
                 SUM(CONVERT(BIGINT, ReadingsCount)) * CONVERT(DECIMAL(18, 6), 1)
                 / NULLIF(SUM(ReceivedUplinkCount), 0)
             )
-        ELSE NULL
     END AS DataReadingsPerReceivedUplink,
     SUM(CONVERT(INT, CASE WHEN ReadingsCount > 0 THEN 1 ELSE 0 END)) AS HoursWithData,
     SUM(CONVERT(INT, CASE WHEN ReceivedUplinkCount > 0 THEN 1 ELSE 0 END)) AS HoursWithChirpStackUplinks,

@@ -104,25 +104,27 @@ IF
         VALUES (N'factChirpStackMetrics');
     END;
 GO
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE
-        object_id = OBJECT_ID(N'observability.factChirpStackDeviceMetrics')
-        AND name = N'ix_factChirpStackDeviceMetrics_timeSpan'
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            object_id = OBJECT_ID(N'observability.factChirpStackDeviceMetrics')
+            AND name = N'ix_factChirpStackDeviceMetrics_timeSpan'
+    )
     BEGIN
         CREATE INDEX ix_factChirpStackDeviceMetrics_timeSpan
             ON observability.factChirpStackDeviceMetrics (TimeSpan DESC, DevEui);
     END;
 GO
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE
-        object_id = OBJECT_ID(N'stg.factChirpStackDeviceMetrics')
-        AND name = N'ix_stg_factChirpStackDeviceMetrics_run'
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            object_id = OBJECT_ID(N'stg.factChirpStackDeviceMetrics')
+            AND name = N'ix_stg_factChirpStackDeviceMetrics_run'
+    )
     BEGIN
         CREATE INDEX ix_stg_factChirpStackDeviceMetrics_run
             ON stg.factChirpStackDeviceMetrics (RunId, DevEui, TimeSpan);

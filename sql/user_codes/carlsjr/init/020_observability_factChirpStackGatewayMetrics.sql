@@ -80,25 +80,27 @@ IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NULL
         );
     END;
 GO
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE
-        object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
-        AND name = N'ix_factChirpStackGatewayMetrics_timeSpan'
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
+            AND name = N'ix_factChirpStackGatewayMetrics_timeSpan'
+    )
     BEGIN
         CREATE INDEX ix_factChirpStackGatewayMetrics_timeSpan
             ON observability.factChirpStackGatewayMetrics (TimeSpan DESC, TenantId, GatewayId);
     END;
 GO
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.indexes
-    WHERE
-        object_id = OBJECT_ID(N'stg.factChirpStackGatewayMetrics')
-        AND name = N'ix_stg_factChirpStackGatewayMetrics_run'
-)
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            object_id = OBJECT_ID(N'stg.factChirpStackGatewayMetrics')
+            AND name = N'ix_stg_factChirpStackGatewayMetrics_run'
+    )
     BEGIN
         CREATE INDEX ix_stg_factChirpStackGatewayMetrics_run
             ON stg.factChirpStackGatewayMetrics (RunId, GatewayId, TimeSpan);
