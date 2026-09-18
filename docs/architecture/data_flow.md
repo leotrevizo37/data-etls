@@ -34,6 +34,15 @@ flowchart LR
 
   managerAccessApi["API Bafar: ultimo acceso de gerentes"] --> managerAccess["dwh.factManagerAccessDaily"]
 
+  chirpstackApi["API ChirpStack"] --> chirpstackDevices["observability.factChirpStackDeviceMetrics"]
+  chirpstackApi --> chirpstackGateways["observability.factChirpStackGatewayMetrics"]
+  dimSidon --> chirpstackDevices
+  chirpstackGateways --> gatewayHealth["serving.vwSenseGatewayHealthHourly"]
+  chirpstackGateways --> tenantGatewayHealth["observability.vwChirpStackTenantGatewayHealthHourly"]
+  chirpstackDevices --> communicationHealth["serving.vwSenseSensorCommunicationHealthHourly"]
+  tenantGatewayHealth --> communicationHealth
+  readingsAudits["observability.factRedingsAudits"] --> communicationHealth
+
   control["ctl.IngestionControl"] --> factLecturas
   control --> factAudiencia
   control --> measurements
@@ -44,6 +53,8 @@ flowchart LR
   control --> bafarSchedules
   control --> outOfHoursSales
   control --> managerAccess
+  control --> chirpstackDevices
+  control --> chirpstackGateways
 ```
 
 ## Sense
@@ -71,3 +82,9 @@ El flujo de ventas lee datos incrementales, los compara contra `dwh.dimStoreSche
 ## Acceso de gerentes Bafar
 
 El flujo consulta diariamente la API de ultimo acceso con fecha, hora de corte y ventana historica explicitas, valida el contrato completo v1.1 y consolida la snapshot gerente-sucursal en `dwh.factManagerAccessDaily`. El watermark `FactManagerAccessDaily` solo avanza al completar la carga; los backfills diarios aplican el mismo upsert sin modificarlo.
+
+## Observabilidad ChirpStack
+
+Carl's Jr., Emerson y Valle del Encino consultan la ultima hora UTC cerrada de ChirpStack. `PhysicalIdentifier` define el alcance de devices; la API resuelve aplicaciones, perfiles, tenants y gateways sin identificadores configurados manualmente. Los hechos de devices y gateways se materializan de forma independiente y las vistas de serving integran uplinks, RSSI, SNR, errores, bateria, estado oficial del gateway y lecturas DATA.
+
+Los DDLs son compartidos en `sql/init`. El code location `bafar` elimina estos objetos en su init especifico porque no ejecuta el pipeline.
