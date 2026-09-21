@@ -20,8 +20,9 @@ valledelencino registra copias independientes de:
 - operational_alerts_sensor.
 - asset_row_count_trend_sensor.
 
-Ambos usan exclusivamente el recurso sqlserver del tenant y se registran en
-estado inicial STOPPED.
+Ambos usan exclusivamente el recurso sqlserver del tenant. En `carlsjr` y
+`emerson` se registran en estado inicial `RUNNING`; en los demás tenants,
+`STOPPED`.
 
 La code location alerting conserva esos dos nombres para compatibilidad. Sus
 sensores también están STOPPED, no solicitan recursos y siempre devuelven

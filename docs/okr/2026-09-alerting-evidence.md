@@ -8,7 +8,7 @@ Detectar de forma aislada por tenant el inicio y fin comprobable de condiciones 
 
 ## Entregable
 
-Las code locations `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores locales en estado inicial `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
+Las code locations `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores locales. En `carlsjr` y `emerson` comienzan en estado `RUNNING`; en los demás tenants permanecen `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
 
 La code location `alerting` conserva ambos nombres de sensor solo por compatibilidad operativa. Sus sensores permanecen `STOPPED`, no solicitan recursos y siempre devuelven `SkipReason`; no realizan detección, persistencia ni entrega.
 
@@ -22,7 +22,7 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 |---|---|
 | Alcance | `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` |
 | Deteccion | Copias locales de `operational_alerts_sensor` y `asset_row_count_trend_sensor` |
-| Estado inicial | Ambos sensores tenant-specific permanecen `STOPPED` hasta su activacion manual |
+| Estado inicial | Ambos sensores están `RUNNING` en `carlsjr` y `emerson`; permanecen `STOPPED` en los demás tenants |
 | Recurso | `sqlserver` de la code location correspondiente |
 | Sensor operativo | Intervalo minimo de 30 segundos; la cadencia efectiva de cada regla se obtiene de la configuración activa |
 | Sensor de tendencias | Intervalo minimo de 21600 segundos, consistente con `capture_interval_seconds` |

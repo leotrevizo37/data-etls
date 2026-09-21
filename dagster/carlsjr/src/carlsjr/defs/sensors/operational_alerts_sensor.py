@@ -723,7 +723,7 @@ def _clear_dagster_failures(
     name="operational_alerts_sensor",
     minimum_interval_seconds=30,
     required_resource_keys={"sqlserver"},
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def operational_alerts_sensor(
     context: SensorEvaluationContext,
