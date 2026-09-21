@@ -114,3 +114,12 @@ evidencia histórica demostrable.
 Los scripts son repetibles. La inicialización no crea una configuración de
 alertas por defecto; cada tenant permanece sin configuración activa hasta que
 se prepare y active explícitamente una versión válida.
+
+`029_alerting_event_model.sql` debe terminar antes de crear
+`serving.vwEstadoAlertas` en `031`. La migración usa `SET NOCOUNT ON` porque el
+cliente antiguo de `mssql-tools` puede emitir `SqlState 24000, Invalid cursor
+state` después del `COMMIT`, omitir los siguientes lotes y devolver código cero.
+El inicializador también detecta esos errores en la salida del cliente y detiene
+el arranque en el script que falló. No se deben adelantar las vistas ni borrar
+las bases para recuperar una inicialización incompleta: se vuelve a ejecutar
+el inicializador corregido.
