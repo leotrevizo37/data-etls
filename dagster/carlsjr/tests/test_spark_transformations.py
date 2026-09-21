@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 import warnings
@@ -63,9 +64,9 @@ class SparkTransformationsTests(unittest.TestCase):
     def test_lecturas_time_hours_builds_an_inclusive_hourly_scaffold(self) -> None:
         base = self.spark.createDataFrame(
             [
-                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
-                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
-                {"SensorId": 11, "DeviceId": 1, "SensorTyId": 101, "sensor_type": 2, "device_type": 1, "LocationId": 11, "TimeZone": "America/Denver"},
+                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_name": "Sensor 10", "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
+                {"SensorId": 10, "DeviceId": 1, "SensorTyId": 100, "sensor_name": "Sensor 10", "sensor_type": 1, "device_type": 1, "LocationId": 11, "TimeZone": "America/Chihuahua"},
+                {"SensorId": 11, "DeviceId": 1, "SensorTyId": 101, "sensor_name": "Sensor 11", "sensor_type": 2, "device_type": 1, "LocationId": 11, "TimeZone": "America/Denver"},
             ]
         )
 
@@ -94,6 +95,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 StructField("SensorId", IntegerType(), True),
                 StructField("DeviceId", IntegerType(), True),
                 StructField("SensorTyId", IntegerType(), True),
+                StructField("sensor_name", StringType(), True),
                 StructField("device_type", IntegerType(), True),
                 StructField("sensor_type", IntegerType(), True),
                 StructField("LocationId", IntegerType(), True),
@@ -171,6 +173,21 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(row["TimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
         self.assertEqual(row["Anomalies"], 1)
+        self.assertTrue(row["HasAnomalies"])
+        self.assertEqual(row["Min"], 10.0)
+        self.assertEqual(row["Max"], 24.0)
+        self.assertEqual(
+            [reading["value"] for reading in json.loads(row["CorrectReadingsJson"])],
+            [21.0, 24.0],
+        )
+        self.assertEqual(
+            [reading["value"] for reading in json.loads(row["AnomalousReadingsJson"])],
+            [10.0],
+        )
+        self.assertEqual(
+            set(json.loads(row["AnomalousReadingsJson"])[0]),
+            {"timestamp", "value"},
+        )
         self.assertAlmostEqual(row["MeasurementValue"], 55 / 3)
 
     def test_stats_calculator_uses_upper_bound_for_status_and_anomalies(self) -> None:
@@ -284,7 +301,8 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(row["TimeSpan"], datetime(2026, 3, 29, 10, 0))
         self.assertEqual(row["ReadingsCount"], 3)
-        self.assertEqual(row["Anomalies"], 1)
+        self.assertEqual(row["Anomalies"], 2)
+        self.assertTrue(row["HasAnomalies"])
         self.assertAlmostEqual(row["MeasurementValue"], 1 / 3)
 
     def test_stats_calculator_anomalies_treats_missing_windows_as_anomalies(self) -> None:
@@ -324,7 +342,7 @@ class SparkTransformationsTests(unittest.TestCase):
         row = result.collect()[0]
 
         self.assertEqual(row["ReadingsCount"], 2)
-        self.assertEqual(row["Anomalies"], 1)
+        self.assertEqual(row["Anomalies"], 2)
         self.assertAlmostEqual(row["MeasurementValue"], 1.0)
 
     def test_cisterna_uses_carlsjr_sensor_name_from_dimensions(self) -> None:
@@ -364,6 +382,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "nivel de cisterna porcentaje",
                     "device_type": "Nivel de cisterna ",
                     "device_name": "Cisterna 1",
+                    "sensor_name": "Nivel de cisterna",
                     "TimeZone": "America/Chihuahua",
                 },
             ]
@@ -380,6 +399,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["ReadingsCount"], 2)
+        self.assertEqual(rows[0]["sensor_name"], "Nivel de cisterna")
         self.assertAlmostEqual(rows[0]["MeasurementValue"], 60.0)
         self.assertEqual(rows[0]["LocalTimeSpan"], datetime(2026, 3, 29, 4, 0))
 
@@ -420,6 +440,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Temperatura F",
                     "device_type": "C\u00e1mara fr\u00eda",
                     "device_name": "C\u00e1mara fr\u00eda 1",
+                    "sensor_name": "Temperatura",
                     "TimeZone": "America/Tijuana",
                 },
                 {
@@ -430,6 +451,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Humedad",
                     "device_type": "C\u00e1mara fr\u00eda",
                     "device_name": "C\u00e1mara fr\u00eda 1",
+                    "sensor_name": "Humedad",
                     "TimeZone": "America/Tijuana",
                 },
             ]
@@ -466,6 +488,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "Temperatura F",
                     "device_type": "C\u00e1mara fr\u00eda",
+                    "sensor_name": "Temperatura",
                     "TimeZone": "America/Denver",
                 }
             ]
@@ -587,6 +610,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "SensorTyId": 200,
                     "sensor_type": "Temperatura F",
                     "device_type": "C\u00e1mara fr\u00eda",
+                    "sensor_name": "Temperatura",
                     "TimeZone": "America/Denver",
                 }
             ]
@@ -656,6 +680,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "sensor_type": "Sensor PRESENCIA 1",
                     "device_type": "Otro dispositivo",
                     "device_name": "Monitoreo 1",
+                    "sensor_name": "Presencia",
                     "TimeZone": "America/Denver",
                 },
             ]
@@ -672,6 +697,7 @@ class SparkTransformationsTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["ReadingsCount"], 2)
+        self.assertEqual(rows[0]["sensor_name"], "Presencia")
         self.assertAlmostEqual(rows[0]["MeasurementValue"], 0.5)
 
     def test_limit_operations_rows_to_closed_hours_removes_future_rows(self) -> None:
@@ -711,6 +737,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertIn("read_lecturas_range(", datalake_source)
         self.assertIn("read_lecturas_local_range", datalake_source)
         self.assertIn("use_utc_range=True", operations_source)
+        self.assertIn('col("sensor_name").alias("SensorName")', operations_source)
         self.assertIn('spark_max("TimeSpan")', operations_source)
         self.assertIn('get_max_time_span(devices_df, "TimeSpan")', operations_source)
         self.assertNotIn('spark_max("LocalTimeSpan")', operations_source)

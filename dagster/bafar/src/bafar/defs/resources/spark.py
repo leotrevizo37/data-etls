@@ -243,43 +243,6 @@ def _build_spark_app_context(
     }
 
 
-DIM_STORE_SCHEDULE_COLUMNS = (
-    "StoreId",
-    "OpeningDate",
-    "ClosingDate",
-    "ReceptionHours",
-    "MondayOpeningTime",
-    "MondayLunchStartTime",
-    "MondayLunchEndTime",
-    "MondayClosingTime",
-    "TuesdayOpeningTime",
-    "TuesdayLunchStartTime",
-    "TuesdayLunchEndTime",
-    "TuesdayClosingTime",
-    "WednesdayOpeningTime",
-    "WednesdayLunchStartTime",
-    "WednesdayLunchEndTime",
-    "WednesdayClosingTime",
-    "ThursdayOpeningTime",
-    "ThursdayLunchStartTime",
-    "ThursdayLunchEndTime",
-    "ThursdayClosingTime",
-    "FridayOpeningTime",
-    "FridayLunchStartTime",
-    "FridayLunchEndTime",
-    "FridayClosingTime",
-    "SaturdayOpeningTime",
-    "SaturdayLunchStartTime",
-    "SaturdayLunchEndTime",
-    "SaturdayClosingTime",
-    "SundayOpeningTime",
-    "SundayLunchStartTime",
-    "SundayLunchEndTime",
-    "SundayClosingTime",
-    "CreatedAt",
-    "CreatedBy",
-    "SalesOfficeId",
-)
 FACT_OUT_OF_HOURS_SALES_COLUMNS = (
     "SaleId",
     "SaleNumber",
@@ -639,25 +602,16 @@ WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126){to_filter}
                 "query",
                 """
 SELECT
-    schedules.StoreId,
-    schedules.OpeningDate,
-    schedules.ClosingDate,
-    schedule.DayOfWeek,
-    CONVERT(VARCHAR(8), schedule.OpeningTime, 108) AS OpeningTime,
-    CONVERT(VARCHAR(8), schedule.LunchStartTime, 108) AS LunchStartTime,
-    CONVERT(VARCHAR(8), schedule.LunchEndTime, 108) AS LunchEndTime,
-    CONVERT(VARCHAR(8), schedule.ClosingTime, 108) AS ClosingTime
+    StoreId,
+    OpeningDate,
+    ClosingDate,
+    CASE WHEN DayNo = 7 THEN 1 ELSE DayNo + 1 END AS DayOfWeek,
+    CONVERT(VARCHAR(8), OpeningTime, 108) AS OpeningTime,
+    CONVERT(VARCHAR(8), LunchStartTime, 108) AS LunchStartTime,
+    CONVERT(VARCHAR(8), LunchEndTime, 108) AS LunchEndTime,
+    CONVERT(VARCHAR(8), ClosingTime, 108) AS ClosingTime
 FROM dwh.dimStoreSchedules AS schedules
-CROSS APPLY (
-    VALUES
-        (1, SundayOpeningTime, SundayLunchStartTime, SundayLunchEndTime, SundayClosingTime),
-        (2, MondayOpeningTime, MondayLunchStartTime, MondayLunchEndTime, MondayClosingTime),
-        (3, TuesdayOpeningTime, TuesdayLunchStartTime, TuesdayLunchEndTime, TuesdayClosingTime),
-        (4, WednesdayOpeningTime, WednesdayLunchStartTime, WednesdayLunchEndTime, WednesdayClosingTime),
-        (5, ThursdayOpeningTime, ThursdayLunchStartTime, ThursdayLunchEndTime, ThursdayClosingTime),
-        (6, FridayOpeningTime, FridayLunchStartTime, FridayLunchEndTime, FridayClosingTime),
-        (7, SaturdayOpeningTime, SaturdayLunchStartTime, SaturdayLunchEndTime, SaturdayClosingTime)
-) AS schedule (DayOfWeek, OpeningTime, LunchStartTime, LunchEndTime, ClosingTime)
+WHERE IsClosed = 0
 """,
             )
             .load()
@@ -744,37 +698,6 @@ WHERE Fecha >= CONVERT(DATETIME2(7), '{from_value}', 126)
             df_chunked.unpersist()
 
         return row_count
-
-    def write_dim_store_schedules_stage(self, df: DataFrame, run_id: str) -> int:
-        df_stage = (
-            df
-            .select(*DIM_STORE_SCHEDULE_COLUMNS)
-            .dropDuplicates(["StoreId"])
-            .withColumn("RunId", lit(run_id))
-            .select("RunId", *DIM_STORE_SCHEDULE_COLUMNS)
-            .persist(StorageLevel.MEMORY_AND_DISK)
-        )
-        try:
-            row_count = df_stage.count()
-            if row_count == 0:
-                return 0
-            wh = self._build_wh_path()
-            (
-                df_stage
-                .coalesce(self.jdbc_write_target_partitions)
-                .write
-                .mode("append")
-                .format("jdbc")
-                .option("url", wh["url"])
-                .option("dbtable", "stg.dimStoreSchedules")
-                .option("batchsize", str(self.jdbc_write_batch_size))
-                .option("isolationLevel", "READ_COMMITTED")
-                .options(**wh["properties"])
-                .save()
-            )
-            return row_count
-        finally:
-            df_stage.unpersist()
 
     def write_fact_out_of_hours_sales_stage(
         self,

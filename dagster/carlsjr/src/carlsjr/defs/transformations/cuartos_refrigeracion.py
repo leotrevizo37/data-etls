@@ -48,7 +48,12 @@ def cuartos_refrigeracion(
                 expr("lower(concat_ws('-', substring(md5(concat(SensorId, cast(TimeSpan as string))), 1, 8), substring(md5(concat(SensorId, cast(TimeSpan as string))), 9, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 13, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 17, 4), substring(md5(concat(SensorId, cast(TimeSpan as string))), 21, 12)))")
             )
             .withColumn("ReadingsCount", lit(0))
-            .withColumn("Anomalies", lit(1).cast("integer"))
+            .withColumn("Min", lit(None))
+            .withColumn("Max", lit(None))
+            .withColumn("Anomalies", lit(0).cast("integer"))
+            .withColumn("HasAnomalies", lit(False))
+            .withColumn("CorrectReadingsJson", lit("[]"))
+            .withColumn("AnomalousReadingsJson", lit("[]"))
             .withColumn("MeasurementValue", lit(None))
             .withColumn("MeasurementStdDev", lit(None))
         )
@@ -74,7 +79,12 @@ def cuartos_refrigeracion(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -98,7 +108,12 @@ def cuartos_refrigeracion(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -108,8 +123,8 @@ def cuartos_refrigeracion(
     current_stats_df = stats_calculator(
         base,
         "Corriente",
-        None,
-        None
+        0,
+        30
     )
     if current_stats_df is not None:
         current_stats_df = (
@@ -122,7 +137,12 @@ def cuartos_refrigeracion(
                 "TimeSpan",
                 "MeasurementValue",
                 "MeasurementStdDev",
+                "Min",
+                "Max",
                 "Anomalies",
+                "HasAnomalies",
+                "CorrectReadingsJson",
+                "AnomalousReadingsJson",
                 "sensor_type",
                 "ReadingsCount",
                 "device_type",
@@ -152,7 +172,12 @@ def cuartos_refrigeracion(
             "TimeSpan",
             "MeasurementValue",
             "MeasurementStdDev",
+            "Min",
+            "Max",
             "Anomalies",
+            "HasAnomalies",
+            "CorrectReadingsJson",
+            "AnomalousReadingsJson",
             "sensor_type",
             "ReadingsCount",
             "device_type",
@@ -190,7 +215,13 @@ def cuartos_refrigeracion(
 
     scaffold_enriched = (
         scaffold_df
-        .fillna({"ReadingsCount": 0, "Anomalies": -1})
+        .fillna({
+            "ReadingsCount": 0,
+            "Anomalies": 0,
+            "HasAnomalies": False,
+            "CorrectReadingsJson": "[]",
+            "AnomalousReadingsJson": "[]",
+        })
     )
 
 

@@ -115,11 +115,24 @@ class RedingsAuditsTests(unittest.TestCase):
             datetime(2026, 7, 30, 10, 0),
         )
         self.assertEqual(rows[first_sensor]["ReadingsCount"], 1)
+        self.assertIsNone(rows[first_sensor]["AverageGapMinutes"])
+        self.assertIsNone(rows[first_sensor]["MaximumGapMinutes"])
+        self.assertIsNone(rows[first_sensor]["MinimumGapMinutes"])
+        self.assertEqual(
+            float(rows[first_sensor]["ReadingsCoveragePercentage"]),
+            8.3333,
+        )
+        self.assertEqual(rows[first_sensor]["CoveredReadingBlocks"], 1)
         self.assertEqual(rows[first_sensor]["MinutesWithoutReadings"], 15)
         self.assertTrue(rows[first_sensor]["HasLateReadings"])
         self.assertFalse(rows[first_sensor]["IsConnectionLost"])
         self.assertIsNone(rows[first_sensor]["ConnectionLostAt"])
         self.assertEqual(rows[second_sensor]["ReadingsCount"], 0)
+        self.assertEqual(
+            float(rows[second_sensor]["ReadingsCoveragePercentage"]),
+            0.0,
+        )
+        self.assertEqual(rows[second_sensor]["CoveredReadingBlocks"], 0)
         self.assertEqual(rows[second_sensor]["MinutesWithoutReadings"], 80)
         self.assertTrue(rows[second_sensor]["HasLateReadings"])
         self.assertTrue(rows[second_sensor]["IsConnectionLost"])
@@ -185,9 +198,62 @@ class RedingsAuditsTests(unittest.TestCase):
         row = result.collect()[0]
 
         self.assertEqual(row["ReadingsCount"], 1)
+        self.assertEqual(float(row["AverageGapMinutes"]), 20.0)
+        self.assertEqual(float(row["MaximumGapMinutes"]), 20.0)
+        self.assertEqual(float(row["MinimumGapMinutes"]), 20.0)
+        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 8.3333)
+        self.assertEqual(row["CoveredReadingBlocks"], 1)
         self.assertEqual(row["MinutesWithoutReadings"], 1)
         self.assertTrue(row["HasLateReadings"])
         self.assertFalse(row["IsConnectionLost"])
+
+    def test_calculates_gap_and_reading_block_coverage_metrics(self) -> None:
+        sensor_id = "11111111-1111-1111-1111-111111111111"
+        dimensions_df = self.spark.createDataFrame(
+            [
+                {
+                    "SensorId": sensor_id,
+                    "Active": True,
+                    "TimeZone": "America/Denver",
+                }
+            ]
+        )
+        readings_df = self.spark.createDataFrame(
+            [
+                {
+                    "ReadId": f"aaaaaaaa-aaaa-aaaa-aaaa-{index:012d}",
+                    "SensorId": sensor_id,
+                    "TimeSpan": datetime(2026, 7, 30, 16, minute),
+                }
+                for index, minute in enumerate([1, 4, 5, 15, 59], start=1)
+            ]
+        )
+        previous_health_df = self.spark.createDataFrame(
+            [],
+            schema=StructType(
+                [
+                    StructField("SensorId", StringType(), False),
+                    StructField("TimeSpan", TimestampType(), False),
+                    StructField("LastReadingAt", TimestampType(), True),
+                ]
+            ),
+        )
+
+        row = redings_audits(
+            readings_df=readings_df,
+            dimensions_df=dimensions_df,
+            previous_health_df=previous_health_df,
+            from_utc=datetime(2026, 7, 30, 16, 0),
+            to_utc=datetime(2026, 7, 30, 16, 0),
+            as_of_utc=datetime(2026, 7, 30, 17, 0),
+        ).collect()[0]
+
+        self.assertEqual(row["ReadingsCount"], 5)
+        self.assertEqual(float(row["AverageGapMinutes"]), 14.5)
+        self.assertEqual(float(row["MaximumGapMinutes"]), 44.0)
+        self.assertEqual(float(row["MinimumGapMinutes"]), 1.0)
+        self.assertEqual(float(row["ReadingsCoveragePercentage"]), 33.3333)
+        self.assertEqual(row["CoveredReadingBlocks"], 4)
 
     def test_keeps_repeated_local_hour_separate_by_utc_time_span(self) -> None:
         sensor_id = "11111111-1111-1111-1111-111111111111"

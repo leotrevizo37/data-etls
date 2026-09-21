@@ -25,46 +25,34 @@ IF OBJECT_ID(N'dwh.dimStoreSchedules', N'U') IS NULL
         CREATE TABLE dwh.dimStoreSchedules
         (
             StoreId VARCHAR(4) NOT NULL,
+            CustomerNo VARCHAR(20) NOT NULL,
+            StoreName NVARCHAR(250) NOT NULL,
             OpeningDate DATE NULL,
             ClosingDate DATE NULL,
-            ReceptionHours TINYINT NOT NULL,
-            MondayOpeningTime TIME(0) NOT NULL,
-            MondayLunchStartTime TIME(0) NULL,
-            MondayLunchEndTime TIME(0) NULL,
-            MondayClosingTime TIME(0) NOT NULL,
-            TuesdayOpeningTime TIME(0) NOT NULL,
-            TuesdayLunchStartTime TIME(0) NULL,
-            TuesdayLunchEndTime TIME(0) NULL,
-            TuesdayClosingTime TIME(0) NOT NULL,
-            WednesdayOpeningTime TIME(0) NOT NULL,
-            WednesdayLunchStartTime TIME(0) NULL,
-            WednesdayLunchEndTime TIME(0) NULL,
-            WednesdayClosingTime TIME(0) NOT NULL,
-            ThursdayOpeningTime TIME(0) NOT NULL,
-            ThursdayLunchStartTime TIME(0) NULL,
-            ThursdayLunchEndTime TIME(0) NULL,
-            ThursdayClosingTime TIME(0) NOT NULL,
-            FridayOpeningTime TIME(0) NOT NULL,
-            FridayLunchStartTime TIME(0) NULL,
-            FridayLunchEndTime TIME(0) NULL,
-            FridayClosingTime TIME(0) NOT NULL,
-            SaturdayOpeningTime TIME(0) NOT NULL,
-            SaturdayLunchStartTime TIME(0) NULL,
-            SaturdayLunchEndTime TIME(0) NULL,
-            SaturdayClosingTime TIME(0) NOT NULL,
-            SundayOpeningTime TIME(0) NOT NULL,
-            SundayLunchStartTime TIME(0) NULL,
-            SundayLunchEndTime TIME(0) NULL,
-            SundayClosingTime TIME(0) NOT NULL,
-            CreatedAt DATE NOT NULL,
-            CreatedBy VARCHAR(12) NOT NULL,
-            SalesOfficeId VARCHAR(4) NOT NULL,
+            IsBlocked BIT NOT NULL,
+            BlockedFrom DATE NULL,
+            BlockedTo DATE NULL,
+            ReceivingId VARCHAR(20) NULL,
+            DayCode CHAR(3) NOT NULL,
+            DayNo TINYINT NOT NULL,
+            IsClosed BIT NOT NULL,
+            OpeningTime TIME(0) NULL,
+            LunchStartTime TIME(0) NULL,
+            LunchEndTime TIME(0) NULL,
+            ClosingTime TIME(0) NULL,
+            IsDeleted BIT NOT NULL,
+            CreatedAt DATETIME2(0) NOT NULL
+            CONSTRAINT DF_dimStoreSchedules_CreatedAt
+            DEFAULT (SYSUTCDATETIME()),
             ModifiedAt DATETIME2(0) NOT NULL
             CONSTRAINT DF_dimStoreSchedules_ModifiedAt
             DEFAULT (SYSUTCDATETIME()),
             CONSTRAINT PK_dimStoreSchedules
-            PRIMARY KEY CLUSTERED (StoreId)
-            WITH (IGNORE_DUP_KEY = ON)
+            PRIMARY KEY CLUSTERED (StoreId, DayNo),
+            CONSTRAINT CK_dimStoreSchedules_DayNo
+            CHECK (DayNo BETWEEN 1 AND 7),
+            CONSTRAINT CK_dimStoreSchedules_DayCode
+            CHECK (DayCode IN ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'))
         );
     END;
 GO
@@ -75,40 +63,25 @@ IF OBJECT_ID(N'stg.dimStoreSchedules', N'U') IS NULL
         (
             RunId NVARCHAR(100) NOT NULL,
             StoreId VARCHAR(4) NOT NULL,
+            CustomerNo VARCHAR(20) NOT NULL,
+            StoreName NVARCHAR(250) NOT NULL,
             OpeningDate DATE NULL,
             ClosingDate DATE NULL,
-            ReceptionHours TINYINT NOT NULL,
-            MondayOpeningTime TIME(0) NOT NULL,
-            MondayLunchStartTime TIME(0) NULL,
-            MondayLunchEndTime TIME(0) NULL,
-            MondayClosingTime TIME(0) NOT NULL,
-            TuesdayOpeningTime TIME(0) NOT NULL,
-            TuesdayLunchStartTime TIME(0) NULL,
-            TuesdayLunchEndTime TIME(0) NULL,
-            TuesdayClosingTime TIME(0) NOT NULL,
-            WednesdayOpeningTime TIME(0) NOT NULL,
-            WednesdayLunchStartTime TIME(0) NULL,
-            WednesdayLunchEndTime TIME(0) NULL,
-            WednesdayClosingTime TIME(0) NOT NULL,
-            ThursdayOpeningTime TIME(0) NOT NULL,
-            ThursdayLunchStartTime TIME(0) NULL,
-            ThursdayLunchEndTime TIME(0) NULL,
-            ThursdayClosingTime TIME(0) NOT NULL,
-            FridayOpeningTime TIME(0) NOT NULL,
-            FridayLunchStartTime TIME(0) NULL,
-            FridayLunchEndTime TIME(0) NULL,
-            FridayClosingTime TIME(0) NOT NULL,
-            SaturdayOpeningTime TIME(0) NOT NULL,
-            SaturdayLunchStartTime TIME(0) NULL,
-            SaturdayLunchEndTime TIME(0) NULL,
-            SaturdayClosingTime TIME(0) NOT NULL,
-            SundayOpeningTime TIME(0) NOT NULL,
-            SundayLunchStartTime TIME(0) NULL,
-            SundayLunchEndTime TIME(0) NULL,
-            SundayClosingTime TIME(0) NOT NULL,
-            CreatedAt DATE NOT NULL,
-            CreatedBy VARCHAR(12) NOT NULL,
-            SalesOfficeId VARCHAR(4) NOT NULL
+            IsBlocked BIT NOT NULL,
+            BlockedFrom DATE NULL,
+            BlockedTo DATE NULL,
+            ReceivingId VARCHAR(20) NULL,
+            DayCode CHAR(3) NOT NULL,
+            DayNo TINYINT NOT NULL,
+            IsClosed BIT NOT NULL,
+            OpeningTime TIME(0) NULL,
+            LunchStartTime TIME(0) NULL,
+            LunchEndTime TIME(0) NULL,
+            ClosingTime TIME(0) NULL,
+            CONSTRAINT CK_stg_dimStoreSchedules_DayNo
+            CHECK (DayNo BETWEEN 1 AND 7),
+            CONSTRAINT CK_stg_dimStoreSchedules_DayCode
+            CHECK (DayCode IN ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'))
         );
     END;
 GO
@@ -126,8 +99,9 @@ IF
             AND o.name = N'dimStoreSchedules'
             AND i.name = N'ix_stg_dimStoreSchedules_run'
     )
+    AND COL_LENGTH(N'stg.dimStoreSchedules', N'DayNo') IS NOT NULL
     BEGIN
-        CREATE INDEX ix_stg_dimStoreSchedules_run
-            ON stg.dimStoreSchedules (RunId, StoreId);
+        CREATE UNIQUE INDEX ix_stg_dimStoreSchedules_run
+            ON stg.dimStoreSchedules (RunId, StoreId, DayNo);
     END;
 GO

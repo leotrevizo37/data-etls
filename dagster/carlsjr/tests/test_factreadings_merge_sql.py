@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PROJECT_ROOT.parents[1]
 
 
 def _install_stubs() -> None:
@@ -48,8 +49,41 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         self.assertIn("target.TimeSpan = source.TimeSpan", sql)
         self.assertIn("source.TimeSpan", sql)
         self.assertIn("target.ModifiedAt = SYSUTCDATETIME()", sql)
+        self.assertIn("target.[Min] = source.[Min]", sql)
+        self.assertIn("target.[Max] = source.[Max]", sql)
+        self.assertIn("target.SensorName = source.SensorName", sql)
+        self.assertIn("target.Anomalies = source.Anomalies", sql)
+        self.assertIn("target.HasAnomalies = source.HasAnomalies", sql)
+        self.assertIn(
+            "target.CorrectReadingsJson = source.CorrectReadingsJson",
+            sql,
+        )
+        self.assertIn(
+            "target.AnomalousReadingsJson = source.AnomalousReadingsJson",
+            sql,
+        )
         self.assertIn("WHEN MATCHED THEN", sql)
         self.assertIn("WHEN NOT MATCHED BY TARGET THEN", sql)
+
+    def test_global_ddl_adds_measurement_detail_columns_and_index(self) -> None:
+        sql = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "init"
+            / "011_dwh_stg_factReadingsMeasurement.sql"
+        ).read_text()
+
+        self.assertEqual(sql.count("[Min] DECIMAL(9, 4) NULL"), 4)
+        self.assertEqual(sql.count("[Max] DECIMAL(9, 4) NULL"), 4)
+        self.assertEqual(sql.count("SensorName NVARCHAR(255) NULL"), 4)
+        self.assertEqual(sql.count("HasAnomalies BIT NULL"), 4)
+        self.assertEqual(sql.count("CorrectReadingsJson NVARCHAR(MAX) NULL"), 4)
+        self.assertEqual(sql.count("AnomalousReadingsJson NVARCHAR(MAX) NULL"), 4)
+        self.assertIn(
+            "CREATE INDEX ix_factReadingsMeasurement_hasAnomalies",
+            sql,
+        )
+        self.assertIn("HasAnomalies,", sql)
 
 if __name__ == "__main__":
     unittest.main()

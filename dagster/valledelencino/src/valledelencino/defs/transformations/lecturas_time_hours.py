@@ -27,7 +27,7 @@ def lecturas_time_hours(
             ).alias("HourStart"))
     )
 
-    sensors_df = base.select("SensorId", "DeviceId", "SensorTyId", "sensor_type", "device_type", "LocationId", "TimeZone").distinct()
+    sensors_df = base.select("SensorId", "DeviceId", "SensorTyId", "sensor_name", "sensor_type", "device_type", "LocationId", "TimeZone").distinct()
 
     skeleton_df = sensors_df.crossJoin(hours_df)
 

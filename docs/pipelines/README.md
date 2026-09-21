@@ -15,6 +15,7 @@ Los pipelines se documentan por salida funcional, no por implementacion duplicad
 | SmartAudits categorias | `110_smartaudits_categories` | `dwh.factSmartauditsCategories` |
 | SmartAudits training | `111_smartaudits_classifier_training` | `ctl.SmartauditsClassifierModels`, artefacto de modelo |
 | SmartAudits lookup promotion | `112_smartaudits_comment_lookup_promotion` | `ctl.SmartauditsAiCommentLookup` |
+| Horarios de sucursales Bafar | `010_bafar_store_schedules` | `dwh.dimStoreSchedules` |
 | Ventas fuera de horario Bafar | `020_bafar_out_of_hours_sales` | `dwh.factOutOfHoursSales` |
 | Backfill ventas fuera de horario Bafar | `022_bafar_out_of_hours_sales_backfill_daily` | Rango diario de `dwh.factOutOfHoursSales` |
 | Acceso diario de gerentes Bafar | `024_bafar_manager_access_daily` | `dwh.factManagerAccessDaily` |
