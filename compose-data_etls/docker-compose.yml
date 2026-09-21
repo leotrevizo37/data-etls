@@ -42,6 +42,22 @@ services:
           set -eu
 
           SQLCMD=/opt/mssql-tools/bin/sqlcmd
+          SQLCMD_LOG=$$(mktemp)
+          trap 'rm -f "$$SQLCMD_LOG"' EXIT
+
+          run_sql() {
+            sql_status=0
+            "$$SQLCMD" "$$@" >"$$SQLCMD_LOG" 2>&1 || sql_status=$$?
+            cat "$$SQLCMD_LOG"
+            if [ "$$sql_status" -ne 0 ]; then
+              return "$$sql_status"
+            fi
+            # Legacy sqlcmd can report ODBC errors but still exit successfully.
+            if grep -Eq '^SqlState [0-9A-Z]{5},|^Sqlcmd: Error:' "$$SQLCMD_LOG"; then
+              echo "SQL client reported an error despite returning success." >&2
+              return 1
+            fi
+          }
 
           echo "Waiting for SQL Server at $${MSSQL_HOST}:$${MSSQL_PORT:-1433}..."
           until "$$SQLCMD" \
@@ -75,7 +91,7 @@ services:
             APP_DB_IDENTIFIER=$$(printf "%s" "$$APP_DB" | sed "s/]/]]/g")
 
             echo "Ensuring database $$APP_DB exists for user_code $$USER_CODE..."
-            "$$SQLCMD" \
+            run_sql \
                 -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                 -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                 -d master \
@@ -86,7 +102,7 @@ services:
             for f in /sql/init/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -96,7 +112,7 @@ services:
             for f in /sql/procedures/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -106,7 +122,7 @@ services:
             for f in /sql/user_codes/"$$USER_CODE"/init/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -116,7 +132,7 @@ services:
             for f in /sql/user_codes/"$$USER_CODE"/procedures/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
