@@ -1,4 +1,4 @@
-name: docker-image.yml
+name: Docker image validation
 
 on:
   push:
