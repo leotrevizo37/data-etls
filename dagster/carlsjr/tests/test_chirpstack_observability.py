@@ -347,6 +347,7 @@ class ChirpStackContractTests(unittest.TestCase):
             sql_directory / "025_observability_factChirpStackGatewayMetrics.sql",
             sql_directory / "026_observability_chirpstackGatewayViews.sql",
             sql_directory / "027_serving_sensorCommunicationHealthViews.sql",
+            sql_directory / "028_observability_vwSenseDevEuiUplinkReadingsDaily.sql",
         ]
         sql = "\n".join(path.read_text(encoding="utf-8") for path in ddl_paths)
 
