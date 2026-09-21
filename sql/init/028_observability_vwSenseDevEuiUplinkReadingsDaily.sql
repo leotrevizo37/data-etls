@@ -1,3 +1,14 @@
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.schemas
+        WHERE name = N'observability'
+    )
+    BEGIN
+        EXEC ('CREATE SCHEMA observability');
+    END;
+GO
+
 CREATE OR ALTER VIEW observability.vwSenseDevEuiUplinkReadingsDaily
 AS
 WITH DeviceHourly AS (
