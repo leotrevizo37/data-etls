@@ -343,6 +343,7 @@ class ChirpStackContractTests(unittest.TestCase):
             / "init"
         )
         ddl_paths = [
+            sql_directory / "023_observability_serving_vwSenseSensorHealth.sql",
             sql_directory / "024_observability_factChirpStackDeviceMetrics.sql",
             sql_directory / "025_observability_factChirpStackGatewayMetrics.sql",
             sql_directory / "026_observability_chirpstackGatewayViews.sql",
@@ -363,6 +364,12 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("GatewayState NVARCHAR(20) NOT NULL", sql)
         self.assertIn("BatteryLevel DECIMAL(7, 4) NULL", sql)
         self.assertIn("serving.vwSenseSensorCommunicationHealthHourly", sql)
+        self.assertIn("serving.vwSenseSensorCoverageHourly", sql)
+        self.assertIn("serving.vwSenseSensorCoverageDaily", sql)
+        self.assertIn("serving.vwSenseSensorCoverageWeekly", sql)
+        self.assertIn("observability.vwSenseDevEuiUplinkReadingsDaily", sql)
+        self.assertIn("COUNT_BIG(*) AS SensorIdCount", sql)
+        self.assertNotIn("CREATE OR ALTER VIEW serving.vwSenseSensorHealth", sql)
         self.assertIn("serving.vwSenseGatewayHealthHourly", sql)
         self.assertIn("observability.vwChirpStackTenantGatewayHealthHourly", sql)
         self.assertIn("N'DATA_INGESTION_PROBLEM'", sql)
@@ -385,9 +392,13 @@ class ChirpStackContractTests(unittest.TestCase):
             / "000_stg_ctl_dwh_dropUnusedTables.sql"
         ).read_text(encoding="utf-8")
         for object_name in (
+            "observability.vwSenseDevEuiUplinkReadingsDaily",
             "serving.vwSenseSensorCommunicationHealthWeekly",
             "serving.vwSenseSensorCommunicationHealthDaily",
             "serving.vwSenseSensorCommunicationHealthHourly",
+            "serving.vwSenseSensorCoverageWeekly",
+            "serving.vwSenseSensorCoverageDaily",
+            "serving.vwSenseSensorCoverageHourly",
             "serving.vwSenseGatewayHealthHourly",
             "observability.vwChirpStackTenantGatewayHealthHourly",
             "stg.factChirpStackDeviceMetrics",
@@ -428,6 +439,10 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("CARLSJR_CHIRPSTACK_API_URL", compose)
         self.assertIn("to_utc = extracted_at.replace", asset)
         self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
+        self.assertIn("except (TypeError, ValueError):", asset)
+        self.assertIn('"valid_dev_eui_count"', asset)
+        self.assertIn('"invalid_physical_identifier_count"', asset)
+        self.assertIn('"invalid_physical_identifiers"', asset)
         self.assertIn('group_name="carlsjr"', asset)
         self.assertIn('key_prefix=["carlsjr"]', asset)
         self.assertNotIn("overlap", asset.lower())

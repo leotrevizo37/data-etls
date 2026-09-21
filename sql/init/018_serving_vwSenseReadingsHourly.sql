@@ -15,6 +15,7 @@ SELECT
     SensorId,
     TimeSpan,
     LocalTimeSpan,
+    Anomalies AS AnomaliesSum,
     MeasurementValue AS AverageValue
 FROM dwh.factReadingsMeasurement;
 GO

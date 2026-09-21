@@ -120,7 +120,7 @@ SELECT
     ReadingsCount,
     AverageGapMinutesSum / NULLIF(AverageGapMinutesCount, 0) AS AverageGapMinutes,
     ReadingsCoveragePercentageSum / NULLIF([RowCount], 0) AS CoveragePercentage
-FROM observability.vwFactRedingsAuditsDaily;
+FROM observability.vwFactRedingsAuditsDaily WITH (NOEXPAND);
 GO
 
 CREATE OR ALTER VIEW serving.vwSenseSensorCoverageWeekly
@@ -132,7 +132,7 @@ SELECT
     DATEADD(DAY, 6, WeekStartDate) AS WeekEndDate,
     AverageGapMinutesSum / NULLIF(AverageGapMinutesCount, 0) AS AverageGapMinutes,
     ReadingsCoveragePercentageSum / NULLIF([RowCount], 0) AS CoveragePercentage
-FROM observability.vwFactRedingsAuditsWeekly;
+FROM observability.vwFactRedingsAuditsWeekly WITH (NOEXPAND);
 GO
 
 IF OBJECT_ID(N'serving.vwSenseSensorHealthDaily', N'V') IS NOT NULL

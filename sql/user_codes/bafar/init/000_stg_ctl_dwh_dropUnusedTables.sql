@@ -1,3 +1,15 @@
+IF OBJECT_ID(N'serving.vwSenseDevEuiUplinkReadingsDaily', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseDevEuiUplinkReadingsDaily;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.vwSenseDevEuiUplinkReadingsDaily', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW observability.vwSenseDevEuiUplinkReadingsDaily;
+    END;
+GO
+
 IF OBJECT_ID(N'serving.vwSenseSensorCommunicationHealthWeekly', N'V') IS NOT NULL
     BEGIN
         DROP VIEW serving.vwSenseSensorCommunicationHealthWeekly;
@@ -71,6 +83,24 @@ IF OBJECT_ID(N'serving.vwSenseSensorHealthWeekly', N'V') IS NOT NULL
     END;
 GO
 
+IF OBJECT_ID(N'serving.vwSenseSensorCoverageHourly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCoverageHourly;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorCoverageDaily', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCoverageDaily;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseSensorCoverageWeekly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseSensorCoverageWeekly;
+    END;
+GO
+
 IF OBJECT_ID(N'observability.vwFactRedingsAuditsDaily', N'V') IS NOT NULL
     BEGIN
         DROP VIEW observability.vwFactRedingsAuditsDaily;
@@ -86,6 +116,18 @@ GO
 IF OBJECT_ID(N'serving.vwSenseReadingsDaily', N'V') IS NOT NULL
     BEGIN
         DROP VIEW serving.vwSenseReadingsDaily;
+    END;
+GO
+
+IF OBJECT_ID(N'serving.vwSenseReadingsWeekly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW serving.vwSenseReadingsWeekly;
+    END;
+GO
+
+IF OBJECT_ID(N'dwh.vwFactReadingsMeasurementWeekly', N'V') IS NOT NULL
+    BEGIN
+        DROP VIEW dwh.vwFactReadingsMeasurementWeekly;
     END;
 GO
 
