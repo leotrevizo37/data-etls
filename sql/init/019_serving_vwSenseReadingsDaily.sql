@@ -111,8 +111,8 @@ AS
 SELECT
     SensorId,
     WeekStartDate,
-    DATEADD(DAY, 6, WeekStartDate) AS WeekEndDate,
     AnomaliesSum,
+    DATEADD(DAY, 6, WeekStartDate) AS WeekEndDate,
     MeasurementValueSum / NULLIF(MeasurementValueCount, 0) AS AverageValue
 FROM dwh.vwFactReadingsMeasurementWeekly WITH (NOEXPAND);
 GO

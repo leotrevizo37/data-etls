@@ -14,8 +14,8 @@ AS
 WITH DeviceHourly AS (
     SELECT
         DevEui,
-        CONVERT(DATE, LocalTimeSpan) AS LocalDate,
         TimeSpan,
+        CONVERT(DATE, LocalTimeSpan) AS LocalDate,
         MAX(ReceivedUplinkCount) AS ReceivedUplinkCount,
         SUM(CONVERT(BIGINT, ReadingsCount)) AS ReadingsCount
     FROM serving.vwSenseSensorCommunicationHealthHourly
@@ -25,6 +25,7 @@ WITH DeviceHourly AS (
         CONVERT(DATE, LocalTimeSpan),
         TimeSpan
 ),
+
 DeviceSensors AS (
     SELECT
         LOWER(LTRIM(RTRIM(PhysicalIdentifier))) AS DevEui,
@@ -33,6 +34,7 @@ DeviceSensors AS (
     WHERE PhysicalIdentifier IS NOT NULL
     GROUP BY LOWER(LTRIM(RTRIM(PhysicalIdentifier)))
 )
+
 SELECT
     hourly.DevEui,
     hourly.LocalDate,
