@@ -102,12 +102,16 @@ def observability_chirpstackmetrics(
             .distinct()
             .collect()
         )
-        dev_euis = sorted(
-            {
-                normalize_dev_eui(row["PhysicalIdentifier"])
-                for row in dimension_rows
-            }
-        )
+        dev_euis = set()
+        invalid_physical_identifiers = []
+        for row in dimension_rows:
+            physical_identifier = row["PhysicalIdentifier"]
+            try:
+                dev_euis.add(normalize_dev_eui(physical_identifier))
+            except (TypeError, ValueError):
+                invalid_physical_identifiers.append(str(physical_identifier))
+        dev_euis = sorted(dev_euis)
+        invalid_physical_identifiers = sorted(set(invalid_physical_identifiers))
         if not dev_euis:
             raise RuntimeError("No active ChirpStack DevEUIs were found in dimensions")
 
@@ -226,6 +230,9 @@ def observability_chirpstackmetrics(
             "device_staged_rows": device_staged_rows,
             "gateway_row_count": gateway_merged_rows,
             "gateway_staged_rows": gateway_staged_rows,
+            "valid_dev_eui_count": len(dev_euis),
+            "invalid_physical_identifier_count": len(invalid_physical_identifiers),
+            "invalid_physical_identifiers": invalid_physical_identifiers,
             "from_utc": str(from_utc),
             "to_utc": str(to_utc),
             "elapsed_seconds": round(perf_counter() - start_time, 3),
