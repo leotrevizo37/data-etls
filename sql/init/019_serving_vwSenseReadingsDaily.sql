@@ -60,5 +60,59 @@ SELECT
     LocalDate,
     AnomaliesSum,
     MeasurementValueSum / NULLIF(MeasurementValueCount, 0) AS AverageValue
-FROM dwh.vwFactReadingsMeasurementDaily;
+FROM dwh.vwFactReadingsMeasurementDaily WITH (NOEXPAND);
+GO
+
+IF OBJECT_ID(N'dwh.vwFactReadingsMeasurementWeekly', N'V') IS NULL
+    BEGIN
+        EXEC (N'
+            CREATE VIEW dwh.vwFactReadingsMeasurementWeekly
+            WITH SCHEMABINDING
+            AS
+            SELECT
+                SensorId,
+                DATEADD(
+                    DAY,
+                    -(DATEDIFF(DAY, CONVERT(DATE, ''19000101'', 112), LocalTimeSpan) % 7),
+                    CONVERT(DATE, LocalTimeSpan)
+                ) AS WeekStartDate,
+                SUM(ISNULL(MeasurementValue, CONVERT(DECIMAL(9, 4), 0))) AS MeasurementValueSum,
+                COUNT_BIG(MeasurementValue) AS MeasurementValueCount,
+                SUM(ISNULL(Anomalies, 0)) AS AnomaliesSum,
+                COUNT_BIG(*) AS [RowCount]
+            FROM dwh.factReadingsMeasurement
+            GROUP BY
+                SensorId,
+                DATEADD(
+                    DAY,
+                    -(DATEDIFF(DAY, CONVERT(DATE, ''19000101'', 112), LocalTimeSpan) % 7),
+                    CONVERT(DATE, LocalTimeSpan)
+                );
+        ');
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE
+            object_id = OBJECT_ID(N'dwh.vwFactReadingsMeasurementWeekly')
+            AND name = N'ix_vwFactReadingsMeasurementWeekly_SensorId_WeekStartDate'
+    )
+    BEGIN
+        CREATE UNIQUE CLUSTERED INDEX ix_vwFactReadingsMeasurementWeekly_SensorId_WeekStartDate
+            ON dwh.vwFactReadingsMeasurementWeekly (SensorId, WeekStartDate);
+    END;
+GO
+
+CREATE OR ALTER VIEW serving.vwSenseReadingsWeekly
+AS
+SELECT
+    SensorId,
+    WeekStartDate,
+    DATEADD(DAY, 6, WeekStartDate) AS WeekEndDate,
+    AnomaliesSum,
+    MeasurementValueSum / NULLIF(MeasurementValueCount, 0) AS AverageValue
+FROM dwh.vwFactReadingsMeasurementWeekly WITH (NOEXPAND);
 GO
