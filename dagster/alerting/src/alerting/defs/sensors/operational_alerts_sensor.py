@@ -3,7 +3,7 @@ from dagster import DefaultSensorStatus, SkipReason, sensor
 
 @sensor(
     name="operational_alerts_sensor",
-    minimum_interval_seconds=99999,
+    minimum_interval_seconds=21600,
     default_status=DefaultSensorStatus.STOPPED,
 )
 def operational_alerts_sensor() -> SkipReason:
