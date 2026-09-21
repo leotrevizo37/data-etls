@@ -24,7 +24,7 @@ Las vistas resultantes soportan el tooltip del mapa de calor, la comparacion ent
 | Relacion DATA-ChirpStack | `dwh.dimSidonProdDimensions.PhysicalIdentifier = DevEui` |
 | Asset | `observability_chirpstackmetrics` |
 | Job | `023_sense_chirpstack_metrics` |
-| Schedule | `023_sense_chirpstack_metrics_every_30m` |
+| Schedule | `023_sense_chirpstack_metrics_hourly_at_30`, una vez por hora al minuto 30 |
 | Ventana | Ultima hora UTC cerrada con agregacion `HOUR` |
 | Hecho de devices | `observability.factChirpStackDeviceMetrics`, granularidad `DevEui`-hora |
 | Hecho de gateways | `observability.factChirpStackGatewayMetrics`, granularidad `GatewayId`-hora |

@@ -446,7 +446,8 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn('key_prefix=["emerson"]', asset)
         self.assertNotIn("overlap", asset.lower())
         self.assertNotIn("backfill", asset.lower())
-        self.assertIn('cron_schedule="*/30 * * * *"', schedule)
+        self.assertIn('name="023_sense_chirpstack_metrics_hourly_at_30"', schedule)
+        self.assertIn('cron_schedule="30 * * * *"', schedule)
         self.assertIn('execution_timezone="America/Ciudad_Juarez"', schedule)
         self.assertIn(
             "default_status=DefaultScheduleStatus.RUNNING",

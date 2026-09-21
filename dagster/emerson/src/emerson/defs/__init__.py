@@ -59,8 +59,8 @@ def _build_defs() -> Any:
         operations_sched_every_1h_w,
         sensor_events_sched_every_6h,
         sensor_events_sched_every_1h_w,
-        redings_audits_sched_every_10m,
-        chirpstack_metrics_sched_every_30m,
+        redings_audits_sched_every_20m,
+        chirpstack_metrics_sched_hourly_at_30,
     )
     from .sensors import (
         asset_row_count_trend_sensor,
@@ -100,8 +100,8 @@ def _build_defs() -> Any:
             operations_sched_every_6h,
             sensor_events_sched_every_6h,
             sensor_events_sched_every_1h_w,
-            redings_audits_sched_every_10m,
-            chirpstack_metrics_sched_every_30m,
+            redings_audits_sched_every_20m,
+            chirpstack_metrics_sched_hourly_at_30,
             cleanup_schedule,
             index_maintenance_schedule,
         ],

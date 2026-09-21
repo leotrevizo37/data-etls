@@ -30,7 +30,7 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 ## Programacion
 
 - Job: `023_sense_chirpstack_metrics`.
-- Schedule: `023_sense_chirpstack_metrics_every_30m`.
+- Schedule: `023_sense_chirpstack_metrics_hourly_at_30`, una vez por hora al minuto 30.
 - Frecuencia: cada 30 minutos.
 - Zona horaria: `America/Ciudad_Juarez`.
 - Estado inicial: activo.
