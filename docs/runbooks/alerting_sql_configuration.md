@@ -26,11 +26,9 @@ Los scripts globales se aplican en orden numérico a cada base tenant:
 10. `032_alerting_state_guards.sql` crea protecciones y activación.
 11. `033_alerting_catalog_guards.sql` protege los GUID de catálogo.
 
-Después se ejecuta
-`sql/user_codes/<user_code>/init/999_zz_alerting_alert_config.sql`. Cada seed
-crea una primera versión solo cuando no existe configuración y nunca reemplaza
-una versión creada previamente. Los scripts globales y los seeds son
-repetibles.
+La inicialización no crea una configuración de alertas por defecto. Cada
+tenant permanece sin configuración activa hasta que se prepare y active
+explícitamente una versión válida. Los scripts globales son repetibles.
 
 Las políticas antiguas de correo, tickets, reintentos y horarios silenciosos
 permanecen preservadas en las tablas `*_legacy`; no se migran a la

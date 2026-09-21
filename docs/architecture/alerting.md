@@ -110,6 +110,6 @@ las vistas, protecciones y el procedimiento de activación. Los scripts 034 y
 035 materializan la configuración efectiva anterior y migran únicamente
 evidencia histórica demostrable.
 
-Los scripts son repetibles. Los seeds 999_zz_alerting_alert_config.sql solo
-crean una primera versión cuando alerting.alert_config está vacía y nunca
-sobrescriben una configuración existente.
+Los scripts son repetibles. La inicialización no crea una configuración de
+alertas por defecto; cada tenant permanece sin configuración activa hasta que
+se prepare y active explícitamente una versión válida.

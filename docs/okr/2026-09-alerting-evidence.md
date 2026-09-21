@@ -44,7 +44,7 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 | Incidencias | Identidad y evidencia raiz | `sql/init/029_alerting_event_model.sql` |
 | Serving | Estado consolidado y validacion de configuración | `sql/init/030_serving_alert_config_validation.sql` y `sql/init/031_serving_alert_state.sql` |
 | Protecciones | Inmutabilidad, referencias y activacion transaccional | `sql/init/032_alerting_state_guards.sql` y `sql/init/033_alerting_catalog_guards.sql` |
-| Seeds | Configuracion inicial por tenant | `sql/user_codes/<user_code>/init/999_zz_alerting_alert_config.sql` |
+| Provisionamiento | Sin configuracion por defecto; cada version se crea y activa explícitamente por tenant | `docs/runbooks/alerting_sql_configuration.md` |
 
 ## Señales cubiertas
 
