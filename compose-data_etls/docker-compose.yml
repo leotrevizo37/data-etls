@@ -42,6 +42,22 @@ services:
           set -eu
 
           SQLCMD=/opt/mssql-tools/bin/sqlcmd
+          SQLCMD_LOG=$$(mktemp)
+          trap 'rm -f "$$SQLCMD_LOG"' EXIT
+
+          run_sql() {
+            sql_status=0
+            "$$SQLCMD" "$$@" >"$$SQLCMD_LOG" 2>&1 || sql_status=$$?
+            cat "$$SQLCMD_LOG"
+            if [ "$$sql_status" -ne 0 ]; then
+              return "$$sql_status"
+            fi
+            # Legacy sqlcmd can report ODBC errors but still exit successfully.
+            if grep -Eq '^SqlState [0-9A-Z]{5},|^Sqlcmd: Error:' "$$SQLCMD_LOG"; then
+              echo "SQL client reported an error despite returning success." >&2
+              return 1
+            fi
+          }
 
           echo "Waiting for SQL Server at $${MSSQL_HOST}:$${MSSQL_PORT:-1433}..."
           until "$$SQLCMD" \
@@ -75,7 +91,7 @@ services:
             APP_DB_IDENTIFIER=$$(printf "%s" "$$APP_DB" | sed "s/]/]]/g")
 
             echo "Ensuring database $$APP_DB exists for user_code $$USER_CODE..."
-            "$$SQLCMD" \
+            run_sql \
                 -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                 -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                 -d master \
@@ -86,7 +102,7 @@ services:
             for f in /sql/init/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -96,7 +112,7 @@ services:
             for f in /sql/procedures/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -106,7 +122,7 @@ services:
             for f in /sql/user_codes/"$$USER_CODE"/init/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -116,7 +132,7 @@ services:
             for f in /sql/user_codes/"$$USER_CODE"/procedures/*.sql; do
               [ -e "$$f" ] || continue
               echo "==> [$$APP_DB] $$f"
-              "$$SQLCMD" \
+              run_sql \
                   -S "$${MSSQL_HOST},$${MSSQL_PORT:-1433}" \
                   -U "$${MSSQL_USER}" -P "$${MSSQL_PASSWORD}" \
                   -d"$$APP_DB" \
@@ -228,6 +244,10 @@ services:
       ADLS_CONTAINER_NAME: ${VALLEDELENCINO_ADLS_CONTAINER_NAME:-valledelencino}
       FACTREADINGS_OVERLAP_HOURS: ${VALLEDELENCINO_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       FACTREDINGSAUDITS_OVERLAP_HOURS: ${VALLEDELENCINO_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
+      CHIRPSTACK_API_URL: ${VALLEDELENCINO_CHIRPSTACK_API_URL:-}
+      CHIRPSTACK_API_TOKEN: ${VALLEDELENCINO_CHIRPSTACK_API_TOKEN:-}
+      CHIRPSTACK_API_TIMEOUT_SECONDS: ${VALLEDELENCINO_CHIRPSTACK_API_TIMEOUT_SECONDS:-}
+      CHIRPSTACK_API_PAGE_SIZE: ${VALLEDELENCINO_CHIRPSTACK_API_PAGE_SIZE:-}
       SPARK_DF_IO_BASE_PATH: ${VALLEDELENCINO_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/valledelencino}
       SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
       SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
@@ -285,6 +305,10 @@ services:
       ADLS_CONTAINER_NAME: ${CARLSJR_ADLS_CONTAINER_NAME:-carlsjr}
       FACTREADINGS_OVERLAP_HOURS: ${CARLSJR_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       FACTREDINGSAUDITS_OVERLAP_HOURS: ${CARLSJR_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
+      CHIRPSTACK_API_URL: ${CARLSJR_CHIRPSTACK_API_URL:-}
+      CHIRPSTACK_API_TOKEN: ${CARLSJR_CHIRPSTACK_API_TOKEN:-}
+      CHIRPSTACK_API_TIMEOUT_SECONDS: ${CARLSJR_CHIRPSTACK_API_TIMEOUT_SECONDS:-}
+      CHIRPSTACK_API_PAGE_SIZE: ${CARLSJR_CHIRPSTACK_API_PAGE_SIZE:-}
       SPARK_DF_IO_BASE_PATH: ${CARLSJR_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/carlsjr}
       SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
       SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
@@ -371,6 +395,10 @@ services:
       ADLS_CONTAINER_NAME: ${EMERSON_ADLS_CONTAINER_NAME:-emerson}
       FACTREADINGS_OVERLAP_HOURS: ${EMERSON_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       FACTREDINGSAUDITS_OVERLAP_HOURS: ${EMERSON_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
+      CHIRPSTACK_API_URL: ${EMERSON_CHIRPSTACK_API_URL:-}
+      CHIRPSTACK_API_TOKEN: ${EMERSON_CHIRPSTACK_API_TOKEN:-}
+      CHIRPSTACK_API_TIMEOUT_SECONDS: ${EMERSON_CHIRPSTACK_API_TIMEOUT_SECONDS:-}
+      CHIRPSTACK_API_PAGE_SIZE: ${EMERSON_CHIRPSTACK_API_PAGE_SIZE:-}
       SPARK_DF_IO_BASE_PATH: ${EMERSON_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/emerson}
       SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
       SPARK_MASTER_STATUS_URL: ${SPARK_MASTER_STATUS_URL:-}
@@ -482,62 +510,6 @@ services:
       retries: 10
       start_period: 40s
 
-  dagster-user-code-alerting:
-    build:
-      context: ..
-      dockerfile: dagster/Dockerfile
-    container_name: alerting-dagster-user-code
-    <<: *dagster_common
-    depends_on:
-      dagster-postgres:
-        condition: service_healthy
-      sql-init:
-        condition: service_completed_successfully
-    working_dir: /opt/dagster/app/alerting
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/alerting/src
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_PORT: ${MSSQL_PORT:-1433}
-      MSSQL_USER: ${MSSQL_USER}
-      MSSQL_PASSWORD: ${MSSQL_PASSWORD}
-      DAGSTER_PG_HOSTNAME: dagster-postgres
-      DAGSTER_PG_USER: ${DAGSTER_PG_USER}
-      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD}
-      DAGSTER_PG_DB: ${DAGSTER_PG_DB}
-      DAGSTER_PG_PORT: 5432
-      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
-      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
-      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
-      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
-      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
-      ALERT_SMTP_TO: ${ALERT_SMTP_TO}
-      ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}
-      ALERT_SMTP_TO_BAFAR_POC_GABINETE_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_BAFAR_POC_GABINETE_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_VALLEDELENCINO_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_VALLEDELENCINO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_CARLSJR_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_CARLSJR_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_EMERSON_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_EMERSON_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_BAFAR_ASSET_ROW_COUNT_TREND: ${ALERT_SMTP_TO_BAFAR_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO_ASSET_ROW_COUNT_TREND:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
-    volumes:
-      - ../dagster/dagster_home:/opt/dagster/dagster_home
-      - ../dagster/alerting:/opt/dagster/app/alerting
-      - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
-    ports:
-      - "${ALERTING_USER_CODE_PORT:-4009}:4009"
-    command: [
-      "dagster", "code-server", "start",
-      "-h", "0.0.0.0",
-      "-p", "4009",
-      "-m", "alerting.definitions"
-    ]
-    healthcheck:
-      test: ["CMD-SHELL", "dagster api grpc-health-check -p 4009 -h 127.0.0.1"]
-      interval: 20s
-      timeout: 25s
-      retries: 10
-      start_period: 20s
-
   dagster-web:
     build:
       context: ..
@@ -593,8 +565,6 @@ services:
       dagster-user-code-carlsjr:
         condition: service_healthy
       dagster-user-code-emerson:
-        condition: service_healthy
-      dagster-user-code-alerting:
         condition: service_healthy
       dagster-postgres:
         condition: service_healthy
@@ -658,74 +628,6 @@ services:
         max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/-/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  alertmanager:
-    image: prom/alertmanager:v0.28.1
-    container_name: data-alertmanager
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-          set -eu
-          umask 077
-          printf '%s' "$${ALERT_SMTP_PASSWORD}" > /run/alertmanager/smtp_password
-          sed \
-            -e "s|__ALERT_SMTP_HOST__|$${ALERT_SMTP_HOST}|g" \
-            -e "s|__ALERT_SMTP_PORT__|$${ALERT_SMTP_PORT}|g" \
-            -e "s|__ALERT_SMTP_FROM__|$${ALERT_SMTP_FROM}|g" \
-            -e "s|__ALERT_SMTP_USER__|$${ALERT_SMTP_USER}|g" \
-            -e "s|__ALERT_SMTP_USE_TLS__|$${ALERT_SMTP_USE_TLS}|g" \
-            -e "s|__ALERT_SMTP_TO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_INFRASTRUCTURE}|g" \
-            -e "s|__ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE}|g" \
-            -e "s|__ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE__|$${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE}|g" \
-            -e "s|__ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE}|g" \
-            -e "s|__ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE__|$${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE}|g" \
-            -e "s|__ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE__|$${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE}|g" \
-            /etc/alertmanager/alertmanager.template.yml \
-            > /run/alertmanager/alertmanager.yml
-          exec /bin/alertmanager \
-            --config.file=/run/alertmanager/alertmanager.yml \
-            --storage.path=/alertmanager \
-            --web.external-url=http://localhost:$${ALERTMANAGER_PORT}
-    env_file:
-      - ${COMPOSE_ENV_FILE:-.env}
-    environment:
-      ALERTMANAGER_PORT: ${ALERTMANAGER_PORT:-9093}
-      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST}
-      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
-      ALERT_SMTP_USER: ${ALERT_SMTP_USER}
-      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD}
-      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM}
-      ALERT_SMTP_USE_TLS: ${ALERT_SMTP_USE_TLS:-true}
-      ALERT_SMTP_TO_INFRASTRUCTURE: ${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}
-      ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_POC_GABINETE_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE: ${ALERT_SMTP_TO_VALLEDELENCINO_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE: ${ALERT_SMTP_TO_CARLSJR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE: ${ALERT_SMTP_TO_EMERSON_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
-      ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE: ${ALERT_SMTP_TO_BAFAR_INFRASTRUCTURE:-${ALERT_SMTP_TO_INFRASTRUCTURE:-${ALERT_SMTP_TO}}}
-    ports:
-      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
-    volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.template.yml:ro
-      - alertmanager_data:/alertmanager
-    tmpfs:
-      - /run/alertmanager:uid=65534,gid=65534,mode=0700
-    networks:
-      - data-dagster
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/-/healthy"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -828,7 +730,6 @@ volumes:
   spark-data:
   dagster_postgres_data:
   prometheus_data:
-  alertmanager_data:
 
 networks:
   data-dagster:

@@ -28,8 +28,3 @@
     - dagster-user-code-bafar:4008
   labels:
     user_code: bafar
-
-- targets:
-    - dagster-user-code-alerting:4009
-  labels:
-    user_code: alerting
