@@ -1,4 +1,5 @@
 SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
 GO
 
 IF OBJECT_ID(N'alerting.alert_incident', N'U') IS NULL
