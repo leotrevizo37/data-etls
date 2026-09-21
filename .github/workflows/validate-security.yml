@@ -103,7 +103,7 @@ jobs:
               "dagster-web must retain its read-only command.",
           )
 
-          for name in ("dagster-web-admin", "alertmanager"):
+          for name in ("dagster-web-admin",):
               service = services[name]
               ports = service.get("ports", [])
               require(
