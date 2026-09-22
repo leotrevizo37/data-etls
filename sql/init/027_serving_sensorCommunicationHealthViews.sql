@@ -92,6 +92,7 @@ WITH Ranked AS (
         ) AS BatteryLevelOrder
     FROM serving.vwSenseSensorCommunicationHealthHourly
 )
+
 SELECT
     SensorId,
     DevEui,
@@ -137,13 +138,13 @@ WITH Ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY
-                SensorId,
-                DevEui,
-                DATEADD(
-                    DAY,
-                    -(DATEDIFF(DAY, CONVERT(DATE, '19000101', 112), LocalTimeSpan) % 7),
-                    CONVERT(DATE, LocalTimeSpan)
-                )
+            SensorId,
+            DevEui,
+            DATEADD(
+                DAY,
+                -(DATEDIFF(DAY, CONVERT(DATE, '19000101', 112), LocalTimeSpan) % 7),
+                CONVERT(DATE, LocalTimeSpan)
+            )
             ORDER BY
                 CASE WHEN BatteryLevel <> 0 THEN 0 WHEN BatteryLevel = 0 THEN 1 ELSE 2 END,
                 BatteryObservedAt DESC,
@@ -151,6 +152,7 @@ WITH Ranked AS (
         ) AS BatteryLevelOrder
     FROM serving.vwSenseSensorCommunicationHealthHourly
 )
+
 SELECT
     SensorId,
     DevEui,
