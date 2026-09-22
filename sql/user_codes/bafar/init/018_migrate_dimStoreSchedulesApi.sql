@@ -1,3 +1,6 @@
+SET NOCOUNT ON;
+GO
+
 IF
     OBJECT_ID(N'dwh.dimStoreSchedules', N'U') IS NOT NULL
     AND COL_LENGTH(N'dwh.dimStoreSchedules', N'DayNo') IS NULL
