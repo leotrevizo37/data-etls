@@ -45,9 +45,3 @@ services:
 
   spark-data-init:
     restart: "no"
-
-  alertmanager:
-    restart: "no"
-
-  dagster-user-code-alerting:
-    restart: "no"

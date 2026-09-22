@@ -1,13 +1,16 @@
 name: lint-sql.yml
 
 on:
+  push:
+    branches:
+      - development
   pull_request:
     types: [ opened, synchronize, reopened ]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/')
+    if: github.event_name == 'push' || startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/')
     steps:
       - uses: actions/checkout@v4
 

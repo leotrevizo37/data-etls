@@ -592,6 +592,182 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
 
 
+FACT_CHIRPSTACK_DEVICE_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackDeviceMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        DevEui,
+        TimeSpan,
+        TenantId,
+        ApplicationId,
+        DeviceProfileId,
+        UplinkIntervalSeconds,
+        ExpectedUplinkCount,
+        ReceivedUplinkCount,
+        AverageRssi,
+        AverageSnr,
+        LinkErrorCount,
+        BatteryLevel,
+        ExternalPowerSource,
+        BatteryLevelSource,
+        BatteryObservedAt,
+        MetricsAvailable,
+        ExtractedAt
+    FROM stg.factChirpStackDeviceMetrics
+    WHERE RunId = ?
+) AS source
+    ON target.DevEui = source.DevEui
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED AND (
+    target.MetricsAvailable = 0
+    OR source.MetricsAvailable = 1
+) THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.ApplicationId = source.ApplicationId,
+        target.DeviceProfileId = source.DeviceProfileId,
+        target.UplinkIntervalSeconds = source.UplinkIntervalSeconds,
+        target.ExpectedUplinkCount = source.ExpectedUplinkCount,
+        target.ReceivedUplinkCount = source.ReceivedUplinkCount,
+        target.AverageRssi = source.AverageRssi,
+        target.AverageSnr = source.AverageSnr,
+        target.LinkErrorCount = source.LinkErrorCount,
+        target.BatteryLevel = source.BatteryLevel,
+        target.ExternalPowerSource = source.ExternalPowerSource,
+        target.BatteryLevelSource = source.BatteryLevelSource,
+        target.BatteryObservedAt = source.BatteryObservedAt,
+        target.MetricsAvailable = source.MetricsAvailable,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        DevEui,
+        TimeSpan,
+        TenantId,
+        ApplicationId,
+        DeviceProfileId,
+        UplinkIntervalSeconds,
+        ExpectedUplinkCount,
+        ReceivedUplinkCount,
+        AverageRssi,
+        AverageSnr,
+        LinkErrorCount,
+        BatteryLevel,
+        ExternalPowerSource,
+        BatteryLevelSource,
+        BatteryObservedAt,
+        MetricsAvailable,
+        ExtractedAt
+    )
+    VALUES (
+        source.DevEui,
+        source.TimeSpan,
+        source.TenantId,
+        source.ApplicationId,
+        source.DeviceProfileId,
+        source.UplinkIntervalSeconds,
+        source.ExpectedUplinkCount,
+        source.ReceivedUplinkCount,
+        source.AverageRssi,
+        source.AverageSnr,
+        source.LinkErrorCount,
+        source.BatteryLevel,
+        source.ExternalPowerSource,
+        source.BatteryLevelSource,
+        source.BatteryObservedAt,
+        source.MetricsAvailable,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+FACT_CHIRPSTACK_GATEWAY_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackGatewayMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayName,
+        ReceivedPacketCount,
+        TransmittedPacketCount,
+        TxOkCount,
+        TxErrorCount,
+        GatewayState,
+        GatewayLastSeenAt,
+        StatsIntervalSeconds,
+        MetricsAvailable,
+        ExtractedAt
+    FROM stg.factChirpStackGatewayMetrics
+    WHERE RunId = ?
+) AS source
+    ON target.GatewayId = source.GatewayId
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED AND (
+    target.MetricsAvailable = 0
+    OR source.MetricsAvailable = 1
+) THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.GatewayName = source.GatewayName,
+        target.ReceivedPacketCount = source.ReceivedPacketCount,
+        target.TransmittedPacketCount = source.TransmittedPacketCount,
+        target.TxOkCount = source.TxOkCount,
+        target.TxErrorCount = source.TxErrorCount,
+        target.GatewayState = source.GatewayState,
+        target.GatewayLastSeenAt = source.GatewayLastSeenAt,
+        target.StatsIntervalSeconds = source.StatsIntervalSeconds,
+        target.MetricsAvailable = source.MetricsAvailable,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayName,
+        ReceivedPacketCount,
+        TransmittedPacketCount,
+        TxOkCount,
+        TxErrorCount,
+        GatewayState,
+        GatewayLastSeenAt,
+        StatsIntervalSeconds,
+        MetricsAvailable,
+        ExtractedAt
+    )
+    VALUES (
+        source.GatewayId,
+        source.TimeSpan,
+        source.TenantId,
+        source.GatewayName,
+        source.ReceivedPacketCount,
+        source.TransmittedPacketCount,
+        source.TxOkCount,
+        source.TxErrorCount,
+        source.GatewayState,
+        source.GatewayLastSeenAt,
+        source.StatsIntervalSeconds,
+        source.MetricsAvailable,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 def build_fact_smartaudits_categories_merge_sql() -> str:
     return """
 SET NOCOUNT ON;
@@ -1567,6 +1743,52 @@ class SqlServerResource:
                 if row is None or row.AffectedRows is None:
                     return 0
                 return int(row.AffectedRows)
+
+    def clear_chirpstack_metrics_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackDeviceMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_devices = int(cursor.rowcount or 0)
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackGatewayMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_gateways = int(cursor.rowcount or 0)
+                conn.commit()
+                return deleted_devices + deleted_gateways
+
+    def merge_chirpstack_metrics(self, run_id: str) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        FACT_CHIRPSTACK_DEVICE_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    device_row = cursor.fetchone()
+                    cursor.execute(
+                        FACT_CHIRPSTACK_GATEWAY_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    gateway_row = cursor.fetchone()
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        device_rows = (
+            0
+            if device_row is None or device_row.AffectedRows is None
+            else int(device_row.AffectedRows)
+        )
+        gateway_rows = (
+            0
+            if gateway_row is None or gateway_row.AffectedRows is None
+            else int(gateway_row.AffectedRows)
+        )
+        return device_rows, gateway_rows
 
     def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:

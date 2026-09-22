@@ -24,6 +24,7 @@ def _build_defs() -> Any:
         dwh_factlecturas,
         dwh_factsensorevents,
         observability_factredingsaudits,
+        observability_chirpstackmetrics,
         dwh_factmantizticketlifecycle,
         dwh_factmantiztickettextinsights,
         dwh_factsmartauditscategories,
@@ -38,6 +39,7 @@ def _build_defs() -> Any:
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         fact_redings_audits_job,
+        chirpstack_metrics_job,
         fact_sensor_events_job,
         fact_smartaudits_categories_job,
         fact_mantiz_tickets_job,
@@ -51,6 +53,7 @@ def _build_defs() -> Any:
     )
     from .resources import (
         dim_sqlserver_resource,
+        chirpstack_api_resource,
         spark_df_io_manager,
         spark_resource,
         mantiz_mysql_resource,
@@ -71,7 +74,8 @@ def _build_defs() -> Any:
         operations_sched_every_1h_w,
         operations_sched_every_6h,
         operations_sched_every_w,
-        redings_audits_sched_every_10m,
+        redings_audits_sched_every_30m,
+        chirpstack_metrics_sched_hourly_at_30,
         sensor_events_sched_every_6h,
         sensor_events_sched_every_1h_w,
         mantiz_tickets_sched_every_6h,
@@ -79,7 +83,9 @@ def _build_defs() -> Any:
         smartaudits_classifier_training_daily,
     )
     from .sensors import (
+        asset_row_count_trend_sensor,
         dwh_dimsidonproddimensions_sensor,
+        operational_alerts_sensor,
     )
 
     return Definitions(
@@ -91,6 +97,7 @@ def _build_defs() -> Any:
             fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             fact_redings_audits_job,
+            chirpstack_metrics_job,
             fact_sensor_events_job,
             fact_smartaudits_categories_job,
             fact_mantiz_tickets_job,
@@ -105,6 +112,7 @@ def _build_defs() -> Any:
         ],
         resources={
             "sqlserver": sqlserver_resource,
+            "chirpstack_api": chirpstack_api_resource,
             "spark": spark_resource,
             "dim_sqlserver": dim_sqlserver_resource,
             "smartaudits_mysql": smartaudits_mysql_resource,
@@ -123,7 +131,8 @@ def _build_defs() -> Any:
             operations_sched_every_w,
             operations_sched_every_1h_w,
             operations_sched_every_6h,
-            redings_audits_sched_every_10m,
+            redings_audits_sched_every_30m,
+            chirpstack_metrics_sched_hourly_at_30,
             sensor_events_sched_every_6h,
             sensor_events_sched_every_1h_w,
             mantiz_tickets_sched_every_6h,
@@ -133,7 +142,9 @@ def _build_defs() -> Any:
             index_maintenance_schedule,
         ],
         sensors=[
+            asset_row_count_trend_sensor,
             dwh_dimsidonproddimensions_sensor,
+            operational_alerts_sensor,
         ],
         assets=[
             dbo_sensors,
@@ -146,6 +157,7 @@ def _build_defs() -> Any:
             dwh_factlecturas,
             dwh_factsensorevents,
             observability_factredingsaudits,
+            observability_chirpstackmetrics,
             dwh_factmantizticketlifecycle,
             dwh_factmantiztickettextinsights,
             dwh_factsmartauditscategories,

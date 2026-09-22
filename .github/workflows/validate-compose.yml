@@ -1,4 +1,4 @@
-name: validate-compose.yml
+name: Validate compose
 
 on:
   pull_request:
@@ -6,8 +6,9 @@ on:
 
 jobs:
   compose-validate:
+    name: Compose mocking and validation
     runs-on: ubuntu-latest
-    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/')
+    if: startsWith(github.head_ref, 'init/') || startsWith(github.head_ref, 'feat/') || github.head_ref == 'development'
     steps:
       - uses: actions/checkout@v4
 

@@ -11,6 +11,7 @@ Los pipelines se documentan por salida funcional, no por implementacion duplicad
 | Backfill audiencia | `015_sense_audiencia_backfill_daily` | Rango diario de `dwh.factAudiencia` |
 | Operaciones Sense | `020_sense_operations` | `dwh.factReadingsMeasurement`, `ctl.IngestionControl` |
 | Eventos de sensores | `021_sense_sensor_events` | `dwh.factSensorEvents` |
+| Observabilidad ChirpStack | `023_sense_chirpstack_metrics` | `observability.factChirpStackDeviceMetrics`, `observability.factChirpStackGatewayMetrics` |
 | Mantiz tickets | `100_mantiz_tickets` | `dwh.factMantizTicketLifecycle`, `dwh.factMantizTicketTextInsights` |
 | SmartAudits categorias | `110_smartaudits_categories` | `dwh.factSmartauditsCategories` |
 | SmartAudits training | `111_smartaudits_classifier_training` | `ctl.SmartauditsClassifierModels`, artefacto de modelo |

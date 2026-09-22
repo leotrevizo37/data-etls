@@ -85,5 +85,31 @@ class FactReadingsMergeSqlTests(unittest.TestCase):
         )
         self.assertIn("HasAnomalies,", sql)
 
+    def test_readings_serving_views_are_symmetric_and_weekly_is_indexed(self) -> None:
+        hourly = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "init"
+            / "018_serving_vwSenseReadingsHourly.sql"
+        ).read_text()
+        aggregates = (
+            REPOSITORY_ROOT
+            / "sql"
+            / "init"
+            / "019_serving_vwSenseReadingsDaily.sql"
+        ).read_text()
+
+        self.assertIn("Anomalies AS AnomaliesSum", hourly)
+        self.assertIn("dwh.vwFactReadingsMeasurementWeekly", aggregates)
+        self.assertIn("WITH SCHEMABINDING", aggregates)
+        self.assertIn(
+            "CREATE UNIQUE CLUSTERED INDEX "
+            "ix_vwFactReadingsMeasurementWeekly_SensorId_WeekStartDate",
+            aggregates,
+        )
+        self.assertIn("serving.vwSenseReadingsWeekly", aggregates)
+        self.assertIn("DATEADD(DAY, 6, WeekStartDate) AS WeekEndDate", aggregates)
+        self.assertEqual(aggregates.count("WITH (NOEXPAND)"), 2)
+
 if __name__ == "__main__":
     unittest.main()
