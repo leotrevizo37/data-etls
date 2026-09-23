@@ -16,8 +16,15 @@ from pyspark.sql.types import (
 
 from dagster import AssetExecutionContext, MaterializeResult, RetryPolicy, asset
 
-from ..resources import ChirpStackApiResource, SparkResource, SqlServerResource
+from ...operations_window import OPERATIONS_TIMEZONE
+from ..resources import (
+    ChirpStackApiResource,
+    MqttEventHistoryApiResource,
+    SparkResource,
+    SqlServerResource,
+)
 from ..transformations.chirpstack_metrics import (
+    build_device_event_metric_rows,
     build_device_metric_row,
     build_gateway_metric_row,
     device_profile_supports_battery,
@@ -67,13 +74,49 @@ GATEWAY_METRICS_SCHEMA = StructType(
         StructField("ExtractedAt", TimestampType(), False),
     ]
 )
+DEVICE_EVENT_METRICS_SCHEMA = StructType(
+    [
+        StructField("DevEui", StringType(), False),
+        StructField("TimeSpan", TimestampType(), False),
+        StructField("TenantId", StringType(), False),
+        StructField("CapturedUplinkCount", LongType(), False),
+        StructField("ObservedGatewayCount", IntegerType(), False),
+        StructField("MultiGatewayUplinkCount", LongType(), False),
+        StructField("EventLogCountsJson", StringType(), False),
+        StructField("ExtractedAt", TimestampType(), False),
+    ]
+)
+DEVICE_GATEWAY_METRICS_SCHEMA = StructType(
+    [
+        StructField("DevEui", StringType(), False),
+        StructField("GatewayId", StringType(), False),
+        StructField("TimeSpan", TimestampType(), False),
+        StructField("TenantId", StringType(), False),
+        StructField("GatewayReceptionCount", LongType(), False),
+        StructField("ReceptionShare", DecimalType(18, 6), False),
+        StructField("AverageRssi", DecimalType(18, 6), False),
+        StructField("MinRssi", DecimalType(18, 6), False),
+        StructField("MaxRssi", DecimalType(18, 6), False),
+        StructField("AverageSnr", DecimalType(18, 6), False),
+        StructField("MinSnr", DecimalType(18, 6), False),
+        StructField("MaxSnr", DecimalType(18, 6), False),
+        StructField("FirstReceivedAt", TimestampType(), False),
+        StructField("LastReceivedAt", TimestampType(), False),
+        StructField("ExtractedAt", TimestampType(), False),
+    ]
+)
 
 
 @asset(
     name="observability_chirpstackmetrics",
     group_name="carlsjr",
     key_prefix=["carlsjr"],
-    required_resource_keys={"chirpstack_api", "spark", "sqlserver"},
+    required_resource_keys={
+        "chirpstack_api",
+        "mqtt_event_history_api",
+        "spark",
+        "sqlserver",
+    },
     retry_policy=CHIRPSTACK_RETRY_POLICY,
 )
 def observability_chirpstackmetrics(
@@ -81,6 +124,9 @@ def observability_chirpstackmetrics(
 ) -> MaterializeResult:
     start_time = perf_counter()
     chirpstack: ChirpStackApiResource = context.resources.chirpstack_api
+    mqtt_history: MqttEventHistoryApiResource = (
+        context.resources.mqtt_event_history_api
+    )
     spark_res: SparkResource = context.resources.spark
     sql: SqlServerResource = context.resources.sqlserver
     extracted_at = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
@@ -93,6 +139,12 @@ def observability_chirpstackmetrics(
     gateway_staged_rows = 0
     device_merged_rows = 0
     gateway_merged_rows = 0
+    device_event_staged_rows = 0
+    device_gateway_staged_rows = 0
+    device_event_merged_rows = 0
+    device_gateway_merged_rows = 0
+    mqtt_event_metrics_available = False
+    event_from_utc = from_utc - timedelta(hours=mqtt_history.lookback_hours - 1)
 
     try:
         sql.clear_chirpstack_metrics_stage(run_id)
@@ -189,6 +241,32 @@ def observability_chirpstackmetrics(
                     )
                 )
 
+        device_event_rows = []
+        device_gateway_rows = []
+        try:
+            event_rows = mqtt_history.fetch_range(
+                event_from_utc.replace(tzinfo=timezone.utc)
+                .astimezone(OPERATIONS_TIMEZONE)
+                .replace(tzinfo=None),
+                (to_utc + timedelta(hours=1))
+                .replace(tzinfo=timezone.utc)
+                .astimezone(OPERATIONS_TIMEZONE)
+                .replace(tzinfo=None),
+            )
+            device_event_rows, device_gateway_rows = build_device_event_metric_rows(
+                event_rows=event_rows,
+                devices={row["DevEui"]: row["TenantId"] for row in device_rows},
+                from_utc=event_from_utc,
+                to_utc=to_utc,
+                extracted_at=extracted_at,
+            )
+            mqtt_event_metrics_available = True
+        except (OSError, RuntimeError, TypeError, ValueError) as ex:
+            context.log.warning(
+                "MQTT event history metrics are unavailable for this run: %s",
+                ex,
+            )
+
         spark = spark_res.get_spark()
         device_df = spark.createDataFrame(device_rows, DEVICE_METRICS_SCHEMA)
         gateway_df = spark.createDataFrame(gateway_rows, GATEWAY_METRICS_SCHEMA)
@@ -200,8 +278,35 @@ def observability_chirpstackmetrics(
             gateway_df,
             run_id,
         )
-        device_merged_rows, gateway_merged_rows = sql.merge_chirpstack_metrics(
-            run_id
+        if mqtt_event_metrics_available:
+            device_event_df = spark.createDataFrame(
+                device_event_rows,
+                DEVICE_EVENT_METRICS_SCHEMA,
+            )
+            device_gateway_df = spark.createDataFrame(
+                device_gateway_rows,
+                DEVICE_GATEWAY_METRICS_SCHEMA,
+            )
+            device_event_staged_rows = (
+                spark_res.write_chirpstack_device_event_metrics_stage(
+                    device_event_df,
+                    run_id,
+                )
+            )
+            device_gateway_staged_rows = (
+                spark_res.write_chirpstack_device_gateway_metrics_stage(
+                    device_gateway_df,
+                    run_id,
+                )
+            )
+        (
+            device_merged_rows,
+            gateway_merged_rows,
+            device_event_merged_rows,
+            device_gateway_merged_rows,
+        ) = sql.merge_chirpstack_metrics(
+            run_id,
+            include_event_metrics=mqtt_event_metrics_available,
         )
         sql.clear_chirpstack_metrics_stage(run_id)
         sql.mark_run_completed(
@@ -232,10 +337,18 @@ def observability_chirpstackmetrics(
             "device_staged_rows": device_staged_rows,
             "gateway_row_count": gateway_merged_rows,
             "gateway_staged_rows": gateway_staged_rows,
+            "device_event_row_count": device_event_merged_rows,
+            "device_event_staged_rows": device_event_staged_rows,
+            "device_gateway_row_count": device_gateway_merged_rows,
+            "device_gateway_staged_rows": device_gateway_staged_rows,
+            "mqtt_event_metrics_available": mqtt_event_metrics_available,
+            "mqtt_event_history_requests": mqtt_history.requests_made,
+            "mqtt_event_lookback_hours": mqtt_history.lookback_hours,
             "valid_dev_eui_count": len(dev_euis),
             "invalid_physical_identifier_count": len(invalid_physical_identifiers),
             "invalid_physical_identifiers": invalid_physical_identifiers,
             "from_utc": str(from_utc),
+            "event_from_utc": str(event_from_utc),
             "to_utc": str(to_utc),
             "elapsed_seconds": round(perf_counter() - start_time, 3),
         }

@@ -54,6 +54,7 @@ def _build_defs() -> Any:
     from .resources import (
         dim_sqlserver_resource,
         chirpstack_api_resource,
+        mqtt_event_history_api_resource,
         spark_df_io_manager,
         spark_resource,
         mantiz_mysql_resource,
@@ -113,6 +114,7 @@ def _build_defs() -> Any:
         resources={
             "sqlserver": sqlserver_resource,
             "chirpstack_api": chirpstack_api_resource,
+            "mqtt_event_history_api": mqtt_event_history_api_resource,
             "spark": spark_resource,
             "dim_sqlserver": dim_sqlserver_resource,
             "smartaudits_mysql": smartaudits_mysql_resource,

@@ -277,6 +277,216 @@ def build_gateway_metric_row(
     }
 
 
+def build_device_event_metric_rows(
+    event_rows: list[dict[str, Any]],
+    devices: dict[str, str],
+    from_utc: datetime,
+    to_utc: datetime,
+    extracted_at: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    from_utc = _utc_naive(from_utc, "from_utc")
+    to_utc = _utc_naive(to_utc, "to_utc")
+    extracted_at = _utc_naive(extracted_at, "ExtractedAt")
+    if from_utc >= to_utc:
+        raise ValueError("Event range must use from_utc < to_utc")
+
+    hours = []
+    hour = from_utc
+    while hour < to_utc:
+        hours.append(hour)
+        hour += timedelta(hours=1)
+    summaries = {
+        (dev_eui, hour): {
+            "uplinks": set(),
+            "gateway_sets": {},
+            "logs": defaultdict(int),
+            "log_fingerprints": set(),
+        }
+        for dev_eui in devices
+        for hour in hours
+    }
+    receptions: dict[tuple[str, str, datetime], dict[str, Any]] = {}
+    uplink_payloads = {}
+
+    for event_row in event_rows:
+        if not isinstance(event_row, dict):
+            raise TypeError("MQTT event row must be an object")
+        dev_eui = normalize_dev_eui(_required_value(event_row, "DevEui", "event row"))
+        if dev_eui not in devices:
+            continue
+        event_time = _event_time_utc_naive(
+            _required_value(event_row, "EventTime", "event row"),
+            "event time",
+        )
+        if event_time < from_utc or event_time >= to_utc:
+            continue
+        time_span = event_time.replace(minute=0, second=0, microsecond=0)
+        raw_message = _mapping_value(event_row, "RawMessage", "event row")
+        device_info = raw_message.get("deviceInfo")
+        if device_info is not None:
+            if not isinstance(device_info, dict):
+                raise TypeError("event deviceInfo must be an object")
+            raw_dev_eui = normalize_dev_eui(
+                _required_value(device_info, "devEui", "event deviceInfo")
+            )
+            if raw_dev_eui != dev_eui:
+                raise ValueError("MQTT event contains a different DevEUI")
+            raw_tenant_id = _uuid_value(device_info, "tenantId", "event deviceInfo")
+            if raw_tenant_id != devices[dev_eui]:
+                raise ValueError("MQTT event belongs to a different tenant")
+
+        summary = summaries[(dev_eui, time_span)]
+        level = raw_message.get("level")
+        code = raw_message.get("code")
+        if level is not None or code is not None:
+            if not isinstance(level, str) or not level:
+                raise ValueError("MQTT log event level must be non-empty text")
+            if not isinstance(code, str) or not code:
+                raise ValueError("MQTT log event code must be non-empty text")
+            fingerprint = json.dumps(
+                {
+                    "time": event_time.isoformat(),
+                    "level": level,
+                    "code": code,
+                    "description": raw_message.get("description"),
+                    "context": raw_message.get("context"),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if fingerprint not in summary["log_fingerprints"]:
+                summary["log_fingerprints"].add(fingerprint)
+                summary["logs"][code] += 1
+
+        if "rxInfo" not in raw_message:
+            continue
+        deduplication_id = _required_value(
+            raw_message,
+            "deduplicationId",
+            "uplink event",
+        )
+        if not isinstance(deduplication_id, str):
+            raise TypeError("uplink event deduplicationId must be text")
+        try:
+            str(UUID(deduplication_id))
+        except ValueError as ex:
+            raise ValueError("uplink event deduplicationId must be a UUID") from ex
+        uplink_key = (dev_eui, deduplication_id)
+        canonical_payload = json.dumps(
+            raw_message,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if uplink_key in uplink_payloads:
+            if uplink_payloads[uplink_key] != canonical_payload:
+                raise ValueError("Duplicate uplink id has conflicting payloads")
+            continue
+        uplink_payloads[uplink_key] = canonical_payload
+        rx_info = raw_message["rxInfo"]
+        if not isinstance(rx_info, list):
+            raise TypeError("uplink event rxInfo must be an array")
+        gateway_ids = set()
+        for reception in rx_info:
+            if not isinstance(reception, dict):
+                raise TypeError("uplink event rxInfo must contain objects")
+            gateway_id = normalize_dev_eui(
+                _required_value(reception, "gatewayId", "uplink reception")
+            )
+            if gateway_id in gateway_ids:
+                raise ValueError("uplink event contains a duplicate gateway reception")
+            gateway_ids.add(gateway_id)
+            rssi = _decimal_number(
+                _required_value(reception, "rssi", "uplink reception"),
+                "uplink reception RSSI",
+                DECIMAL_QUANTUM,
+            )
+            snr = _decimal_number(
+                _required_value(reception, "snr", "uplink reception"),
+                "uplink reception SNR",
+                DECIMAL_QUANTUM,
+            )
+            reception_values = receptions.setdefault(
+                (dev_eui, gateway_id, time_span),
+                {
+                    "rssi": [],
+                    "snr": [],
+                    "first": event_time,
+                    "last": event_time,
+                },
+            )
+            reception_values["rssi"].append(rssi)
+            reception_values["snr"].append(snr)
+            reception_values["first"] = min(reception_values["first"], event_time)
+            reception_values["last"] = max(reception_values["last"], event_time)
+        summary["uplinks"].add(deduplication_id)
+        summary["gateway_sets"][deduplication_id] = gateway_ids
+
+    device_rows = []
+    for (dev_eui, time_span), summary in sorted(summaries.items()):
+        gateway_ids = (
+            set().union(*summary["gateway_sets"].values())
+            if summary["gateway_sets"]
+            else set()
+        )
+        device_rows.append(
+            {
+                "DevEui": dev_eui,
+                "TimeSpan": time_span,
+                "TenantId": devices[dev_eui],
+                "CapturedUplinkCount": len(summary["uplinks"]),
+                "ObservedGatewayCount": len(gateway_ids),
+                "MultiGatewayUplinkCount": sum(
+                    len(value) > 1 for value in summary["gateway_sets"].values()
+                ),
+                "EventLogCountsJson": json.dumps(
+                    dict(sorted(summary["logs"].items())),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "ExtractedAt": extracted_at,
+            }
+        )
+
+    captured_uplinks = {
+        (row["DevEui"], row["TimeSpan"]): row["CapturedUplinkCount"]
+        for row in device_rows
+    }
+    gateway_rows = []
+    for (dev_eui, gateway_id, time_span), values in sorted(receptions.items()):
+        uplink_count = len(values["rssi"])
+        device_uplink_count = captured_uplinks[(dev_eui, time_span)]
+        if device_uplink_count == 0:
+            raise ValueError("Gateway reception cannot exist without a captured uplink")
+        gateway_rows.append(
+            {
+                "DevEui": dev_eui,
+                "GatewayId": gateway_id,
+                "TimeSpan": time_span,
+                "TenantId": devices[dev_eui],
+                "GatewayReceptionCount": uplink_count,
+                "ReceptionShare": (
+                    Decimal(uplink_count) / Decimal(device_uplink_count)
+                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
+                "AverageRssi": (
+                    sum(values["rssi"]) / Decimal(uplink_count)
+                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
+                "MinRssi": min(values["rssi"]),
+                "MaxRssi": max(values["rssi"]),
+                "AverageSnr": (
+                    sum(values["snr"]) / Decimal(uplink_count)
+                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
+                "MinSnr": min(values["snr"]),
+                "MaxSnr": max(values["snr"]),
+                "FirstReceivedAt": values["first"],
+                "LastReceivedAt": values["last"],
+                "ExtractedAt": extracted_at,
+            }
+        )
+    return device_rows, gateway_rows
+
+
 def _required_value(payload: dict[str, Any], key: str, context: str) -> Any:
     if key not in payload or payload[key] is None:
         raise ValueError(f"{context} omitted {key}")
@@ -328,6 +538,14 @@ def _utc_naive(value: datetime, context: str) -> datetime:
     if value.tzinfo is None:
         return value.replace(microsecond=0)
     return value.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+def _event_time_utc_naive(value: datetime, context: str) -> datetime:
+    if not isinstance(value, datetime):
+        raise TypeError(f"{context} must be a datetime")
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _metric_chart(payload: dict[str, Any], key: str, context: str) -> dict[datetime, dict[str, float | int]]:
