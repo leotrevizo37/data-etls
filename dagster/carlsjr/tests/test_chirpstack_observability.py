@@ -289,6 +289,56 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
             datetime(2026, 9, 17, 10, 5, 0, 123456),
         )
 
+    def test_event_reception_accepts_optional_rssi_snr_and_channel(self) -> None:
+        tenant_id = "087175fa-5bf9-4180-a02e-7c57fb3543e8"
+        dev_eui = "24e124136e090452"
+        gateways = [
+            "c0ba1ffffe01f6d7",
+            "c0ba1ffffe01f6d8",
+            "c0ba1ffffe01f6d9",
+        ]
+        _, gateway_rows = build_device_event_metric_rows(
+            event_rows=[
+                {
+                    "DevEui": dev_eui,
+                    "EventTime": datetime(2026, 9, 17, 10, 5),
+                    "RawMessage": {
+                        "deduplicationId": "9232a3a7-79f5-4301-90f7-fa878659d322",
+                        "time": "2026-09-17T10:05:00Z",
+                        "deviceInfo": {
+                            "devEui": dev_eui,
+                            "tenantId": tenant_id,
+                        },
+                        "rxInfo": [
+                            {"gatewayId": gateways[0], "rssi": -86},
+                            {"gatewayId": gateways[1], "snr": 4.5},
+                            {"gatewayId": gateways[2]},
+                        ],
+                    },
+                }
+            ],
+            devices={dev_eui: tenant_id},
+            from_utc=datetime(2026, 9, 17, 10),
+            to_utc=datetime(2026, 9, 17, 11),
+            extracted_at=datetime(2026, 9, 17, 11, 2),
+        )
+
+        rows_by_gateway = {row["GatewayId"]: row for row in gateway_rows}
+        self.assertEqual(len(rows_by_gateway), 3)
+        self.assertEqual(
+            rows_by_gateway[gateways[0]]["AverageRssi"],
+            Decimal("-86.000000"),
+        )
+        self.assertIsNone(rows_by_gateway[gateways[0]]["AverageSnr"])
+        self.assertIsNone(rows_by_gateway[gateways[1]]["AverageRssi"])
+        self.assertEqual(
+            rows_by_gateway[gateways[1]]["AverageSnr"],
+            Decimal("4.500000"),
+        )
+        self.assertIsNone(rows_by_gateway[gateways[2]]["AverageRssi"])
+        self.assertIsNone(rows_by_gateway[gateways[2]]["AverageSnr"])
+        self.assertTrue(all(row["GatewayReceptionCount"] == 1 for row in gateway_rows))
+
     def test_rejects_unknown_gateway_state_and_invalid_eui(self) -> None:
         with self.assertRaisesRegex(ValueError, "16-character hexadecimal"):
             normalize_dev_eui("not-an-eui")

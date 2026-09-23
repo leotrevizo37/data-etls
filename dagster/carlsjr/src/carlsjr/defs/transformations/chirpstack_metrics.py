@@ -397,27 +397,35 @@ def build_device_event_metric_rows(
             if gateway_id in gateway_ids:
                 raise ValueError("uplink event contains a duplicate gateway reception")
             gateway_ids.add(gateway_id)
-            rssi = _decimal_number(
-                _required_value(reception, "rssi", "uplink reception"),
-                "uplink reception RSSI",
-                DECIMAL_QUANTUM,
-            )
-            snr = _decimal_number(
-                _required_value(reception, "snr", "uplink reception"),
-                "uplink reception SNR",
-                DECIMAL_QUANTUM,
-            )
+            rssi = reception.get("rssi")
+            if rssi is not None:
+                rssi = _decimal_number(
+                    rssi,
+                    "uplink reception RSSI",
+                    DECIMAL_QUANTUM,
+                )
+            snr = reception.get("snr")
+            if snr is not None:
+                snr = _decimal_number(
+                    snr,
+                    "uplink reception SNR",
+                    DECIMAL_QUANTUM,
+                )
             reception_values = receptions.setdefault(
                 (dev_eui, gateway_id, time_span),
                 {
+                    "count": 0,
                     "rssi": [],
                     "snr": [],
                     "first": event_time,
                     "last": event_time,
                 },
             )
-            reception_values["rssi"].append(rssi)
-            reception_values["snr"].append(snr)
+            reception_values["count"] += 1
+            if rssi is not None:
+                reception_values["rssi"].append(rssi)
+            if snr is not None:
+                reception_values["snr"].append(snr)
             reception_values["first"] = min(reception_values["first"], event_time)
             reception_values["last"] = max(reception_values["last"], event_time)
         summary["uplinks"].add(deduplication_id)
@@ -455,7 +463,7 @@ def build_device_event_metric_rows(
     }
     gateway_rows = []
     for (dev_eui, gateway_id, time_span), values in sorted(receptions.items()):
-        uplink_count = len(values["rssi"])
+        uplink_count = values["count"]
         device_uplink_count = captured_uplinks[(dev_eui, time_span)]
         if device_uplink_count == 0:
             raise ValueError("Gateway reception cannot exist without a captured uplink")
@@ -470,15 +478,19 @@ def build_device_event_metric_rows(
                     Decimal(uplink_count) / Decimal(device_uplink_count)
                 ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
                 "AverageRssi": (
-                    sum(values["rssi"]) / Decimal(uplink_count)
-                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
-                "MinRssi": min(values["rssi"]),
-                "MaxRssi": max(values["rssi"]),
+                    sum(values["rssi"]) / Decimal(len(values["rssi"]))
+                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP)
+                if values["rssi"]
+                else None,
+                "MinRssi": min(values["rssi"]) if values["rssi"] else None,
+                "MaxRssi": max(values["rssi"]) if values["rssi"] else None,
                 "AverageSnr": (
-                    sum(values["snr"]) / Decimal(uplink_count)
-                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
-                "MinSnr": min(values["snr"]),
-                "MaxSnr": max(values["snr"]),
+                    sum(values["snr"]) / Decimal(len(values["snr"]))
+                ).quantize(DECIMAL_QUANTUM, rounding=ROUND_HALF_UP)
+                if values["snr"]
+                else None,
+                "MinSnr": min(values["snr"]) if values["snr"] else None,
+                "MaxSnr": max(values["snr"]) if values["snr"] else None,
                 "FirstReceivedAt": values["first"],
                 "LastReceivedAt": values["last"],
                 "ExtractedAt": extracted_at,

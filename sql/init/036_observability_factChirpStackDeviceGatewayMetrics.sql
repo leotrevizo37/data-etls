@@ -8,12 +8,12 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
             TenantId UNIQUEIDENTIFIER NOT NULL,
             GatewayReceptionCount BIGINT NOT NULL,
             ReceptionShare DECIMAL(18, 6) NOT NULL,
-            AverageRssi DECIMAL(18, 6) NOT NULL,
-            MinRssi DECIMAL(18, 6) NOT NULL,
-            MaxRssi DECIMAL(18, 6) NOT NULL,
-            AverageSnr DECIMAL(18, 6) NOT NULL,
-            MinSnr DECIMAL(18, 6) NOT NULL,
-            MaxSnr DECIMAL(18, 6) NOT NULL,
+            AverageRssi DECIMAL(18, 6) NULL,
+            MinRssi DECIMAL(18, 6) NULL,
+            MaxRssi DECIMAL(18, 6) NULL,
+            AverageSnr DECIMAL(18, 6) NULL,
+            MinSnr DECIMAL(18, 6) NULL,
+            MaxSnr DECIMAL(18, 6) NULL,
             FirstReceivedAt DATETIME2(6) NOT NULL,
             LastReceivedAt DATETIME2(6) NOT NULL,
             ExtractedAt DATETIME2(0) NOT NULL,
@@ -37,6 +37,23 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
     END;
 GO
 
+IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN AverageRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MinRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MaxRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN AverageSnr DECIMAL(18, 6) NULL;
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MinSnr DECIMAL(18, 6) NULL;
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MaxSnr DECIMAL(18, 6) NULL;
+    END;
+GO
+
 IF OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.factChirpStackDeviceGatewayMetrics
@@ -48,16 +65,33 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
             TenantId UNIQUEIDENTIFIER NOT NULL,
             GatewayReceptionCount BIGINT NOT NULL,
             ReceptionShare DECIMAL(18, 6) NOT NULL,
-            AverageRssi DECIMAL(18, 6) NOT NULL,
-            MinRssi DECIMAL(18, 6) NOT NULL,
-            MaxRssi DECIMAL(18, 6) NOT NULL,
-            AverageSnr DECIMAL(18, 6) NOT NULL,
-            MinSnr DECIMAL(18, 6) NOT NULL,
-            MaxSnr DECIMAL(18, 6) NOT NULL,
+            AverageRssi DECIMAL(18, 6) NULL,
+            MinRssi DECIMAL(18, 6) NULL,
+            MaxRssi DECIMAL(18, 6) NULL,
+            AverageSnr DECIMAL(18, 6) NULL,
+            MinSnr DECIMAL(18, 6) NULL,
+            MaxSnr DECIMAL(18, 6) NULL,
             FirstReceivedAt DATETIME2(6) NOT NULL,
             LastReceivedAt DATETIME2(6) NOT NULL,
             ExtractedAt DATETIME2(0) NOT NULL
         );
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN AverageRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MinRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MaxRssi DECIMAL(18, 6) NULL;
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN AverageSnr DECIMAL(18, 6) NULL;
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MinSnr DECIMAL(18, 6) NULL;
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ALTER COLUMN MaxSnr DECIMAL(18, 6) NULL;
     END;
 GO
 
