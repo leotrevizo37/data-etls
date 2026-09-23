@@ -74,7 +74,8 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NULL
     END;
 GO
 
-IF COL_LENGTH(
+IF
+    COL_LENGTH(
         N'observability.factChirpStackDeviceMetrics',
         N'LinkErrorCountsJson'
     ) IS NULL
@@ -131,7 +132,8 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NULL
     END;
 GO
 
-IF COL_LENGTH(
+IF
+    COL_LENGTH(
         N'stg.factChirpStackDeviceMetrics',
         N'LinkErrorCountsJson'
     ) IS NULL

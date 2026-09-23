@@ -66,7 +66,8 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
     END;
 GO
 
-IF COL_LENGTH(
+IF
+    COL_LENGTH(
         N'observability.factChirpStackGatewayMetrics',
         N'TxPacketStatusCountsJson'
     ) IS NULL
@@ -117,7 +118,8 @@ IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NULL
     END;
 GO
 
-IF COL_LENGTH(
+IF
+    COL_LENGTH(
         N'stg.factChirpStackGatewayMetrics',
         N'TxPacketStatusCountsJson'
     ) IS NULL
