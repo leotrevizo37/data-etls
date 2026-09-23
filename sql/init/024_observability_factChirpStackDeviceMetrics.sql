@@ -79,10 +79,10 @@ IF
         N'observability.factChirpStackDeviceMetrics',
         N'LinkErrorCountsJson'
     ) IS NULL
-        BEGIN
-            ALTER TABLE observability.factChirpStackDeviceMetrics
-            ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
-        END;
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceMetrics
+        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
+    END;
 GO
 
 IF
@@ -137,10 +137,10 @@ IF
         N'stg.factChirpStackDeviceMetrics',
         N'LinkErrorCountsJson'
     ) IS NULL
-        BEGIN
-            ALTER TABLE stg.factChirpStackDeviceMetrics
-            ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
-        END;
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceMetrics
+        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
+    END;
 GO
 
 IF

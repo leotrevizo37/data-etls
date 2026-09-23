@@ -71,10 +71,10 @@ IF
         N'observability.factChirpStackGatewayMetrics',
         N'TxPacketStatusCountsJson'
     ) IS NULL
-        BEGIN
-            ALTER TABLE observability.factChirpStackGatewayMetrics
-            ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
-        END;
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
+    END;
 GO
 IF
     NOT EXISTS (
@@ -123,10 +123,10 @@ IF
         N'stg.factChirpStackGatewayMetrics',
         N'TxPacketStatusCountsJson'
     ) IS NULL
-        BEGIN
-            ALTER TABLE stg.factChirpStackGatewayMetrics
-            ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
-        END;
+    BEGIN
+        ALTER TABLE stg.factChirpStackGatewayMetrics
+        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
+    END;
 GO
 IF
     NOT EXISTS (
