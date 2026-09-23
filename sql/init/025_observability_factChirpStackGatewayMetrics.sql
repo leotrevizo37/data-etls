@@ -65,14 +65,15 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
         );
     END;
 GO
+
 IF COL_LENGTH(
-    N'observability.factChirpStackGatewayMetrics',
-    N'TxPacketStatusCountsJson'
-) IS NULL
-    BEGIN
-        ALTER TABLE observability.factChirpStackGatewayMetrics
-        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
-    END;
+        N'observability.factChirpStackGatewayMetrics',
+        N'TxPacketStatusCountsJson'
+    ) IS NULL
+        BEGIN
+            ALTER TABLE observability.factChirpStackGatewayMetrics
+            ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
+        END;
 GO
 IF
     NOT EXISTS (
@@ -115,14 +116,15 @@ IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NULL
         );
     END;
 GO
+
 IF COL_LENGTH(
-    N'stg.factChirpStackGatewayMetrics',
-    N'TxPacketStatusCountsJson'
-) IS NULL
-    BEGIN
-        ALTER TABLE stg.factChirpStackGatewayMetrics
-        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
-    END;
+        N'stg.factChirpStackGatewayMetrics',
+        N'TxPacketStatusCountsJson'
+    ) IS NULL
+        BEGIN
+            ALTER TABLE stg.factChirpStackGatewayMetrics
+            ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
+        END;
 GO
 IF
     NOT EXISTS (

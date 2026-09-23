@@ -73,15 +73,17 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NULL
         );
     END;
 GO
+
 IF COL_LENGTH(
-    N'observability.factChirpStackDeviceMetrics',
-    N'LinkErrorCountsJson'
-) IS NULL
-    BEGIN
-        ALTER TABLE observability.factChirpStackDeviceMetrics
-        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
-    END;
+        N'observability.factChirpStackDeviceMetrics',
+        N'LinkErrorCountsJson'
+    ) IS NULL
+        BEGIN
+            ALTER TABLE observability.factChirpStackDeviceMetrics
+            ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
+        END;
 GO
+
 IF
     NOT EXISTS (
         SELECT 1
@@ -128,15 +130,17 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NULL
         );
     END;
 GO
+
 IF COL_LENGTH(
-    N'stg.factChirpStackDeviceMetrics',
-    N'LinkErrorCountsJson'
-) IS NULL
-    BEGIN
-        ALTER TABLE stg.factChirpStackDeviceMetrics
-        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
-    END;
+        N'stg.factChirpStackDeviceMetrics',
+        N'LinkErrorCountsJson'
+    ) IS NULL
+        BEGIN
+            ALTER TABLE stg.factChirpStackDeviceMetrics
+            ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
+        END;
 GO
+
 IF
     NOT EXISTS (
         SELECT 1
