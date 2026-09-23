@@ -88,6 +88,12 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NOT N
     END;
 GO
 
+IF OBJECT_ID(N'raw.MqttEventHistoryRejectedRow', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE raw.MqttEventHistoryRejectedRow;
+    END;
+GO
+
 IF OBJECT_ID(N'ctl.IngestionControl', N'U') IS NOT NULL
     BEGIN
         DELETE FROM ctl.IngestionControl

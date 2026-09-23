@@ -1925,6 +1925,58 @@ class SqlServerResource:
                     + deleted_device_gateways
                 )
 
+    def write_mqtt_event_history_rejected_rows(
+        self,
+        rows: list[dict],
+        run_id: str,
+        retention_days: int,
+    ) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+DELETE FROM raw.MqttEventHistoryRejectedRow
+WHERE CreatedAt < DATEADD(DAY, -?, SYSUTCDATETIME());
+""",
+                        retention_days,
+                    )
+                    deleted_rows = max(int(cursor.rowcount or 0), 0)
+                    if rows:
+                        cursor.executemany(
+                            """
+INSERT INTO raw.MqttEventHistoryRejectedRow (
+    RunId,
+    Tenant,
+    FechaInicio,
+    FechaFin,
+    RequestedLimit,
+    FailureReason,
+    RowJson,
+    FetchedAt
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+""",
+                            [
+                                (
+                                    run_id,
+                                    row["Tenant"],
+                                    row["FechaInicio"],
+                                    row["FechaFin"],
+                                    row["RequestedLimit"],
+                                    row["FailureReason"],
+                                    row["RowJson"],
+                                    row["FetchedAt"],
+                                )
+                                for row in rows
+                            ],
+                        )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return len(rows), deleted_rows
+
     def merge_chirpstack_metrics(
         self,
         run_id: str,

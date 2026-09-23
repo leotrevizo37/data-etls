@@ -283,7 +283,7 @@ def build_device_event_metric_rows(
     from_utc: datetime,
     to_utc: datetime,
     extracted_at: datetime,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     from_utc = _utc_naive(from_utc, "from_utc")
     to_utc = _utc_naive(to_utc, "to_utc")
     extracted_at = _utc_naive(extracted_at, "ExtractedAt")
@@ -307,110 +307,150 @@ def build_device_event_metric_rows(
     }
     receptions: dict[tuple[str, str, datetime], dict[str, Any]] = {}
     uplink_payloads = {}
+    rejected_rows = []
 
     for event_row in event_rows:
-        if not isinstance(event_row, dict):
-            raise TypeError("MQTT event row must be an object")
-        dev_eui = normalize_dev_eui(_required_value(event_row, "DevEui", "event row"))
-        if dev_eui not in devices:
-            continue
-        event_time = _event_time_utc_naive(
-            _required_value(event_row, "EventTime", "event row"),
-            "event time",
-        )
-        if event_time < from_utc or event_time >= to_utc:
-            continue
-        time_span = event_time.replace(minute=0, second=0, microsecond=0)
-        raw_message = _mapping_value(event_row, "RawMessage", "event row")
-        device_info = raw_message.get("deviceInfo")
-        if device_info is not None:
-            if not isinstance(device_info, dict):
-                raise TypeError("event deviceInfo must be an object")
-            raw_dev_eui = normalize_dev_eui(
-                _required_value(device_info, "devEui", "event deviceInfo")
+        try:
+            if not isinstance(event_row, dict):
+                raise TypeError("MQTT event row must be an object")
+            dev_eui = normalize_dev_eui(
+                _required_value(event_row, "DevEui", "event row")
             )
-            if raw_dev_eui != dev_eui:
-                raise ValueError("MQTT event contains a different DevEUI")
-            raw_tenant_id = _uuid_value(device_info, "tenantId", "event deviceInfo")
-            if raw_tenant_id != devices[dev_eui]:
-                raise ValueError("MQTT event belongs to a different tenant")
+            if dev_eui not in devices:
+                continue
+            event_time = _event_time_utc_naive(
+                _required_value(event_row, "EventTime", "event row"),
+                "event time",
+            )
+            if event_time < from_utc or event_time >= to_utc:
+                continue
+            time_span = event_time.replace(minute=0, second=0, microsecond=0)
+            raw_message = _mapping_value(event_row, "RawMessage", "event row")
+            device_info = raw_message.get("deviceInfo")
+            if device_info is not None:
+                if not isinstance(device_info, dict):
+                    raise TypeError("event deviceInfo must be an object")
+                raw_dev_eui = normalize_dev_eui(
+                    _required_value(device_info, "devEui", "event deviceInfo")
+                )
+                if raw_dev_eui != dev_eui:
+                    raise ValueError("MQTT event contains a different DevEUI")
+                raw_tenant_id = _uuid_value(
+                    device_info,
+                    "tenantId",
+                    "event deviceInfo",
+                )
+                if raw_tenant_id != devices[dev_eui]:
+                    raise ValueError("MQTT event belongs to a different tenant")
+
+            level = raw_message.get("level")
+            code = raw_message.get("code")
+            fingerprint = None
+            if level is not None or code is not None:
+                if not isinstance(level, str) or not level:
+                    raise ValueError("MQTT log event level must be non-empty text")
+                if not isinstance(code, str) or not code:
+                    raise ValueError("MQTT log event code must be non-empty text")
+                fingerprint = json.dumps(
+                    {
+                        "time": event_time.isoformat(),
+                        "level": level,
+                        "code": code,
+                        "description": raw_message.get("description"),
+                        "context": raw_message.get("context"),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+
+            deduplication_id = None
+            canonical_payload = None
+            gateway_ids = set()
+            event_receptions = []
+            if "rxInfo" in raw_message:
+                deduplication_id = _required_value(
+                    raw_message,
+                    "deduplicationId",
+                    "uplink event",
+                )
+                if not isinstance(deduplication_id, str):
+                    raise TypeError("uplink event deduplicationId must be text")
+                try:
+                    str(UUID(deduplication_id))
+                except ValueError as ex:
+                    raise ValueError(
+                        "uplink event deduplicationId must be a UUID"
+                    ) from ex
+                canonical_payload = json.dumps(
+                    raw_message,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                uplink_key = (dev_eui, deduplication_id)
+                if uplink_key in uplink_payloads:
+                    if uplink_payloads[uplink_key] != canonical_payload:
+                        raise ValueError(
+                            "Duplicate uplink id has conflicting payloads"
+                        )
+                    continue
+                rx_info = raw_message["rxInfo"]
+                if not isinstance(rx_info, list):
+                    raise TypeError("uplink event rxInfo must be an array")
+                for reception in rx_info:
+                    if not isinstance(reception, dict):
+                        raise TypeError("uplink event rxInfo must contain objects")
+                    gateway_id = normalize_dev_eui(
+                        _required_value(
+                            reception,
+                            "gatewayId",
+                            "uplink reception",
+                        )
+                    )
+                    if gateway_id in gateway_ids:
+                        raise ValueError(
+                            "uplink event contains a duplicate gateway reception"
+                        )
+                    gateway_ids.add(gateway_id)
+                    rssi = reception.get("rssi")
+                    if rssi is not None:
+                        rssi = _decimal_number(
+                            rssi,
+                            "uplink reception RSSI",
+                            DECIMAL_QUANTUM,
+                        )
+                    snr = reception.get("snr")
+                    if snr is not None:
+                        snr = _decimal_number(
+                            snr,
+                            "uplink reception SNR",
+                            DECIMAL_QUANTUM,
+                        )
+                    event_receptions.append((gateway_id, rssi, snr))
+        except (KeyError, TypeError, ValueError) as ex:
+            if isinstance(event_row, dict):
+                rejected_rows.append(
+                    {
+                        "Tenant": event_row.get("Tenant"),
+                        "FechaInicio": event_row.get("FechaInicio"),
+                        "FechaFin": event_row.get("FechaFin"),
+                        "RequestedLimit": event_row.get("RequestedLimit"),
+                        "FailureReason": str(ex)[:1000],
+                        "RowJson": event_row.get("SourceRowJson"),
+                        "FetchedAt": event_row.get("FetchedAt"),
+                    }
+                )
+            continue
 
         summary = summaries[(dev_eui, time_span)]
-        level = raw_message.get("level")
-        code = raw_message.get("code")
-        if level is not None or code is not None:
-            if not isinstance(level, str) or not level:
-                raise ValueError("MQTT log event level must be non-empty text")
-            if not isinstance(code, str) or not code:
-                raise ValueError("MQTT log event code must be non-empty text")
-            fingerprint = json.dumps(
-                {
-                    "time": event_time.isoformat(),
-                    "level": level,
-                    "code": code,
-                    "description": raw_message.get("description"),
-                    "context": raw_message.get("context"),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            if fingerprint not in summary["log_fingerprints"]:
-                summary["log_fingerprints"].add(fingerprint)
-                summary["logs"][code] += 1
-
-        if "rxInfo" not in raw_message:
+        if fingerprint is not None and fingerprint not in summary["log_fingerprints"]:
+            summary["log_fingerprints"].add(fingerprint)
+            summary["logs"][code] += 1
+        if deduplication_id is None:
             continue
-        deduplication_id = _required_value(
-            raw_message,
-            "deduplicationId",
-            "uplink event",
-        )
-        if not isinstance(deduplication_id, str):
-            raise TypeError("uplink event deduplicationId must be text")
-        try:
-            str(UUID(deduplication_id))
-        except ValueError as ex:
-            raise ValueError("uplink event deduplicationId must be a UUID") from ex
-        uplink_key = (dev_eui, deduplication_id)
-        canonical_payload = json.dumps(
-            raw_message,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        if uplink_key in uplink_payloads:
-            if uplink_payloads[uplink_key] != canonical_payload:
-                raise ValueError("Duplicate uplink id has conflicting payloads")
-            continue
-        uplink_payloads[uplink_key] = canonical_payload
-        rx_info = raw_message["rxInfo"]
-        if not isinstance(rx_info, list):
-            raise TypeError("uplink event rxInfo must be an array")
-        gateway_ids = set()
-        for reception in rx_info:
-            if not isinstance(reception, dict):
-                raise TypeError("uplink event rxInfo must contain objects")
-            gateway_id = normalize_dev_eui(
-                _required_value(reception, "gatewayId", "uplink reception")
-            )
-            if gateway_id in gateway_ids:
-                raise ValueError("uplink event contains a duplicate gateway reception")
-            gateway_ids.add(gateway_id)
-            rssi = reception.get("rssi")
-            if rssi is not None:
-                rssi = _decimal_number(
-                    rssi,
-                    "uplink reception RSSI",
-                    DECIMAL_QUANTUM,
-                )
-            snr = reception.get("snr")
-            if snr is not None:
-                snr = _decimal_number(
-                    snr,
-                    "uplink reception SNR",
-                    DECIMAL_QUANTUM,
-                )
+        uplink_payloads[(dev_eui, deduplication_id)] = canonical_payload
+        for gateway_id, rssi, snr in event_receptions:
             reception_values = receptions.setdefault(
                 (dev_eui, gateway_id, time_span),
                 {
@@ -496,7 +536,7 @@ def build_device_event_metric_rows(
                 "ExtractedAt": extracted_at,
             }
         )
-    return device_rows, gateway_rows
+    return device_rows, gateway_rows, rejected_rows
 
 
 def _required_value(payload: dict[str, Any], key: str, context: str) -> Any:

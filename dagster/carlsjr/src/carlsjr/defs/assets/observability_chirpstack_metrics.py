@@ -144,6 +144,9 @@ def observability_chirpstackmetrics(
     device_event_merged_rows = 0
     device_gateway_merged_rows = 0
     mqtt_event_metrics_available = False
+    mqtt_event_rejected_rows = 0
+    mqtt_event_rejections_persisted = 0
+    mqtt_event_rejections_expired = 0
     event_from_utc = from_utc - timedelta(hours=mqtt_history.lookback_hours - 1)
 
     try:
@@ -243,6 +246,7 @@ def observability_chirpstackmetrics(
 
         device_event_rows = []
         device_gateway_rows = []
+        transformation_rejected_rows = []
         try:
             event_rows = mqtt_history.fetch_range(
                 event_from_utc.replace(tzinfo=timezone.utc)
@@ -253,7 +257,11 @@ def observability_chirpstackmetrics(
                 .astimezone(OPERATIONS_TIMEZONE)
                 .replace(tzinfo=None),
             )
-            device_event_rows, device_gateway_rows = build_device_event_metric_rows(
+            (
+                device_event_rows,
+                device_gateway_rows,
+                transformation_rejected_rows,
+            ) = build_device_event_metric_rows(
                 event_rows=event_rows,
                 devices={row["DevEui"]: row["TenantId"] for row in device_rows},
                 from_utc=event_from_utc,
@@ -265,6 +273,25 @@ def observability_chirpstackmetrics(
             context.log.warning(
                 "MQTT event history metrics are unavailable for this run: %s",
                 ex,
+            )
+
+        rejected_rows = [
+            *mqtt_history.rejected_rows,
+            *transformation_rejected_rows,
+        ]
+        mqtt_event_rejected_rows = len(rejected_rows)
+        try:
+            (
+                mqtt_event_rejections_persisted,
+                mqtt_event_rejections_expired,
+            ) = sql.write_mqtt_event_history_rejected_rows(
+                rejected_rows,
+                run_id,
+                mqtt_history.rejected_row_retention_days,
+            )
+        except pyodbc.Error:
+            context.log.warning(
+                "Could not persist rejected MQTT event history rows"
             )
 
         spark = spark_res.get_spark()
@@ -344,6 +371,9 @@ def observability_chirpstackmetrics(
             "mqtt_event_metrics_available": mqtt_event_metrics_available,
             "mqtt_event_history_requests": mqtt_history.requests_made,
             "mqtt_event_lookback_hours": mqtt_history.lookback_hours,
+            "mqtt_event_rejected_rows": mqtt_event_rejected_rows,
+            "mqtt_event_rejections_persisted": mqtt_event_rejections_persisted,
+            "mqtt_event_rejections_expired": mqtt_event_rejections_expired,
             "valid_dev_eui_count": len(dev_euis),
             "invalid_physical_identifier_count": len(invalid_physical_identifiers),
             "invalid_physical_identifiers": invalid_physical_identifiers,

@@ -263,7 +263,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
             },
         ]
 
-        device_rows, gateway_rows = build_device_event_metric_rows(
+        device_rows, gateway_rows, rejected_rows = build_device_event_metric_rows(
             event_rows=event_rows,
             devices={dev_eui: tenant_id},
             from_utc=datetime(2026, 9, 17, 10),
@@ -272,6 +272,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
         )
 
         self.assertEqual(device_rows[0]["CapturedUplinkCount"], 2)
+        self.assertEqual(rejected_rows, [])
         self.assertEqual(device_rows[0]["ObservedGatewayCount"], 2)
         self.assertEqual(device_rows[0]["MultiGatewayUplinkCount"], 1)
         self.assertEqual(
@@ -297,7 +298,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
             "c0ba1ffffe01f6d8",
             "c0ba1ffffe01f6d9",
         ]
-        _, gateway_rows = build_device_event_metric_rows(
+        _, gateway_rows, rejected_rows = build_device_event_metric_rows(
             event_rows=[
                 {
                     "DevEui": dev_eui,
@@ -325,6 +326,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
 
         rows_by_gateway = {row["GatewayId"]: row for row in gateway_rows}
         self.assertEqual(len(rows_by_gateway), 3)
+        self.assertEqual(rejected_rows, [])
         self.assertEqual(
             rows_by_gateway[gateways[0]]["AverageRssi"],
             Decimal("-86.000000"),
@@ -338,6 +340,67 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
         self.assertIsNone(rows_by_gateway[gateways[2]]["AverageRssi"])
         self.assertIsNone(rows_by_gateway[gateways[2]]["AverageSnr"])
         self.assertTrue(all(row["GatewayReceptionCount"] == 1 for row in gateway_rows))
+
+    def test_invalid_event_is_rejected_without_discarding_valid_event(self) -> None:
+        tenant_id = "087175fa-5bf9-4180-a02e-7c57fb3543e8"
+        dev_eui = "24e124136e090452"
+        query_metadata = {
+            "Tenant": "carls",
+            "FechaInicio": "2026-09-17T04:00:00.000000Z",
+            "FechaFin": "2026-09-17T05:00:00.000000Z",
+            "RequestedLimit": 5000,
+            "FetchedAt": datetime(2026, 9, 17, 11, 0),
+        }
+        event_rows = [
+            {
+                **query_metadata,
+                "DevEui": dev_eui,
+                "EventTime": datetime(2026, 9, 17, 10, 5),
+                "SourceRowJson": '{"id":"valid"}',
+                "RawMessage": {
+                    "deduplicationId": "9232a3a7-79f5-4301-90f7-fa878659d322",
+                    "time": "2026-09-17T10:05:00Z",
+                    "deviceInfo": {
+                        "devEui": dev_eui,
+                        "tenantId": tenant_id,
+                    },
+                    "rxInfo": [{"gatewayId": "c0ba1ffffe01f6d7"}],
+                },
+            },
+            {
+                **query_metadata,
+                "DevEui": dev_eui,
+                "EventTime": datetime(2026, 9, 17, 10, 10),
+                "SourceRowJson": '{"id":"invalid"}',
+                "RawMessage": {
+                    "deduplicationId": "6fd801c3-7ee5-4be2-842b-d48475d34753",
+                    "time": "2026-09-17T10:10:00Z",
+                    "deviceInfo": {
+                        "devEui": dev_eui,
+                        "tenantId": tenant_id,
+                    },
+                    "rxInfo": None,
+                },
+            },
+        ]
+
+        device_rows, gateway_rows, rejected_rows = build_device_event_metric_rows(
+            event_rows=event_rows,
+            devices={dev_eui: tenant_id},
+            from_utc=datetime(2026, 9, 17, 10),
+            to_utc=datetime(2026, 9, 17, 11),
+            extracted_at=datetime(2026, 9, 17, 11, 2),
+        )
+
+        self.assertEqual(device_rows[0]["CapturedUplinkCount"], 1)
+        self.assertEqual(len(gateway_rows), 1)
+        self.assertEqual(len(rejected_rows), 1)
+        self.assertEqual(rejected_rows[0]["RowJson"], '{"id":"invalid"}')
+        self.assertEqual(
+            rejected_rows[0]["FechaInicio"],
+            query_metadata["FechaInicio"],
+        )
+        self.assertIn("rxInfo must be an array", rejected_rows[0]["FailureReason"])
 
     def test_rejects_unknown_gateway_state_and_invalid_eui(self) -> None:
         with self.assertRaisesRegex(ValueError, "16-character hexadecimal"):
@@ -614,6 +677,69 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertEqual(urlopen_mock.call_count, 2)
 
+    def test_invalid_api_row_is_truncated_and_does_not_discard_valid_row(self) -> None:
+        valid_raw = {
+            "time": "2026-09-17T10:00:00Z",
+            "deviceInfo": {"devEui": "24e124136e090452"},
+        }
+        payload = {
+            "ok": True,
+            "tenant": "carls",
+            "fecha_inicio": "2026-09-17T04:00:00Z",
+            "fecha_fin": "2026-09-17T05:00:00Z",
+            "total": 2,
+            "data": [
+                {
+                    "id": "9232a3a7-79f5-4301-90f7-fa878659d322",
+                    "fecha": "2026-09-17T04:30:00",
+                    "deveui": "24e124136e090452",
+                    "tenant": "carls",
+                    "mensaje_raw": json.dumps(valid_raw),
+                },
+                {
+                    "id": "6fd801c3-7ee5-4be2-842b-d48475d34753",
+                    "fecha": "2026-09-17T04:31:00",
+                    "deveui": "24e124136e090452",
+                    "tenant": "carls",
+                    "mensaje_raw": json.dumps({"payload": "x" * 5000}),
+                },
+            ],
+        }
+
+        class Headers:
+            @staticmethod
+            def get_content_type():
+                return "application/json"
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = Headers()
+
+        resource = self.resource_module.MqttEventHistoryApiResource(
+            url="http://mqtt-history.test/api/lecturas/tenant",
+            user="api-user",
+            password="private-password",
+            timeout_seconds=15,
+        )
+        with patch.object(
+            self.resource_module,
+            "urlopen",
+            return_value=Response(json.dumps(payload).encode()),
+        ):
+            rows = resource.fetch_range(
+                datetime(2026, 9, 17, 4),
+                datetime(2026, 9, 17, 5),
+            )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(resource.rejected_rows), 1)
+        rejected = resource.rejected_rows[0]
+        self.assertEqual(rejected["FechaInicio"], "2026-09-17T04:00:00.000000Z")
+        self.assertEqual(rejected["FechaFin"], "2026-09-17T05:00:00.000000Z")
+        self.assertEqual(rejected["RequestedLimit"], 5000)
+        self.assertEqual(len(rejected["RowJson"]), 4000)
+        self.assertIn("'time'", rejected["FailureReason"])
+
 
 class ChirpStackContractTests(unittest.TestCase):
     def test_sql_contract_has_hourly_keys_and_official_gateway_state(self) -> None:
@@ -631,6 +757,7 @@ class ChirpStackContractTests(unittest.TestCase):
             sql_directory / "034_observability_vwSenseDevEuiUplinkReadingsDaily.sql",
             sql_directory / "035_observability_factChirpStackDeviceEventMetrics.sql",
             sql_directory / "036_observability_factChirpStackDeviceGatewayMetrics.sql",
+            sql_directory / "037_raw_MqttEventHistoryRejectedRow.sql",
         ]
         sql = "\n".join(path.read_text(encoding="utf-8") for path in ddl_paths)
 
@@ -649,6 +776,8 @@ class ChirpStackContractTests(unittest.TestCase):
         )
         self.assertIn("LinkErrorCountsJson NVARCHAR(MAX) NULL", sql)
         self.assertIn("TxPacketStatusCountsJson NVARCHAR(MAX) NULL", sql)
+        self.assertIn("raw.MqttEventHistoryRejectedRow", sql)
+        self.assertIn("RowJson NVARCHAR(4000) NOT NULL", sql)
         self.assertIn("GatewayState NVARCHAR(20) NOT NULL", sql)
         self.assertIn("BatteryLevel DECIMAL(7, 4) NULL", sql)
         self.assertIn("serving.vwSenseSensorCommunicationHealthHourly", sql)
@@ -697,6 +826,7 @@ class ChirpStackContractTests(unittest.TestCase):
             "stg.factChirpStackDeviceGatewayMetrics",
             "observability.factChirpStackDeviceEventMetrics",
             "observability.factChirpStackDeviceGatewayMetrics",
+            "raw.MqttEventHistoryRejectedRow",
         ):
             self.assertIn(object_name, bafar_cleanup)
         self.assertIn(
@@ -734,6 +864,10 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("observability_chirpstackmetrics", defs_source)
         self.assertIn("CARLSJR_CHIRPSTACK_API_URL", compose)
         self.assertIn("CARLSJR_MQTT_EVENT_HISTORY_API_URL", compose)
+        self.assertIn(
+            "CARLSJR_MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS",
+            compose,
+        )
         self.assertIn("to_utc = extracted_at.replace", asset)
         self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
         self.assertIn("except (TypeError, ValueError):", asset)
@@ -773,6 +907,8 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("FROM stg.factChirpStackGatewayMetrics", sql_resource)
         self.assertIn("FROM stg.factChirpStackDeviceEventMetrics", sql_resource)
         self.assertIn("FROM stg.factChirpStackDeviceGatewayMetrics", sql_resource)
+        self.assertIn("def write_mqtt_event_history_rejected_rows", sql_resource)
+        self.assertIn("DATEADD(DAY, -?, SYSUTCDATETIME())", sql_resource)
         self.assertGreaterEqual(sql_resource.count("WHERE RunId = ?"), 2)
         self.assertIn("def merge_chirpstack_metrics", sql_resource)
         self.assertIn("conn.rollback()", sql_resource)

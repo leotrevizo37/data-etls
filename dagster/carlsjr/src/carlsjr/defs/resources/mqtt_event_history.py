@@ -17,6 +17,7 @@ EVENT_API_TENANT = "carls"
 EVENT_API_MAX_LIMIT = 5000
 EVENT_API_MAX_RETRIES = 3
 EVENT_API_MAX_REQUESTS_PER_MINUTE = 95
+REJECTED_ROW_JSON_MAX_CHARS = 4000
 DEV_EUI_PATTERN = re.compile(r"^[0-9A-Fa-f]{16}$")
 ISO_DATETIME_PATTERN = re.compile(
     r"(?P<base>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
@@ -61,6 +62,7 @@ class MqttEventHistoryApiResource:
         limit: int = EVENT_API_MAX_LIMIT,
         requests_per_minute: int = EVENT_API_MAX_REQUESTS_PER_MINUTE,
         lookback_hours: int = 6,
+        rejected_row_retention_days: int = 30,
     ) -> None:
         self.url = url
         self.user = user
@@ -69,7 +71,9 @@ class MqttEventHistoryApiResource:
         self.limit = limit
         self.requests_per_minute = requests_per_minute
         self.lookback_hours = lookback_hours
+        self.rejected_row_retention_days = rejected_row_retention_days
         self.requests_made = 0
+        self.rejected_rows = []
         self._last_request_at = None
 
     def _wait_for_request_slot(self) -> None:
@@ -95,6 +99,7 @@ class MqttEventHistoryApiResource:
             or not 1 <= self.limit <= EVENT_API_MAX_LIMIT
             or not 1 <= self.requests_per_minute < 100
             or not 1 <= self.lookback_hours <= 168
+            or not 1 <= self.rejected_row_retention_days <= 3650
         ):
             raise RuntimeError("MQTT event history API configuration is incomplete")
         if from_local.tzinfo is not None or to_local.tzinfo is not None:
@@ -116,24 +121,41 @@ class MqttEventHistoryApiResource:
             midpoint,
             to_local,
         )
-        mqtt_ids = {row["MqttId"] for row in combined_rows}
-        if len(mqtt_ids) != len(combined_rows):
-            raise RuntimeError("MQTT event history API split windows returned duplicate ids")
-        return combined_rows
+        rows = []
+        mqtt_ids = set()
+        for row in combined_rows:
+            if row["MqttId"] in mqtt_ids:
+                self.rejected_rows.append(
+                    {
+                        "Tenant": row["Tenant"],
+                        "FechaInicio": row["FechaInicio"],
+                        "FechaFin": row["FechaFin"],
+                        "RequestedLimit": row["RequestedLimit"],
+                        "FailureReason": (
+                            "MQTT event history API split windows returned "
+                            "a duplicate id"
+                        ),
+                        "RowJson": row["SourceRowJson"],
+                        "FetchedAt": row["FetchedAt"],
+                    }
+                )
+                continue
+            mqtt_ids.add(row["MqttId"])
+            rows.append(row)
+        return rows
 
     def _request_window(
         self,
         from_local: datetime,
         to_local: datetime,
     ) -> list[dict[str, Any]]:
-        query = urlencode(
-            {
-                "tenant": EVENT_API_TENANT,
-                "fechaInicio": from_local.isoformat(timespec="microseconds") + "Z",
-                "fechaFin": to_local.isoformat(timespec="microseconds") + "Z",
-                "limit": self.limit,
-            }
-        )
+        request_params = {
+            "tenant": EVENT_API_TENANT,
+            "fechaInicio": from_local.isoformat(timespec="microseconds") + "Z",
+            "fechaFin": to_local.isoformat(timespec="microseconds") + "Z",
+            "limit": self.limit,
+        }
+        query = urlencode(request_params)
         separator = "&" if "?" in self.url else "?"
         authorization = base64.b64encode(
             f"{self.user}:{self.password}".encode("utf-8")
@@ -156,8 +178,16 @@ class MqttEventHistoryApiResource:
                         )
                     if response.headers.get_content_type() != "application/json":
                         raise RuntimeError("MQTT event history API did not return JSON")
-                    payload = json.loads(response.read().decode("utf-8"))
-                return self._validate_payload(payload, from_local, to_local)
+                    response_body = response.read()
+                    fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    payload = json.loads(response_body.decode("utf-8"))
+                return self._validate_payload(
+                    payload,
+                    from_local,
+                    to_local,
+                    request_params,
+                    fetched_at,
+                )
             except HTTPError as ex:
                 if ex.code == 504:
                     raise MqttEventHistoryWindowTooLarge(
@@ -191,6 +221,8 @@ class MqttEventHistoryApiResource:
         payload: Any,
         from_local: datetime,
         to_local: datetime,
+        request_params: dict[str, Any],
+        fetched_at: datetime,
     ) -> list[dict[str, Any]]:
         if not isinstance(payload, dict):
             raise ValueError("MQTT event history API response must be an object")
@@ -239,70 +271,99 @@ class MqttEventHistoryApiResource:
         rows = []
         mqtt_ids = set()
         for index, row in enumerate(data):
-            if not isinstance(row, dict):
-                raise ValueError(
-                    f"MQTT event history API row {index} does not match the contract"
-                )
-            dev_eui = row.get("deveui")
-            if not isinstance(dev_eui, str) or DEV_EUI_PATTERN.fullmatch(dev_eui) is None:
-                continue
-            if not isinstance(row.get("id"), str):
-                raise ValueError(f"MQTT event history API row {index} has an invalid id")
             try:
-                mqtt_id = str(UUID(row["id"]))
-            except ValueError as ex:
-                raise ValueError(
-                    f"MQTT event history API row {index} has an invalid id"
-                ) from ex
-            if mqtt_id in mqtt_ids:
-                raise ValueError("MQTT event history API response contains duplicate ids")
-            mqtt_ids.add(mqtt_id)
-            if (
-                not isinstance(row.get("tenant"), str)
-                or row["tenant"].casefold() != EVENT_API_TENANT
-            ):
-                raise ValueError(
-                    f"MQTT event history API row {index} has a different tenant"
-                )
-            try:
+                if not isinstance(row, dict):
+                    raise ValueError(
+                        f"MQTT event history API row {index} does not match the contract"
+                    )
+                dev_eui = row.get("deveui")
+                if (
+                    not isinstance(dev_eui, str)
+                    or DEV_EUI_PATTERN.fullmatch(dev_eui) is None
+                ):
+                    raise ValueError(
+                        f"MQTT event history API row {index} has an invalid deveui"
+                    )
+                if not isinstance(row.get("id"), str):
+                    raise ValueError(
+                        f"MQTT event history API row {index} has an invalid id"
+                    )
+                try:
+                    mqtt_id = str(UUID(row["id"]))
+                except ValueError as ex:
+                    raise ValueError(
+                        f"MQTT event history API row {index} has an invalid id"
+                    ) from ex
+                if mqtt_id in mqtt_ids:
+                    raise ValueError(
+                        "MQTT event history API response contains duplicate ids"
+                    )
+                if (
+                    not isinstance(row.get("tenant"), str)
+                    or row["tenant"].casefold() != EVENT_API_TENANT
+                ):
+                    raise ValueError(
+                        f"MQTT event history API row {index} has a different tenant"
+                    )
                 received_at = _parse_datetime(row["fecha"])
-            except (KeyError, ValueError) as ex:
-                raise ValueError(
-                    f"MQTT event history API row {index} fecha is invalid"
-                ) from ex
-            if (
-                received_at.tzinfo is not None
-                or received_at < from_local
-                or received_at >= to_local
-            ):
-                raise ValueError(
-                    f"MQTT event history API row {index} fecha is outside the requested window"
-                )
-            raw_text = row.get("mensaje_raw")
-            if not isinstance(raw_text, str):
-                raise ValueError(
-                    f"MQTT event history API row {index} mensaje_raw must be JSON text"
-                )
-            try:
+                if (
+                    received_at.tzinfo is not None
+                    or received_at < from_local
+                    or received_at >= to_local
+                ):
+                    raise ValueError(
+                        f"MQTT event history API row {index} fecha is outside the requested window"
+                    )
+                raw_text = row.get("mensaje_raw")
+                if not isinstance(raw_text, str):
+                    raise ValueError(
+                        f"MQTT event history API row {index} mensaje_raw must be JSON text"
+                    )
                 raw_message = json.loads(raw_text)
                 if not isinstance(raw_message, dict):
-                    raise ValueError
+                    raise ValueError(
+                        f"MQTT event history API row {index} mensaje_raw must be an object"
+                    )
                 json.dumps(raw_message, allow_nan=False)
                 event_time = _parse_datetime(raw_message["time"])
+                if event_time.tzinfo is None or event_time.utcoffset() != timedelta(0):
+                    raise ValueError(
+                        f"MQTT event history API row {index} mensaje_raw.time must use UTC"
+                    )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as ex:
-                raise ValueError(
-                    f"MQTT event history API row {index} mensaje_raw is invalid"
-                ) from ex
-            if event_time.tzinfo is None or event_time.utcoffset() != timedelta(0):
-                raise ValueError(
-                    f"MQTT event history API row {index} mensaje_raw.time must use UTC"
+                self.rejected_rows.append(
+                    {
+                        "Tenant": request_params["tenant"],
+                        "FechaInicio": request_params["fechaInicio"],
+                        "FechaFin": request_params["fechaFin"],
+                        "RequestedLimit": request_params["limit"],
+                        "FailureReason": str(ex)[:1000],
+                        "RowJson": json.dumps(
+                            row,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )[:REJECTED_ROW_JSON_MAX_CHARS],
+                        "FetchedAt": fetched_at,
+                    }
                 )
+                continue
+            mqtt_ids.add(mqtt_id)
             rows.append(
                 {
                     "MqttId": mqtt_id,
                     "DevEui": dev_eui.lower(),
                     "EventTime": event_time.astimezone(timezone.utc).replace(tzinfo=None),
                     "RawMessage": raw_message,
+                    "Tenant": request_params["tenant"],
+                    "FechaInicio": request_params["fechaInicio"],
+                    "FechaFin": request_params["fechaFin"],
+                    "RequestedLimit": request_params["limit"],
+                    "SourceRowJson": json.dumps(
+                        row,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )[:REJECTED_ROW_JSON_MAX_CHARS],
+                    "FetchedAt": fetched_at,
                 }
             )
         return rows
@@ -319,6 +380,10 @@ def mqtt_event_history_api_resource(_):
     lookback_hours_text = os.getenv(
         "MQTT_EVENT_HISTORY_LOOKBACK_HOURS",
         "6",
+    ).strip()
+    retention_days_text = os.getenv(
+        "MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS",
+        "30",
     ).strip()
     try:
         timeout_seconds = int(timeout_text)
@@ -338,6 +403,12 @@ def mqtt_event_history_api_resource(_):
         lookback_hours = int(lookback_hours_text)
     except ValueError as ex:
         raise ValueError("MQTT_EVENT_HISTORY_LOOKBACK_HOURS must be an integer") from ex
+    try:
+        rejected_row_retention_days = int(retention_days_text)
+    except ValueError as ex:
+        raise ValueError(
+            "MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS must be an integer"
+        ) from ex
     return MqttEventHistoryApiResource(
         url=os.getenv("MQTT_EVENT_HISTORY_API_URL", "").strip(),
         user=os.getenv("MQTT_EVENT_HISTORY_API_USER", "").strip(),
@@ -346,4 +417,5 @@ def mqtt_event_history_api_resource(_):
         limit=limit,
         requests_per_minute=requests_per_minute,
         lookback_hours=lookback_hours,
+        rejected_row_retention_days=rejected_row_retention_days,
     )
