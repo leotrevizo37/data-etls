@@ -13,6 +13,7 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NULL
             AverageRssi DECIMAL(18, 6) NULL,
             AverageSnr DECIMAL(18, 6) NULL,
             LinkErrorCount BIGINT NULL,
+            LinkErrorCountsJson NVARCHAR(MAX) NULL,
             BatteryLevel DECIMAL(7, 4) NULL,
             ExternalPowerSource BIT NULL,
             BatteryLevelSource NVARCHAR(32) NULL,
@@ -30,6 +31,11 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NULL
             CHECK (ReceivedUplinkCount IS NULL OR ReceivedUplinkCount >= 0),
             CONSTRAINT CK_factChirpStackDeviceMetrics_LinkErrors
             CHECK (LinkErrorCount IS NULL OR LinkErrorCount >= 0),
+            CONSTRAINT CK_factChirpStackDeviceMetrics_LinkErrorCountsJson
+            CHECK (
+                LinkErrorCountsJson IS NULL
+                OR ISJSON(LinkErrorCountsJson) = 1
+            ),
             CONSTRAINT CK_factChirpStackDeviceMetrics_Battery
             CHECK (
                 (
@@ -67,6 +73,34 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NULL
         );
     END;
 GO
+IF COL_LENGTH(
+    N'observability.factChirpStackDeviceMetrics',
+    N'LinkErrorCountsJson'
+) IS NULL
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceMetrics
+        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
+    END;
+GO
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(
+                N'observability.factChirpStackDeviceMetrics'
+            )
+            AND name = N'CK_factChirpStackDeviceMetrics_LinkErrorCountsJson'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceMetrics
+        ADD CONSTRAINT CK_factChirpStackDeviceMetrics_LinkErrorCountsJson
+        CHECK (
+            LinkErrorCountsJson IS NULL
+            OR ISJSON(LinkErrorCountsJson) = 1
+        );
+    END;
+GO
 
 IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NULL
     BEGIN
@@ -84,6 +118,7 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NULL
             AverageRssi DECIMAL(18, 6) NULL,
             AverageSnr DECIMAL(18, 6) NULL,
             LinkErrorCount BIGINT NULL,
+            LinkErrorCountsJson NVARCHAR(MAX) NULL,
             BatteryLevel DECIMAL(7, 4) NULL,
             ExternalPowerSource BIT NULL,
             BatteryLevelSource NVARCHAR(32) NULL,
@@ -91,6 +126,15 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceMetrics', N'U') IS NULL
             MetricsAvailable BIT NOT NULL,
             ExtractedAt DATETIME2(0) NOT NULL
         );
+    END;
+GO
+IF COL_LENGTH(
+    N'stg.factChirpStackDeviceMetrics',
+    N'LinkErrorCountsJson'
+) IS NULL
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceMetrics
+        ADD LinkErrorCountsJson NVARCHAR(MAX) NULL;
     END;
 GO
 IF

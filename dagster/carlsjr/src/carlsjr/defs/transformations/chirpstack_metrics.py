@@ -1,6 +1,8 @@
+import json
 import math
 import re
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -93,6 +95,7 @@ def build_device_metric_row(
     average_rssi = _labeled_decimal(gw_rssi, "rssi", time_span, "gwRssi")
     average_snr = _labeled_decimal(gw_snr, "snr", time_span, "gwSnr")
     link_error_count = _summed_count(errors, time_span, "errors")
+    link_error_counts_json = _counts_json(errors, time_span, "errors")
     metrics_available = received_uplink_count is not None
     if metrics_available and link_error_count is None:
         raise ValueError("ChirpStack link metrics omitted errors for the requested hour")
@@ -160,6 +163,7 @@ def build_device_metric_row(
         "AverageRssi": average_rssi,
         "AverageSnr": average_snr,
         "LinkErrorCount": link_error_count,
+        "LinkErrorCountsJson": link_error_counts_json,
         "BatteryLevel": battery_level,
         "ExternalPowerSource": external_power_source,
         "BatteryLevelSource": battery_level_source,
@@ -249,6 +253,11 @@ def build_gateway_metric_row(
         )
         if tx_error_count > SQL_BIGINT_MAX:
             raise ValueError("gateway TX error exceeds the SQL BIGINT contract")
+    tx_packet_status_counts_json = _counts_json(
+        tx_statuses,
+        time_span,
+        "gateway txPacketsPerStatus",
+    )
 
     return {
         "GatewayId": gateway_id,
@@ -259,6 +268,7 @@ def build_gateway_metric_row(
         "TransmittedPacketCount": transmitted_packet_count,
         "TxOkCount": tx_ok_count,
         "TxErrorCount": tx_error_count,
+        "TxPacketStatusCountsJson": tx_packet_status_counts_json,
         "GatewayState": gateway_state,
         "GatewayLastSeenAt": gateway_last_seen_at,
         "StatsIntervalSeconds": stats_interval,
@@ -409,6 +419,26 @@ def _summed_count(
     if result > SQL_BIGINT_MAX:
         raise ValueError(f"{context} exceeds the SQL BIGINT contract")
     return result
+
+
+def _counts_json(
+    values_by_timestamp: dict[datetime, dict[str, float | int]],
+    time_span: datetime,
+    context: str,
+) -> str | None:
+    values = values_by_timestamp.get(time_span)
+    if values is None:
+        return None
+    counts = {
+        label: count
+        for label, value in values.items()
+        if (count := _count_number(value, f"{context}.{label}")) > 0
+    }
+    return json.dumps(
+        dict(sorted(counts.items())),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _finite_number(value: Any, context: str) -> float | int:

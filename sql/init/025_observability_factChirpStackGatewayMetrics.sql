@@ -10,6 +10,7 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
             TransmittedPacketCount BIGINT NULL,
             TxOkCount BIGINT NULL,
             TxErrorCount BIGINT NULL,
+            TxPacketStatusCountsJson NVARCHAR(MAX) NULL,
             GatewayState NVARCHAR(20) NOT NULL,
             GatewayLastSeenAt DATETIME2(0) NULL,
             StatsIntervalSeconds INT NULL,
@@ -24,6 +25,11 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
                 AND (TransmittedPacketCount IS NULL OR TransmittedPacketCount >= 0)
                 AND (TxOkCount IS NULL OR TxOkCount >= 0)
                 AND (TxErrorCount IS NULL OR TxErrorCount >= 0)
+            ),
+            CONSTRAINT CK_factChirpStackGatewayMetrics_TxStatusJson
+            CHECK (
+                TxPacketStatusCountsJson IS NULL
+                OR ISJSON(TxPacketStatusCountsJson) = 1
             ),
             CONSTRAINT CK_factChirpStackGatewayMetrics_State
             CHECK (GatewayState IN (N'NEVER_SEEN', N'ONLINE', N'OFFLINE')),
@@ -59,6 +65,34 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
         );
     END;
 GO
+IF COL_LENGTH(
+    N'observability.factChirpStackGatewayMetrics',
+    N'TxPacketStatusCountsJson'
+) IS NULL
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
+    END;
+GO
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(
+                N'observability.factChirpStackGatewayMetrics'
+            )
+            AND name = N'CK_factChirpStackGatewayMetrics_TxStatusJson'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        ADD CONSTRAINT CK_factChirpStackGatewayMetrics_TxStatusJson
+        CHECK (
+            TxPacketStatusCountsJson IS NULL
+            OR ISJSON(TxPacketStatusCountsJson) = 1
+        );
+    END;
+GO
 IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NULL
     BEGIN
         CREATE TABLE stg.factChirpStackGatewayMetrics
@@ -72,12 +106,22 @@ IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NULL
             TransmittedPacketCount BIGINT NULL,
             TxOkCount BIGINT NULL,
             TxErrorCount BIGINT NULL,
+            TxPacketStatusCountsJson NVARCHAR(MAX) NULL,
             GatewayState NVARCHAR(20) NOT NULL,
             GatewayLastSeenAt DATETIME2(0) NULL,
             StatsIntervalSeconds INT NULL,
             MetricsAvailable BIT NOT NULL,
             ExtractedAt DATETIME2(0) NOT NULL
         );
+    END;
+GO
+IF COL_LENGTH(
+    N'stg.factChirpStackGatewayMetrics',
+    N'TxPacketStatusCountsJson'
+) IS NULL
+    BEGIN
+        ALTER TABLE stg.factChirpStackGatewayMetrics
+        ADD TxPacketStatusCountsJson NVARCHAR(MAX) NULL;
     END;
 GO
 IF

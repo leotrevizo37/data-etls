@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -95,6 +96,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
         self.assertEqual(row["AverageRssi"], Decimal("-81.125000"))
         self.assertEqual(row["AverageSnr"], Decimal("7.250000"))
         self.assertEqual(row["LinkErrorCount"], 0)
+        self.assertEqual(row["LinkErrorCountsJson"], "{}")
         self.assertEqual(row["BatteryLevel"], Decimal("89.5000"))
         self.assertEqual(row["BatteryLevelSource"], "DEVICE_METRICS")
         self.assertEqual(row["BatteryObservedAt"], time_span.replace(tzinfo=None))
@@ -209,6 +211,10 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
         self.assertEqual(row["TransmittedPacketCount"], 2)
         self.assertEqual(row["TxOkCount"], 2)
         self.assertEqual(row["TxErrorCount"], 1)
+        self.assertEqual(
+            row["TxPacketStatusCountsJson"],
+            '{"OK":2,"TOO_LATE":1}',
+        )
         self.assertTrue(row["MetricsAvailable"])
 
     def test_rejects_unknown_gateway_state_and_invalid_eui(self) -> None:
