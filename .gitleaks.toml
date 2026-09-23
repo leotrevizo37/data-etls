@@ -46,9 +46,18 @@ regexTarget = "secret"
 
 regexes = [
   '''^\$\{[A-Za-z_][A-Za-z0-9_]*\}$''',
+  '''^\$\{[A-Za-z_][A-Za-z0-9_]*:-\}$''',
   '''^%[A-Za-z_][A-Za-z0-9_]*%$''',
   '''^<[^>]+>$''',
   '''(?i)^(?:changeme|change_me|replace_me|dummy|example|example_value|your[_-].+)$'''
+]
+
+
+[[rules.allowlists]]
+regexTarget = "line"
+
+regexes = [
+  '''^\s*password\s*=\s*os\.getenv\("[A-Z][A-Z0-9]*(?:_[A-Z][A-Z0-9]*)+",\s*(?:""|None)\),?\s*$'''
 ]
 
 
@@ -80,6 +89,14 @@ regexes = [
   '''^%[A-Za-z_][A-Za-z0-9_]*%$''',
   '''^<[^>]+>$''',
   '''(?i)^(?:changeme|change_me|replace_me|dummy|example|example_value|your[_-].+)$'''
+]
+
+
+[[rules.allowlists]]
+regexTarget = "line"
+
+regexes = [
+  '''^\s*password\s*=\s*os\.getenv\("[A-Z][A-Z0-9]*(?:_[A-Z][A-Z0-9]*)+",\s*(?:""|None)\),?\s*$'''
 ]
 
 
