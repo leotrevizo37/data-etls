@@ -12,3 +12,9 @@ dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignme
 dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:619
 dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:664
 dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721
+dagster/valledelencino/src/valledelencino/defs/resources/mqtt_event_history.py:connection-string-password:69
+dagster/valledelencino/src/valledelencino/defs/resources/mqtt_event_history.py:hardcoded-secret-assignment:69
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:584
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:619
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:664
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721

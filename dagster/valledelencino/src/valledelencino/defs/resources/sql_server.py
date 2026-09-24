@@ -611,6 +611,7 @@ USING (
         AverageRssi,
         AverageSnr,
         LinkErrorCount,
+        LinkErrorCountsJson,
         BatteryLevel,
         ExternalPowerSource,
         BatteryLevelSource,
@@ -636,6 +637,7 @@ WHEN MATCHED AND (
         target.AverageRssi = source.AverageRssi,
         target.AverageSnr = source.AverageSnr,
         target.LinkErrorCount = source.LinkErrorCount,
+        target.LinkErrorCountsJson = source.LinkErrorCountsJson,
         target.BatteryLevel = source.BatteryLevel,
         target.ExternalPowerSource = source.ExternalPowerSource,
         target.BatteryLevelSource = source.BatteryLevelSource,
@@ -656,6 +658,7 @@ WHEN NOT MATCHED BY TARGET THEN
         AverageRssi,
         AverageSnr,
         LinkErrorCount,
+        LinkErrorCountsJson,
         BatteryLevel,
         ExternalPowerSource,
         BatteryLevelSource,
@@ -675,6 +678,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.AverageRssi,
         source.AverageSnr,
         source.LinkErrorCount,
+        source.LinkErrorCountsJson,
         source.BatteryLevel,
         source.ExternalPowerSource,
         source.BatteryLevelSource,
@@ -704,6 +708,7 @@ USING (
         TransmittedPacketCount,
         TxOkCount,
         TxErrorCount,
+        TxPacketStatusCountsJson,
         GatewayState,
         GatewayLastSeenAt,
         StatsIntervalSeconds,
@@ -725,6 +730,7 @@ WHEN MATCHED AND (
         target.TransmittedPacketCount = source.TransmittedPacketCount,
         target.TxOkCount = source.TxOkCount,
         target.TxErrorCount = source.TxErrorCount,
+        target.TxPacketStatusCountsJson = source.TxPacketStatusCountsJson,
         target.GatewayState = source.GatewayState,
         target.GatewayLastSeenAt = source.GatewayLastSeenAt,
         target.StatsIntervalSeconds = source.StatsIntervalSeconds,
@@ -741,6 +747,7 @@ WHEN NOT MATCHED BY TARGET THEN
         TransmittedPacketCount,
         TxOkCount,
         TxErrorCount,
+        TxPacketStatusCountsJson,
         GatewayState,
         GatewayLastSeenAt,
         StatsIntervalSeconds,
@@ -756,6 +763,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.TransmittedPacketCount,
         source.TxOkCount,
         source.TxErrorCount,
+        source.TxPacketStatusCountsJson,
         source.GatewayState,
         source.GatewayLastSeenAt,
         source.StatsIntervalSeconds,
@@ -766,6 +774,150 @@ OUTPUT $action INTO @MergeActions;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
+
+
+FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackDeviceEventMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        DevEui,
+        TimeSpan,
+        TenantId,
+        CapturedUplinkCount,
+        ObservedGatewayCount,
+        MultiGatewayUplinkCount,
+        EventLogCountsJson,
+        ExtractedAt
+    FROM stg.factChirpStackDeviceEventMetrics
+    WHERE RunId = ?
+) AS source
+    ON target.DevEui = source.DevEui
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.CapturedUplinkCount = source.CapturedUplinkCount,
+        target.ObservedGatewayCount = source.ObservedGatewayCount,
+        target.MultiGatewayUplinkCount = source.MultiGatewayUplinkCount,
+        target.EventLogCountsJson = source.EventLogCountsJson,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        DevEui,
+        TimeSpan,
+        TenantId,
+        CapturedUplinkCount,
+        ObservedGatewayCount,
+        MultiGatewayUplinkCount,
+        EventLogCountsJson,
+        ExtractedAt
+    )
+    VALUES (
+        source.DevEui,
+        source.TimeSpan,
+        source.TenantId,
+        source.CapturedUplinkCount,
+        source.ObservedGatewayCount,
+        source.MultiGatewayUplinkCount,
+        source.EventLogCountsJson,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackDeviceGatewayMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        DevEui,
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayReceptionCount,
+        ReceptionShare,
+        AverageRssi,
+        MinRssi,
+        MaxRssi,
+        AverageSnr,
+        MinSnr,
+        MaxSnr,
+        FirstReceivedAt,
+        LastReceivedAt,
+        ExtractedAt
+    FROM stg.factChirpStackDeviceGatewayMetrics
+    WHERE RunId = ?
+) AS source
+    ON target.DevEui = source.DevEui
+    AND target.GatewayId = source.GatewayId
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.GatewayReceptionCount = source.GatewayReceptionCount,
+        target.ReceptionShare = source.ReceptionShare,
+        target.AverageRssi = source.AverageRssi,
+        target.MinRssi = source.MinRssi,
+        target.MaxRssi = source.MaxRssi,
+        target.AverageSnr = source.AverageSnr,
+        target.MinSnr = source.MinSnr,
+        target.MaxSnr = source.MaxSnr,
+        target.FirstReceivedAt = source.FirstReceivedAt,
+        target.LastReceivedAt = source.LastReceivedAt,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        DevEui,
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayReceptionCount,
+        ReceptionShare,
+        AverageRssi,
+        MinRssi,
+        MaxRssi,
+        AverageSnr,
+        MinSnr,
+        MaxSnr,
+        FirstReceivedAt,
+        LastReceivedAt,
+        ExtractedAt
+    )
+    VALUES (
+        source.DevEui,
+        source.GatewayId,
+        source.TimeSpan,
+        source.TenantId,
+        source.GatewayReceptionCount,
+        source.ReceptionShare,
+        source.AverageRssi,
+        source.MinRssi,
+        source.MaxRssi,
+        source.AverageSnr,
+        source.MinSnr,
+        source.MaxSnr,
+        source.FirstReceivedAt,
+        source.LastReceivedAt,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
 
 
 class SqlServerResource:
@@ -1043,10 +1195,81 @@ class SqlServerResource:
                     run_id,
                 )
                 deleted_gateways = int(cursor.rowcount or 0)
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackDeviceEventMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_device_events = int(cursor.rowcount or 0)
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackDeviceGatewayMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_device_gateways = int(cursor.rowcount or 0)
                 conn.commit()
-                return deleted_devices + deleted_gateways
+                return (
+                    deleted_devices
+                    + deleted_gateways
+                    + deleted_device_events
+                    + deleted_device_gateways
+                )
 
-    def merge_chirpstack_metrics(self, run_id: str) -> tuple[int, int]:
+    def write_mqtt_event_history_rejected_rows(
+        self,
+        rows: list[dict],
+        run_id: str,
+        retention_days: int,
+    ) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+DELETE FROM raw.MqttEventHistoryRejectedRow
+WHERE CreatedAt < DATEADD(DAY, -?, SYSUTCDATETIME());
+""",
+                        retention_days,
+                    )
+                    deleted_rows = max(int(cursor.rowcount or 0), 0)
+                    if rows:
+                        cursor.executemany(
+                            """
+INSERT INTO raw.MqttEventHistoryRejectedRow (
+    RunId,
+    Tenant,
+    FechaInicio,
+    FechaFin,
+    RequestedLimit,
+    FailureReason,
+    RowJson,
+    FetchedAt
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+""",
+                            [
+                                (
+                                    run_id,
+                                    row["Tenant"],
+                                    row["FechaInicio"],
+                                    row["FechaFin"],
+                                    row["RequestedLimit"],
+                                    row["FailureReason"],
+                                    row["RowJson"],
+                                    row["FetchedAt"],
+                                )
+                                for row in rows
+                            ],
+                        )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return len(rows), deleted_rows
+
+    def merge_chirpstack_metrics(
+        self,
+        run_id: str,
+        include_event_metrics: bool = False,
+    ) -> tuple[int, int, int, int]:
         with self._get_connection() as conn:
             try:
                 with conn.cursor() as cursor:
@@ -1060,6 +1283,19 @@ class SqlServerResource:
                         run_id,
                     )
                     gateway_row = cursor.fetchone()
+                    device_event_row = None
+                    device_gateway_row = None
+                    if include_event_metrics:
+                        cursor.execute(
+                            FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL,
+                            run_id,
+                        )
+                        device_event_row = cursor.fetchone()
+                        cursor.execute(
+                            FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL,
+                            run_id,
+                        )
+                        device_gateway_row = cursor.fetchone()
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -1074,7 +1310,17 @@ class SqlServerResource:
             if gateway_row is None or gateway_row.AffectedRows is None
             else int(gateway_row.AffectedRows)
         )
-        return device_rows, gateway_rows
+        device_event_rows = (
+            0
+            if device_event_row is None or device_event_row.AffectedRows is None
+            else int(device_event_row.AffectedRows)
+        )
+        device_gateway_rows = (
+            0
+            if device_gateway_row is None or device_gateway_row.AffectedRows is None
+            else int(device_gateway_row.AffectedRows)
+        )
+        return device_rows, gateway_rows, device_event_rows, device_gateway_rows
 
     def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:

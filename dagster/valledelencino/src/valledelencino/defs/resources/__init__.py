@@ -4,6 +4,10 @@ from .sql_server_dimensions import dim_sqlserver_resource, SqlDimServerResource
 from .transformation_ops import transformation_ops, TransformationOps
 from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOManager
 from .chirpstack import chirpstack_api_resource, ChirpStackApiResource
+from .mqtt_event_history import (
+    mqtt_event_history_api_resource,
+    MqttEventHistoryApiResource,
+)
 
 
 __all__ = [
@@ -19,4 +23,6 @@ __all__ = [
     "spark_df_io_manager",
     "chirpstack_api_resource",
     "ChirpStackApiResource",
+    "mqtt_event_history_api_resource",
+    "MqttEventHistoryApiResource",
 ]
