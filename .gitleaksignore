@@ -6,3 +6,9 @@ dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignme
 dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721
 dagster/carlsjr/src/carlsjr/defs/resources/mqtt_event_history.py:connection-string-password:67
 dagster/carlsjr/src/carlsjr/defs/resources/mqtt_event_history.py:hardcoded-secret-assignment:67
+dagster/emerson/src/emerson/defs/resources/mqtt_event_history.py:connection-string-password:69
+dagster/emerson/src/emerson/defs/resources/mqtt_event_history.py:hardcoded-secret-assignment:69
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:584
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:619
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:664
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721

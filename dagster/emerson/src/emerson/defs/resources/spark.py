@@ -1112,6 +1112,7 @@ class SparkResource:
             "AverageRssi",
             "AverageSnr",
             "LinkErrorCount",
+            "LinkErrorCountsJson",
             "BatteryLevel",
             "ExternalPowerSource",
             "BatteryLevelSource",
@@ -1147,6 +1148,7 @@ class SparkResource:
             "TransmittedPacketCount",
             "TxOkCount",
             "TxErrorCount",
+            "TxPacketStatusCountsJson",
             "GatewayState",
             "GatewayLastSeenAt",
             "StatsIntervalSeconds",
@@ -1165,6 +1167,71 @@ class SparkResource:
             df_stage,
             table="stg.factChirpStackGatewayMetrics",
             chunk_column="GatewayId",
+        )
+
+    def write_chirpstack_device_event_metrics_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "DevEui",
+            "TimeSpan",
+            "TenantId",
+            "CapturedUplinkCount",
+            "ObservedGatewayCount",
+            "MultiGatewayUplinkCount",
+            "EventLogCountsJson",
+            "ExtractedAt",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["DevEui", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factChirpStackDeviceEventMetrics",
+            chunk_column="DevEui",
+        )
+
+    def write_chirpstack_device_gateway_metrics_stage(
+        self,
+        df: DataFrame,
+        run_id: str,
+    ) -> int:
+        fact_columns = [
+            "DevEui",
+            "GatewayId",
+            "TimeSpan",
+            "TenantId",
+            "GatewayReceptionCount",
+            "ReceptionShare",
+            "AverageRssi",
+            "MinRssi",
+            "MaxRssi",
+            "AverageSnr",
+            "MinSnr",
+            "MaxSnr",
+            "FirstReceivedAt",
+            "LastReceivedAt",
+            "ExtractedAt",
+        ]
+        df_stage = (
+            df
+            .select(*fact_columns)
+            .dropDuplicates(["DevEui", "GatewayId", "TimeSpan"])
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *fact_columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factChirpStackDeviceGatewayMetrics",
+            chunk_column="DevEui",
         )
 
     def create_emptiness_dataframe(self) -> DataFrame:
