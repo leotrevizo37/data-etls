@@ -638,6 +638,39 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
             )
 
         self.assertEqual([row["MqttId"] for row in rows], [first_id, second_id])
+        self.assertEqual(resource.windows_split, 1)
+        self.assertEqual(resource.windows_completed, 2)
+
+    def test_rejects_response_total_smaller_than_data(self) -> None:
+        resource = self.resource_module.MqttEventHistoryApiResource(
+            url="http://mqtt-history.test/api/lecturas/tenant",
+            user="api-user",
+            password="private-password",
+            timeout_seconds=15,
+        )
+        from_local = datetime(2026, 9, 17, 4)
+        to_local = datetime(2026, 9, 17, 5)
+
+        with self.assertRaisesRegex(ValueError, "total does not match data"):
+            resource._validate_payload(
+                {
+                    "ok": True,
+                    "tenant": "carls",
+                    "fecha_inicio": "2026-09-17T04:00:00Z",
+                    "fecha_fin": "2026-09-17T05:00:00Z",
+                    "total": 0,
+                    "data": [{}],
+                },
+                from_local,
+                to_local,
+                {
+                    "tenant": "carls",
+                    "fechaInicio": "2026-09-17T04:00:00.000000Z",
+                    "fechaFin": "2026-09-17T05:00:00.000000Z",
+                    "limit": 5000,
+                },
+                datetime(2026, 9, 17, 5),
+            )
 
     def test_retries_a_transient_transport_failure(self) -> None:
         payload = {
@@ -855,6 +888,13 @@ class ChirpStackContractTests(unittest.TestCase):
             / "schedules"
             / "chirpstack_metrics_scheduler.py"
         ).read_text(encoding="utf-8")
+        job = (
+            PROJECT_SRC
+            / "carlsjr"
+            / "defs"
+            / "jobs"
+            / "chirpstack_metrics_job.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('"chirpstack_api": chirpstack_api_resource', defs_source)
         self.assertIn(
@@ -862,22 +902,28 @@ class ChirpStackContractTests(unittest.TestCase):
             defs_source,
         )
         self.assertIn("observability_chirpstackmetrics", defs_source)
+        self.assertIn("observability_chirpstackmqttmetrics", defs_source)
         self.assertIn("CARLSJR_CHIRPSTACK_API_URL", compose)
         self.assertIn("CARLSJR_MQTT_EVENT_HISTORY_API_URL", compose)
         self.assertIn(
             "CARLSJR_MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS",
             compose,
         )
-        self.assertIn("to_utc = extracted_at.replace", asset)
-        self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
+        self.assertIn("MQTT_INGESTION_NAME = \"factChirpStackMqttMetrics\"", asset)
+        self.assertIn("to_utc = extracted_at", asset)
+        self.assertIn("last_loaded_at = sql.get_watermark(INGESTION_NAME)", asset)
+        self.assertIn("last_loaded_at = sql.get_watermark(MQTT_INGESTION_NAME)", asset)
+        self.assertIn("while window_from_utc < to_utc", asset)
         self.assertIn("except (TypeError, ValueError):", asset)
         self.assertIn('"valid_dev_eui_count"', asset)
         self.assertIn('"invalid_physical_identifier_count"', asset)
         self.assertIn('"invalid_physical_identifiers"', asset)
         self.assertIn('group_name="carlsjr"', asset)
         self.assertIn('key_prefix=["carlsjr"]', asset)
-        self.assertNotIn("overlap", asset.lower())
-        self.assertNotIn("backfill", asset.lower())
+        self.assertIn(
+            'AssetKey(["carlsjr", "observability_chirpstackmqttmetrics"])',
+            job,
+        )
         self.assertIn('name="023_sense_chirpstack_metrics_hourly_at_30"', schedule)
         self.assertIn('cron_schedule="30 * * * *"', schedule)
         self.assertIn('execution_timezone="America/Ciudad_Juarez"', schedule)
@@ -911,6 +957,8 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("DATEADD(DAY, -?, SYSUTCDATETIME())", sql_resource)
         self.assertGreaterEqual(sql_resource.count("WHERE RunId = ?"), 2)
         self.assertIn("def merge_chirpstack_metrics", sql_resource)
+        self.assertIn("def merge_chirpstack_mqtt_metrics", sql_resource)
+        self.assertIn("def clear_chirpstack_mqtt_metrics_stage", sql_resource)
         self.assertIn("conn.rollback()", sql_resource)
         self.assertEqual(
             sql_resource.count(

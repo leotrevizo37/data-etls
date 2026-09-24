@@ -1907,6 +1907,12 @@ class SqlServerResource:
                     run_id,
                 )
                 deleted_gateways = int(cursor.rowcount or 0)
+                conn.commit()
+                return deleted_devices + deleted_gateways
+
+    def clear_chirpstack_mqtt_metrics_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     "DELETE FROM stg.factChirpStackDeviceEventMetrics WHERE RunId = ?",
                     run_id,
@@ -1918,12 +1924,7 @@ class SqlServerResource:
                 )
                 deleted_device_gateways = int(cursor.rowcount or 0)
                 conn.commit()
-                return (
-                    deleted_devices
-                    + deleted_gateways
-                    + deleted_device_events
-                    + deleted_device_gateways
-                )
+                return deleted_device_events + deleted_device_gateways
 
     def write_mqtt_event_history_rejected_rows(
         self,
@@ -1980,8 +1981,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
     def merge_chirpstack_metrics(
         self,
         run_id: str,
-        include_event_metrics: bool = False,
-    ) -> tuple[int, int, int, int]:
+    ) -> tuple[int, int]:
         with self._get_connection() as conn:
             try:
                 with conn.cursor() as cursor:
@@ -1995,19 +1995,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                         run_id,
                     )
                     gateway_row = cursor.fetchone()
-                    device_event_row = None
-                    device_gateway_row = None
-                    if include_event_metrics:
-                        cursor.execute(
-                            FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL,
-                            run_id,
-                        )
-                        device_event_row = cursor.fetchone()
-                        cursor.execute(
-                            FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL,
-                            run_id,
-                        )
-                        device_gateway_row = cursor.fetchone()
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -2022,6 +2009,29 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             if gateway_row is None or gateway_row.AffectedRows is None
             else int(gateway_row.AffectedRows)
         )
+        return device_rows, gateway_rows
+
+    def merge_chirpstack_mqtt_metrics(
+        self,
+        run_id: str,
+    ) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    device_event_row = cursor.fetchone()
+                    cursor.execute(
+                        FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    device_gateway_row = cursor.fetchone()
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
         device_event_rows = (
             0
             if device_event_row is None or device_event_row.AffectedRows is None
@@ -2032,7 +2042,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             if device_gateway_row is None or device_gateway_row.AffectedRows is None
             else int(device_gateway_row.AffectedRows)
         )
-        return device_rows, gateway_rows, device_event_rows, device_gateway_rows
+        return device_event_rows, device_gateway_rows
 
     def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:

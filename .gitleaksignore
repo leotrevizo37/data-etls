@@ -3,6 +3,7 @@
 dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:471
 dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:506
 dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:551
+dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:648
 dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721
 dagster/carlsjr/src/carlsjr/defs/resources/mqtt_event_history.py:connection-string-password:67
 dagster/carlsjr/src/carlsjr/defs/resources/mqtt_event_history.py:hardcoded-secret-assignment:67

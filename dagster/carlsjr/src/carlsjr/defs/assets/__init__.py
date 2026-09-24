@@ -9,7 +9,10 @@ from .dwh_factLecturas import dwh_factlecturas
 from .dwh_factAudiencia import dwh_factaudiencia
 from .dwh_factSensorEvents import dwh_factsensorevents
 from .observability_factRedingsAudits import observability_factredingsaudits
-from .observability_chirpstack_metrics import observability_chirpstackmetrics
+from .observability_chirpstack_metrics import (
+    observability_chirpstackmetrics,
+    observability_chirpstackmqttmetrics,
+)
 from .dwh_factSmartauditsCategories import dwh_factsmartauditscategories
 from .dwh_factMantizTicketLifecycle import dwh_factmantizticketlifecycle
 from .dwh_factMantizTicketTextInsights import dwh_factmantiztickettextinsights
@@ -29,6 +32,7 @@ __all__ = [
     "dwh_factsensorevents",
     "observability_factredingsaudits",
     "observability_chirpstackmetrics",
+    "observability_chirpstackmqttmetrics",
     "dwh_factsmartauditscategories",
     "dwh_factmantizticketlifecycle",
     "dwh_factmantiztickettextinsights",
