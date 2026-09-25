@@ -258,6 +258,18 @@ def build_gateway_metric_row(
         time_span,
         "gateway txPacketsPerStatus",
     )
+    if time_span < extracted_at.replace(minute=0, second=0, microsecond=0):
+        if gateway_state != "NEVER_SEEN":
+            gateway_state = "ONLINE" if any(
+                (value or 0) > 0
+                for value in (
+                    received_packet_count,
+                    transmitted_packet_count,
+                    tx_ok_count,
+                    tx_error_count,
+                )
+            ) else "UNKNOWN"
+        gateway_last_seen_at = None
 
     return {
         "GatewayId": gateway_id,

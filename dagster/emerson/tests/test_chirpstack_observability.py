@@ -192,10 +192,10 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
                 }
             },
             gateway_metrics_payload={
-                "rxPackets": _chart("rx_count", 20),
-                "txPackets": _chart("tx_count", 2),
+                "rxPackets": _chart("rx_count", 20, "2026-09-17T11:00:00Z"),
+                "txPackets": _chart("tx_count", 2, "2026-09-17T11:00:00Z"),
                 "txPacketsPerStatus": {
-                    "timestamps": ["2026-09-17T10:00:00Z"],
+                    "timestamps": ["2026-09-17T11:00:00Z"],
                     "datasets": [
                         {"label": "OK", "data": [2]},
                         {"label": "TOO_LATE", "data": [1]},
@@ -203,7 +203,7 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
                 },
             },
             expected_tenant_id="087175fa-5bf9-4180-a02e-7c57fb3543e8",
-            time_span=datetime(2026, 9, 17, 10, tzinfo=timezone.utc),
+            time_span=datetime(2026, 9, 17, 11, tzinfo=timezone.utc),
             extracted_at=datetime(2026, 9, 17, 11, 2, tzinfo=timezone.utc),
         )
 

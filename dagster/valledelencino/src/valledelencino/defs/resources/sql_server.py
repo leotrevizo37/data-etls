@@ -633,16 +633,64 @@ WHEN MATCHED AND (
         target.DeviceProfileId = source.DeviceProfileId,
         target.UplinkIntervalSeconds = source.UplinkIntervalSeconds,
         target.ExpectedUplinkCount = source.ExpectedUplinkCount,
-        target.ReceivedUplinkCount = source.ReceivedUplinkCount,
-        target.AverageRssi = source.AverageRssi,
-        target.AverageSnr = source.AverageSnr,
-        target.LinkErrorCount = source.LinkErrorCount,
-        target.LinkErrorCountsJson = source.LinkErrorCountsJson,
-        target.BatteryLevel = source.BatteryLevel,
-        target.ExternalPowerSource = source.ExternalPowerSource,
-        target.BatteryLevelSource = source.BatteryLevelSource,
-        target.BatteryObservedAt = source.BatteryObservedAt,
-        target.MetricsAvailable = source.MetricsAvailable,
+        target.ReceivedUplinkCount = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.ReceivedUplinkCount
+            ELSE target.ReceivedUplinkCount
+        END,
+        target.AverageRssi = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.AverageRssi
+            ELSE target.AverageRssi
+        END,
+        target.AverageSnr = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.AverageSnr
+            ELSE target.AverageSnr
+        END,
+        target.LinkErrorCount = CASE
+            WHEN target.LinkErrorCount IS NULL
+                OR source.LinkErrorCount > target.LinkErrorCount
+                THEN source.LinkErrorCount
+            ELSE target.LinkErrorCount
+        END,
+        target.LinkErrorCountsJson = CASE
+            WHEN target.LinkErrorCount IS NULL
+                OR source.LinkErrorCount > target.LinkErrorCount
+                THEN source.LinkErrorCountsJson
+            ELSE target.LinkErrorCountsJson
+        END,
+        target.BatteryLevel = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryLevel
+            ELSE target.BatteryLevel
+        END,
+        target.ExternalPowerSource = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.ExternalPowerSource
+            ELSE target.ExternalPowerSource
+        END,
+        target.BatteryLevelSource = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryLevelSource
+            ELSE target.BatteryLevelSource
+        END,
+        target.BatteryObservedAt = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryObservedAt
+            ELSE target.BatteryObservedAt
+        END,
+        target.MetricsAvailable = CASE
+            WHEN target.MetricsAvailable = 1 OR source.MetricsAvailable = 1 THEN 1
+            ELSE 0
+        END,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -726,15 +774,57 @@ WHEN MATCHED AND (
     UPDATE SET
         target.TenantId = source.TenantId,
         target.GatewayName = source.GatewayName,
-        target.ReceivedPacketCount = source.ReceivedPacketCount,
-        target.TransmittedPacketCount = source.TransmittedPacketCount,
-        target.TxOkCount = source.TxOkCount,
-        target.TxErrorCount = source.TxErrorCount,
-        target.TxPacketStatusCountsJson = source.TxPacketStatusCountsJson,
-        target.GatewayState = source.GatewayState,
+        target.ReceivedPacketCount = CASE
+            WHEN target.ReceivedPacketCount IS NULL
+                OR source.ReceivedPacketCount > target.ReceivedPacketCount
+                THEN source.ReceivedPacketCount
+            ELSE target.ReceivedPacketCount
+        END,
+        target.TransmittedPacketCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TransmittedPacketCount
+            ELSE target.TransmittedPacketCount
+        END,
+        target.TxOkCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxOkCount
+            ELSE target.TxOkCount
+        END,
+        target.TxErrorCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxErrorCount
+            ELSE target.TxErrorCount
+        END,
+        target.TxPacketStatusCountsJson = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxPacketStatusCountsJson
+            ELSE target.TxPacketStatusCountsJson
+        END,
+        target.GatewayState = CASE
+            WHEN source.GatewayLastSeenAt IS NOT NULL THEN source.GatewayState
+            WHEN source.GatewayState = N'NEVER_SEEN' THEN source.GatewayState
+            WHEN
+                ISNULL(target.ReceivedPacketCount, 0) > 0
+                OR ISNULL(source.ReceivedPacketCount, 0) > 0
+                OR ISNULL(target.TransmittedPacketCount, 0) > 0
+                OR ISNULL(source.TransmittedPacketCount, 0) > 0
+                OR ISNULL(target.TxOkCount, 0) > 0
+                OR ISNULL(source.TxOkCount, 0) > 0
+                OR ISNULL(target.TxErrorCount, 0) > 0
+                OR ISNULL(source.TxErrorCount, 0) > 0
+                THEN N'ONLINE'
+            ELSE N'UNKNOWN'
+        END,
         target.GatewayLastSeenAt = source.GatewayLastSeenAt,
         target.StatsIntervalSeconds = source.StatsIntervalSeconds,
-        target.MetricsAvailable = source.MetricsAvailable,
+        target.MetricsAvailable = CASE
+            WHEN target.MetricsAvailable = 1 OR source.MetricsAvailable = 1 THEN 1
+            ELSE 0
+        END,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -797,7 +887,33 @@ USING (
 ) AS source
     ON target.DevEui = source.DevEui
     AND target.TimeSpan = source.TimeSpan
-WHEN MATCHED THEN
+WHEN MATCHED AND
+    source.CapturedUplinkCount >= target.CapturedUplinkCount
+    AND source.ObservedGatewayCount >= target.ObservedGatewayCount
+    AND source.MultiGatewayUplinkCount >= target.MultiGatewayUplinkCount
+    AND NOT EXISTS (
+        SELECT 1
+        FROM OPENJSON(target.EventLogCountsJson) AS targetLog
+        LEFT JOIN OPENJSON(source.EventLogCountsJson) AS sourceLog
+            ON sourceLog.[key] = targetLog.[key]
+        WHERE
+            sourceLog.[key] IS NULL
+            OR CONVERT(BIGINT, sourceLog.[value]) < CONVERT(BIGINT, targetLog.[value])
+    )
+    AND (
+        source.CapturedUplinkCount > target.CapturedUplinkCount
+        OR source.ObservedGatewayCount > target.ObservedGatewayCount
+        OR source.MultiGatewayUplinkCount > target.MultiGatewayUplinkCount
+        OR EXISTS (
+            SELECT 1
+            FROM OPENJSON(source.EventLogCountsJson) AS sourceLog
+            LEFT JOIN OPENJSON(target.EventLogCountsJson) AS targetLog
+                ON targetLog.[key] = sourceLog.[key]
+            WHERE
+                targetLog.[key] IS NULL
+                OR CONVERT(BIGINT, sourceLog.[value]) > CONVERT(BIGINT, targetLog.[value])
+        )
+    ) THEN
     UPDATE SET
         target.TenantId = source.TenantId,
         target.CapturedUplinkCount = source.CapturedUplinkCount,
@@ -855,14 +971,33 @@ USING (
         MaxSnr,
         FirstReceivedAt,
         LastReceivedAt,
-        ExtractedAt
-    FROM stg.factChirpStackDeviceGatewayMetrics
+        ExtractedAt,
+        CASE
+            WHEN NOT EXISTS (
+                SELECT 1
+                FROM observability.factChirpStackDeviceGatewayMetrics AS existing
+                LEFT JOIN stg.factChirpStackDeviceGatewayMetrics AS candidate
+                    ON candidate.RunId = stage.RunId
+                    AND candidate.DevEui = existing.DevEui
+                    AND candidate.GatewayId = existing.GatewayId
+                    AND candidate.TimeSpan = existing.TimeSpan
+                WHERE
+                    existing.DevEui = stage.DevEui
+                    AND existing.TimeSpan = stage.TimeSpan
+                    AND (
+                        candidate.GatewayId IS NULL
+                        OR candidate.GatewayReceptionCount < existing.GatewayReceptionCount
+                    )
+            ) THEN 1
+            ELSE 0
+        END AS IsNonDecreasing
+    FROM stg.factChirpStackDeviceGatewayMetrics AS stage
     WHERE RunId = ?
 ) AS source
     ON target.DevEui = source.DevEui
     AND target.GatewayId = source.GatewayId
     AND target.TimeSpan = source.TimeSpan
-WHEN MATCHED THEN
+WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
     UPDATE SET
         target.TenantId = source.TenantId,
         target.GatewayReceptionCount = source.GatewayReceptionCount,
@@ -877,7 +1012,7 @@ WHEN MATCHED THEN
         target.LastReceivedAt = source.LastReceivedAt,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
-WHEN NOT MATCHED BY TARGET THEN
+WHEN NOT MATCHED BY TARGET AND source.IsNonDecreasing = 1 THEN
     INSERT (
         DevEui,
         GatewayId,

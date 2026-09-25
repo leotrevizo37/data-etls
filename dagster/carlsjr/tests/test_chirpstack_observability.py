@@ -192,10 +192,10 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
                 }
             },
             gateway_metrics_payload={
-                "rxPackets": _chart("rx_count", 20),
-                "txPackets": _chart("tx_count", 2),
+                "rxPackets": _chart("rx_count", 20, "2026-09-17T11:00:00Z"),
+                "txPackets": _chart("tx_count", 2, "2026-09-17T11:00:00Z"),
                 "txPacketsPerStatus": {
-                    "timestamps": ["2026-09-17T10:00:00Z"],
+                    "timestamps": ["2026-09-17T11:00:00Z"],
                     "datasets": [
                         {"label": "OK", "data": [2]},
                         {"label": "TOO_LATE", "data": [1]},
@@ -203,11 +203,12 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
                 },
             },
             expected_tenant_id="087175fa-5bf9-4180-a02e-7c57fb3543e8",
-            time_span=datetime(2026, 9, 17, 10, tzinfo=timezone.utc),
+            time_span=datetime(2026, 9, 17, 11, tzinfo=timezone.utc),
             extracted_at=datetime(2026, 9, 17, 11, 2, tzinfo=timezone.utc),
         )
 
         self.assertEqual(row["GatewayState"], "OFFLINE")
+        self.assertEqual(row["GatewayLastSeenAt"], datetime(2026, 9, 17, 10, 59, 30))
         self.assertEqual(row["ReceivedPacketCount"], 20)
         self.assertEqual(row["TransmittedPacketCount"], 2)
         self.assertEqual(row["TxOkCount"], 2)
@@ -217,6 +218,64 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
             '{"OK":2,"TOO_LATE":1}',
         )
         self.assertTrue(row["MetricsAvailable"])
+
+    def test_gateway_historical_state_uses_hourly_evidence(self) -> None:
+        gateway_list_item = {
+            "tenantId": "087175fa-5bf9-4180-a02e-7c57fb3543e8",
+            "gatewayId": "C0BA1FFFFE01F6D7",
+            "state": "OFFLINE",
+            "lastSeenAt": "2026-09-17T10:59:30Z",
+        }
+        gateway_payload = {
+            "gateway": {
+                "gatewayId": "c0ba1ffffe01f6d7",
+                "tenantId": "087175fa-5bf9-4180-a02e-7c57fb3543e8",
+                "name": "Carls-jr-juventud",
+                "statsInterval": 30,
+            }
+        }
+        for metrics, expected_state, metrics_available in (
+            (
+                {
+                    "rxPackets": _chart("rx_count", 1),
+                    "txPackets": _chart("tx_count", 0),
+                    "txPacketsPerStatus": _chart("OK", 0),
+                },
+                "ONLINE",
+                True,
+            ),
+            (
+                {
+                    "rxPackets": _chart("rx_count", 0),
+                    "txPackets": _chart("tx_count", 0),
+                    "txPacketsPerStatus": _chart("OK", 0),
+                },
+                "UNKNOWN",
+                True,
+            ),
+            (
+                {
+                    "rxPackets": _chart("rx_count", 0, "2026-09-17T09:00:00Z"),
+                    "txPackets": _chart("tx_count", 0, "2026-09-17T09:00:00Z"),
+                    "txPacketsPerStatus": _chart("OK", 0, "2026-09-17T09:00:00Z"),
+                },
+                "UNKNOWN",
+                False,
+            ),
+        ):
+            with self.subTest(expected_state=expected_state, metrics_available=metrics_available):
+                row = build_gateway_metric_row(
+                    gateway_list_item=gateway_list_item,
+                    gateway_payload=gateway_payload,
+                    gateway_metrics_payload=metrics,
+                    expected_tenant_id="087175fa-5bf9-4180-a02e-7c57fb3543e8",
+                    time_span=datetime(2026, 9, 17, 10, tzinfo=timezone.utc),
+                    extracted_at=datetime(2026, 9, 17, 11, 2, tzinfo=timezone.utc),
+                )
+
+                self.assertEqual(row["GatewayState"], expected_state)
+                self.assertIsNone(row["GatewayLastSeenAt"])
+                self.assertEqual(row["MetricsAvailable"], metrics_available)
 
     def test_event_rows_aggregate_uplinks_logs_and_gateway_receptions(self) -> None:
         tenant_id = "087175fa-5bf9-4180-a02e-7c57fb3543e8"
@@ -775,6 +834,89 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
 
 
 class ChirpStackContractTests(unittest.TestCase):
+    def test_chirpstack_historical_state_and_merges_match_all_code_locations(self) -> None:
+        code_locations = {
+            "carlsjr": REPOSITORY_ROOT
+            / "dagster"
+            / "carlsjr"
+            / "src"
+            / "carlsjr",
+            "emerson": REPOSITORY_ROOT
+            / "dagster"
+            / "emerson"
+            / "src"
+            / "emerson",
+            "valledelencino": REPOSITORY_ROOT
+            / "dagster"
+            / "valledelencino"
+            / "src"
+            / "valledelencino",
+        }
+        sql_sources = {}
+        for code_location, source_root in code_locations.items():
+            transformation_path = (
+                source_root / "defs" / "transformations" / "chirpstack_metrics.py"
+            )
+            spec = importlib.util.spec_from_file_location(
+                f"{code_location}_chirpstack_metrics_integration",
+                transformation_path,
+            )
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            for received_packet_count, expected_state in ((0, "UNKNOWN"), (1, "ONLINE")):
+                with self.subTest(
+                    code_location=code_location,
+                    received_packet_count=received_packet_count,
+                ):
+                    row = module.build_gateway_metric_row(
+                        gateway_list_item={
+                            "tenantId": "087175fa-5bf9-4180-a02e-7c57fb3543e8",
+                            "gatewayId": "C0BA1FFFFE01F6D7",
+                            "state": "ONLINE",
+                            "lastSeenAt": "2026-09-17T10:59:30Z",
+                        },
+                        gateway_payload={
+                            "gateway": {
+                                "gatewayId": "c0ba1ffffe01f6d7",
+                                "tenantId": "087175fa-5bf9-4180-a02e-7c57fb3543e8",
+                                "name": "Gateway",
+                                "statsInterval": 30,
+                            }
+                        },
+                        gateway_metrics_payload={
+                            "rxPackets": _chart("rx_count", received_packet_count),
+                            "txPackets": _chart("tx_count", 0),
+                            "txPacketsPerStatus": _chart("OK", 0),
+                        },
+                        expected_tenant_id="087175fa-5bf9-4180-a02e-7c57fb3543e8",
+                        time_span=datetime(2026, 9, 17, 10, tzinfo=timezone.utc),
+                        extracted_at=datetime(2026, 9, 17, 11, 2, tzinfo=timezone.utc),
+                    )
+                    self.assertEqual(row["GatewayState"], expected_state)
+                    self.assertTrue(row["MetricsAvailable"])
+                    self.assertIsNone(row["GatewayLastSeenAt"])
+            sql_sources[code_location] = (
+                source_root / "defs" / "resources" / "sql_server.py"
+            ).read_text(encoding="utf-8")
+
+        for constant_name in (
+            "FACT_CHIRPSTACK_DEVICE_METRICS_MERGE_SQL",
+            "FACT_CHIRPSTACK_GATEWAY_METRICS_MERGE_SQL",
+            "FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL",
+            "FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL",
+        ):
+            marker = f'{constant_name} = """'
+            carlsjr_merge = sql_sources["carlsjr"].split(marker, 1)[1].split('"""', 1)[0]
+            for code_location in ("emerson", "valledelencino"):
+                with self.subTest(
+                    constant_name=constant_name,
+                    code_location=code_location,
+                ):
+                    merge = sql_sources[code_location].split(marker, 1)[1].split('"""', 1)[0]
+                    self.assertEqual(merge, carlsjr_merge)
+
     def test_sql_contract_has_hourly_keys_and_official_gateway_state(self) -> None:
         sql_directory = (
             REPOSITORY_ROOT
@@ -812,6 +954,10 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn("raw.MqttEventHistoryRejectedRow", sql)
         self.assertIn("RowJson NVARCHAR(4000) NOT NULL", sql)
         self.assertIn("GatewayState NVARCHAR(20) NOT NULL", sql)
+        self.assertIn("N'UNKNOWN'", sql)
+        self.assertIn("ISNULL(ReceivedPacketCount, 0) = 0", sql)
+        self.assertNotIn("GatewayState = N'UNKNOWN'\n                    AND GatewayLastSeenAt IS NULL\n                    AND MetricsAvailable = 0", sql)
+        self.assertIn("UnknownGatewayCount", sql)
         self.assertIn("BatteryLevel DECIMAL(7, 4) NULL", sql)
         self.assertIn("serving.vwSenseSensorCommunicationHealthHourly", sql)
         self.assertIn("serving.vwSenseSensorCoverageHourly", sql)
@@ -967,6 +1113,24 @@ class ChirpStackContractTests(unittest.TestCase):
             ),
             2,
         )
+        self.assertIn(
+            "source.ReceivedUplinkCount > target.ReceivedUplinkCount",
+            sql_resource,
+        )
+        self.assertIn(
+            "source.ReceivedPacketCount > target.ReceivedPacketCount",
+            sql_resource,
+        )
+        self.assertIn(
+            "source.CapturedUplinkCount > target.CapturedUplinkCount",
+            sql_resource,
+        )
+        self.assertIn(
+            "candidate.GatewayReceptionCount < existing.GatewayReceptionCount",
+            sql_resource,
+        )
+        self.assertIn("OPENJSON(target.EventLogCountsJson)", sql_resource)
+        self.assertIn("ExtractedAt,\n        CASE", sql_resource)
         self.assertIn(
             '.dropDuplicates(["DevEui", "TimeSpan"])',
             spark_resource,
