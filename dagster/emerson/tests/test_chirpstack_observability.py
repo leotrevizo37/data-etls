@@ -855,6 +855,13 @@ class ChirpStackContractTests(unittest.TestCase):
             / "schedules"
             / "chirpstack_metrics_scheduler.py"
         ).read_text(encoding="utf-8")
+        job = (
+            PROJECT_SRC
+            / "emerson"
+            / "defs"
+            / "jobs"
+            / "chirpstack_metrics_job.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('"chirpstack_api": chirpstack_api_resource', defs_source)
         self.assertIn(
@@ -862,22 +869,28 @@ class ChirpStackContractTests(unittest.TestCase):
             defs_source,
         )
         self.assertIn("observability_chirpstackmetrics", defs_source)
+        self.assertIn("observability_chirpstackmqttmetrics", defs_source)
         self.assertIn("EMERSON_CHIRPSTACK_API_URL", compose)
         self.assertIn("EMERSON_MQTT_EVENT_HISTORY_API_URL", compose)
         self.assertIn(
             "EMERSON_MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS",
             compose,
         )
-        self.assertIn("to_utc = extracted_at.replace", asset)
-        self.assertIn("from_utc = to_utc - timedelta(hours=1)", asset)
+        self.assertIn("MQTT_INGESTION_NAME = \"factChirpStackMqttMetrics\"", asset)
+        self.assertIn("to_utc = extracted_at", asset)
+        self.assertIn("last_loaded_at = sql.get_watermark(INGESTION_NAME)", asset)
+        self.assertIn("last_loaded_at = sql.get_watermark(MQTT_INGESTION_NAME)", asset)
+        self.assertIn("while window_from_utc < to_utc", asset)
         self.assertIn("except (TypeError, ValueError):", asset)
         self.assertIn('"valid_dev_eui_count"', asset)
         self.assertIn('"invalid_physical_identifier_count"', asset)
         self.assertIn('"invalid_physical_identifiers"', asset)
         self.assertIn('group_name="emerson"', asset)
         self.assertIn('key_prefix=["emerson"]', asset)
-        self.assertNotIn("overlap", asset.lower())
-        self.assertNotIn("backfill", asset.lower())
+        self.assertIn(
+            'AssetKey(["emerson", "observability_chirpstackmqttmetrics"])',
+            job,
+        )
         self.assertIn('name="023_sense_chirpstack_metrics_hourly_at_30"', schedule)
         self.assertIn('cron_schedule="30 * * * *"', schedule)
         self.assertIn('execution_timezone="America/Ciudad_Juarez"', schedule)
