@@ -32,12 +32,33 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
                 OR ISJSON(TxPacketStatusCountsJson) = 1
             ),
             CONSTRAINT CK_factChirpStackGatewayMetrics_State
-            CHECK (GatewayState IN (N'NEVER_SEEN', N'ONLINE', N'OFFLINE')),
+            CHECK (GatewayState IN (N'NEVER_SEEN', N'ONLINE', N'OFFLINE', N'UNKNOWN')),
             CONSTRAINT CK_factChirpStackGatewayMetrics_LastSeen
             CHECK (
-                (GatewayState = N'NEVER_SEEN' AND GatewayLastSeenAt IS NULL)
+                (
+                    GatewayState = N'NEVER_SEEN'
+                    AND GatewayLastSeenAt IS NULL
+                )
                 OR (
-                    GatewayState IN (N'ONLINE', N'OFFLINE')
+                    GatewayState = N'UNKNOWN'
+                    AND GatewayLastSeenAt IS NULL
+                    AND ISNULL(ReceivedPacketCount, 0) = 0
+                    AND ISNULL(TransmittedPacketCount, 0) = 0
+                    AND ISNULL(TxOkCount, 0) = 0
+                    AND ISNULL(TxErrorCount, 0) = 0
+                )
+                OR (
+                    GatewayState = N'ONLINE'
+                    AND (
+                        GatewayLastSeenAt IS NOT NULL
+                        OR ISNULL(ReceivedPacketCount, 0) > 0
+                        OR ISNULL(TransmittedPacketCount, 0) > 0
+                        OR ISNULL(TxOkCount, 0) > 0
+                        OR ISNULL(TxErrorCount, 0) > 0
+                    )
+                )
+                OR (
+                    GatewayState = N'OFFLINE'
                     AND GatewayLastSeenAt IS NOT NULL
                 )
             ),
@@ -62,6 +83,90 @@ IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NULL
             ),
             CONSTRAINT PK_factChirpStackGatewayMetrics
             PRIMARY KEY CLUSTERED (GatewayId, TimeSpan)
+        );
+    END;
+GO
+
+IF
+    EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
+            AND name = N'CK_factChirpStackGatewayMetrics_State'
+            AND [definition] NOT LIKE N'%UNKNOWN%'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        DROP CONSTRAINT CK_factChirpStackGatewayMetrics_State;
+    END;
+GO
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
+            AND name = N'CK_factChirpStackGatewayMetrics_State'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        ADD CONSTRAINT CK_factChirpStackGatewayMetrics_State
+        CHECK (GatewayState IN (N'NEVER_SEEN', N'ONLINE', N'OFFLINE', N'UNKNOWN'));
+    END;
+GO
+IF
+    EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
+            AND name = N'CK_factChirpStackGatewayMetrics_LastSeen'
+            AND [definition] NOT LIKE N'%ReceivedPacketCount%'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        DROP CONSTRAINT CK_factChirpStackGatewayMetrics_LastSeen;
+    END;
+GO
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'observability.factChirpStackGatewayMetrics')
+            AND name = N'CK_factChirpStackGatewayMetrics_LastSeen'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackGatewayMetrics
+        ADD CONSTRAINT CK_factChirpStackGatewayMetrics_LastSeen
+        CHECK (
+            (
+                GatewayState = N'NEVER_SEEN'
+                AND GatewayLastSeenAt IS NULL
+            )
+            OR (
+                GatewayState = N'UNKNOWN'
+                AND GatewayLastSeenAt IS NULL
+                AND ISNULL(ReceivedPacketCount, 0) = 0
+                AND ISNULL(TransmittedPacketCount, 0) = 0
+                AND ISNULL(TxOkCount, 0) = 0
+                AND ISNULL(TxErrorCount, 0) = 0
+            )
+            OR (
+                GatewayState = N'ONLINE'
+                AND (
+                    GatewayLastSeenAt IS NOT NULL
+                    OR ISNULL(ReceivedPacketCount, 0) > 0
+                    OR ISNULL(TransmittedPacketCount, 0) > 0
+                    OR ISNULL(TxOkCount, 0) > 0
+                    OR ISNULL(TxErrorCount, 0) > 0
+                )
+            )
+            OR (
+                GatewayState = N'OFFLINE'
+                AND GatewayLastSeenAt IS NOT NULL
+            )
         );
     END;
 GO
