@@ -74,6 +74,9 @@ class MqttEventHistoryApiResource:
         self.rejected_row_retention_days = rejected_row_retention_days
         self.requests_made = 0
         self.rejected_rows = []
+        self.windows_completed = 0
+        self.windows_split = 0
+        self.rows_received = 0
         self._last_request_at = None
 
     def _wait_for_request_slot(self) -> None:
@@ -109,8 +112,10 @@ class MqttEventHistoryApiResource:
         try:
             rows = self._request_window(from_local, to_local)
         except MqttEventHistoryWindowTooLarge:
+            self.windows_split += 1
             rows = None
         if rows is not None:
+            self.windows_completed += 1
             return rows
         if to_local - from_local <= timedelta(microseconds=1):
             raise RuntimeError(
@@ -249,6 +254,7 @@ class MqttEventHistoryApiResource:
             raise ValueError("MQTT event history API total must be a non-negative integer")
         if not isinstance(data, list) or len(data) > self.limit:
             raise ValueError("MQTT event history API data does not match the requested limit")
+        self.rows_received += len(data)
         response_from = _parse_datetime(payload["fecha_inicio"])
         response_to = _parse_datetime(payload["fecha_fin"])
         if (
@@ -267,6 +273,8 @@ class MqttEventHistoryApiResource:
             raise MqttEventHistoryWindowTooLarge(
                 "MQTT event history API response reached the requested limit"
             )
+        if total != len(data):
+            raise ValueError("MQTT event history API total does not match data")
 
         rows = []
         mqtt_ids = set()

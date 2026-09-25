@@ -24,6 +24,7 @@ def _build_defs() -> Any:
         dwh_factsensorevents,
         observability_factredingsaudits,
         observability_chirpstackmetrics,
+        observability_chirpstackmqttmetrics,
         operations_assets,
     )
     from .jobs import (
@@ -123,6 +124,7 @@ def _build_defs() -> Any:
             dwh_factsensorevents,
             observability_factredingsaudits,
             observability_chirpstackmetrics,
+            observability_chirpstackmqttmetrics,
             operations_assets,
             dwh_dimsidonproddimensions,
             cleanup_old_runs,
