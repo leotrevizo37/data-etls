@@ -31,6 +31,8 @@ def test_signal_model_uses_stable_guid_catalogs_and_append_only_events():
         "pipeline_stale",
         "dagster_run_failure",
         "asset_row_count_trend",
+        "sidon_device_configuration",
+        "sidon_alert_configuration",
         "DETECTED",
         "CLEARED",
         "INFO",
@@ -77,6 +79,20 @@ def test_signal_model_uses_stable_guid_catalogs_and_append_only_events():
     assert "UQ_alert_signal_event_transition" in _SIGNAL_MODEL
     assert _VIEWS.count("append_only") == 3
     assert _VIEWS.count("_stable") == 10
+
+
+def test_shared_catalog_preserves_sidon_alert_type_ids():
+    catalog = (
+        _ROOT / "sql" / "init" / "027_alerting_catalog_values.sql"
+    ).read_text(encoding="utf-8")
+    for alert_type_id, code, sort_order in (
+        ("10000000-0000-0000-0000-000000000007", "sidon_device_configuration", 70),
+        ("10000000-0000-0000-0000-000000000008", "sidon_alert_configuration", 80),
+    ):
+        rows = [line for line in catalog.splitlines() if f"N'{code}'" in line]
+        assert len(rows) == 1
+        assert f"('{alert_type_id}', N'{code}'," in rows[0]
+        assert rows[0].rstrip(",").endswith(f", 1, 1, {sort_order})")
 
 
 def test_serving_view_exposes_only_spanish_pascal_case_contract():
