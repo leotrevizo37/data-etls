@@ -1002,12 +1002,54 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
         target.TenantId = source.TenantId,
         target.GatewayReceptionCount = source.GatewayReceptionCount,
         target.ReceptionShare = source.ReceptionShare,
-        target.AverageRssi = source.AverageRssi,
-        target.MinRssi = source.MinRssi,
-        target.MaxRssi = source.MaxRssi,
-        target.AverageSnr = source.AverageSnr,
-        target.MinSnr = source.MinSnr,
-        target.MaxSnr = source.MaxSnr,
+        target.AverageRssi = CASE
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.AverageRssi
+            ELSE source.AverageRssi
+        END,
+        target.MinRssi = CASE
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.MinRssi
+            ELSE source.MinRssi
+        END,
+        target.MaxRssi = CASE
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.MaxRssi
+            ELSE source.MaxRssi
+        END,
+        target.AverageSnr = CASE
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.AverageSnr
+            ELSE source.AverageSnr
+        END,
+        target.MinSnr = CASE
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.MinSnr
+            ELSE source.MinSnr
+        END,
+        target.MaxSnr = CASE
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.MaxSnr
+            ELSE source.MaxSnr
+        END,
         target.FirstReceivedAt = source.FirstReceivedAt,
         target.LastReceivedAt = source.LastReceivedAt,
         target.ExtractedAt = source.ExtractedAt,

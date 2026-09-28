@@ -1,14 +1,19 @@
 import importlib.util
 import io
 import json
+import re
+import sqlite3
 import sys
 import unittest
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = PROJECT_ROOT.parents[1]
@@ -940,6 +945,161 @@ class ChirpStackContractTests(unittest.TestCase):
             '.dropDuplicates(["GatewayId", "TimeSpan"])',
             spark_resource,
         )
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    (
+        "decreased_count",
+        "missing_gateway",
+        "different_run",
+        "missing_radio",
+    ),
+)
+def test_mqtt_merge_source_preserves_gateway_evidence(scenario):
+    module = importlib.import_module("emerson.defs.resources.sql_server")
+    statement = module.FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL
+    source_select = statement.split("USING (", 1)[1].split(") AS source", 1)[0]
+    radio_update = statement.split("target.AverageRssi = ", 1)[1].split(
+        ",\n        target.MinRssi", 1
+    )[0]
+    target = {
+        "DevEui": "0000000000000001",
+        "GatewayId": "0000000000000002",
+        "TimeSpan": "2026-09-17 10:00:00",
+        "TenantId": "00000000-0000-0000-0000-000000000003",
+        "GatewayReceptionCount": 2,
+        "ReceptionShare": 1.0,
+        "AverageRssi": -90,
+        "MinRssi": -90,
+        "MaxRssi": -90,
+        "AverageSnr": 5,
+        "MinSnr": 5,
+        "MaxSnr": 5,
+        "FirstReceivedAt": "2026-09-17 10:05:00",
+        "LastReceivedAt": "2026-09-17 10:15:00",
+        "ExtractedAt": "2026-09-17 11:00:00",
+    }
+    source = {**target, "RunId": "synthetic-run"}
+    if scenario == "decreased_count":
+        source["GatewayReceptionCount"] = 1
+    elif scenario == "missing_gateway":
+        source["GatewayId"] = "0000000000000004"
+    elif scenario == "different_run":
+        source["RunId"] = "another-run"
+    else:
+        for field in ("AverageRssi", "MinRssi", "MaxRssi", "AverageSnr", "MinSnr", "MaxSnr"):
+            source[field] = None
+    with closing(sqlite3.connect(":memory:")) as database:
+        database.row_factory = sqlite3.Row
+        for schema, row in (("observability", target), ("stg", source)):
+            database.execute(f"ATTACH DATABASE ':memory:' AS {schema}")
+            table = f"{schema}.factChirpStackDeviceGatewayMetrics"
+            database.execute(f"CREATE TABLE {table} ({', '.join(row)})")
+            database.execute(
+                f"INSERT INTO {table} VALUES ({', '.join('?' for _ in row)})",
+                tuple(row.values()),
+            )
+        selected = database.execute(source_select, ("synthetic-run",)).fetchall()
+        if scenario == "different_run":
+            assert selected == []
+        elif scenario != "missing_radio":
+            assert len(selected) == 1
+            assert selected[0]["IsNonDecreasing"] == 0
+        else:
+            assert len(selected) == 1
+            actual_rssi = target["AverageRssi"]
+            if selected[0]["IsNonDecreasing"] == 1:
+                actual_rssi = database.execute(
+                    f"WITH source AS ({source_select}) "
+                    f"SELECT {radio_update} "
+                    "FROM source CROSS JOIN observability.factChirpStackDeviceGatewayMetrics AS target",
+                    ("synthetic-run",),
+                ).fetchone()[0]
+            assert actual_rssi == target["AverageRssi"]
+
+
+@pytest.mark.parametrize("count", (2, 3))
+@pytest.mark.parametrize("signal", ("Rssi", "Snr"))
+@pytest.mark.parametrize(
+    "previous,incoming,expected",
+    (
+        pytest.param((-85, -90, -80), (None, None, None), (-85, -90, -80), id="null-triplet"),
+        pytest.param((-85, -90, -80), (None, -80, -60), (-85, -90, -80), id="null-average"),
+        pytest.param((-85, -90, -80), (-70, None, -60), (-85, -90, -80), id="null-minimum"),
+        pytest.param((-85, -90, -80), (-70, -80, None), (-85, -90, -80), id="null-maximum"),
+        pytest.param((-85, -90, -80), (0, 0, 0), (-85, -90, -80), id="zero-triplet"),
+        pytest.param((-85, -90, -80), (0, -2, 2), (0, -2, 2), id="valid-zero-average"),
+        pytest.param((-85, -90, -80), (2, 0, 4), (2, 0, 4), id="valid-zero-minimum"),
+        pytest.param((-85, -90, -80), (-2, -4, 0), (-2, -4, 0), id="valid-zero-maximum"),
+        pytest.param((-85, -90, -80), (-70, -80, -60), (-70, -80, -60), id="new-evidence"),
+        pytest.param((-85, -90, -80), (-85, -90, -80), (-85, -90, -80), id="identical"),
+        pytest.param((None, None, None), (-70, -80, -60), (-70, -80, -60), id="first-evidence"),
+        pytest.param((None, None, None), (0, 0, 0), (0, 0, 0), id="first-zero-evidence"),
+        pytest.param((None, None, None), (None, None, None), (None, None, None), id="still-unavailable"),
+        pytest.param((None, -90, -80), (-70, -80, -60), (-70, -80, -60), id="complete-partial-evidence"),
+    ),
+)
+def test_mqtt_replay_preserves_radio_triplets(count, signal, previous, incoming, expected):
+    module = importlib.import_module("emerson.defs.resources.sql_server")
+    statement = module.FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL
+    assignments = statement.split("UPDATE SET", 1)[1].split("WHEN NOT MATCHED", 1)[0]
+    assignments = re.split(r",\s*target\.", assignments.strip().removeprefix("target."))
+    projections = {
+        field: expression
+        for field, expression in (assignment.split(" = ", 1) for assignment in assignments)
+        if field != "ModifiedAt"
+    }
+    target = {
+        "TenantId": "00000000-0000-0000-0000-000000000003",
+        "GatewayReceptionCount": 2,
+        "ReceptionShare": 1.0,
+        "AverageRssi": -85, "MinRssi": -90, "MaxRssi": -80,
+        "AverageSnr": 5, "MinSnr": 4, "MaxSnr": 6,
+        "FirstReceivedAt": "2026-09-17 10:01:00",
+        "LastReceivedAt": "2026-09-17 10:15:00",
+        "ExtractedAt": "2026-09-17 11:00:00",
+    }
+    fields = [prefix + signal for prefix in ("Average", "Min", "Max")]
+    target.update(zip(fields, previous))
+    source = {
+        **target,
+        "GatewayReceptionCount": count,
+        "ReceptionShare": 0.5,
+        "AverageRssi": -75, "MinRssi": -80, "MaxRssi": -70,
+        "AverageSnr": 8, "MinSnr": 7, "MaxSnr": 9,
+        "LastReceivedAt": "2026-09-17 10:45:00",
+        "ExtractedAt": "2026-09-17 11:30:00",
+    }
+    source.update(zip(fields, incoming))
+    ddl = (
+        REPOSITORY_ROOT
+        / "sql" / "init" / "036_observability_factChirpStackDeviceGatewayMetrics.sql"
+    ).read_text(encoding="utf-8")
+    check = re.search(r"\bCHECK\s*\((.*?)\)\s*,", ddl, re.S).group(1)
+    with closing(sqlite3.connect(":memory:")) as database:
+        database.row_factory = sqlite3.Row
+        ctes = []
+        parameters = []
+        for alias, row in (("target", target), ("source", source)):
+            ctes.append(alias + " AS (SELECT " + ", ".join("? AS " + field for field in row) + ")")
+            parameters.extend(row.values())
+        updated = dict(database.execute(
+            "WITH " + ", ".join(ctes)
+            + " SELECT " + ", ".join(expression + " AS " + field for field, expression in projections.items())
+            + " FROM target CROSS JOIN source",
+            parameters,
+        ).fetchone())
+        assert tuple(updated[field] for field in fields) == expected
+        assert {field: value for field, value in updated.items() if field not in fields} == {
+            field: value for field, value in source.items() if field not in fields
+        }
+        valid = database.execute(
+            "WITH result AS (SELECT " + ", ".join("? AS " + field for field in updated)
+            + ") SELECT (" + check + ") FROM result",
+            list(updated.values()),
+        ).fetchone()[0]
+        assert valid != 0
 
 
 if __name__ == "__main__":
