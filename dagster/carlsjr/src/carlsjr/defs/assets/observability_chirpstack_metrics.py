@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
 
@@ -14,7 +15,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from dagster import AssetExecutionContext, AssetIn, AssetKey, MaterializeResult, Output, RetryPolicy, asset
+from dagster import AssetExecutionContext, AssetIn, AssetKey, AssetObservation, MaterializeResult, Output, RetryPolicy, asset
 
 from ...operations_window import OPERATIONS_TIMEZONE
 from ..resources import (
@@ -356,6 +357,7 @@ def observability_chirpstackmetrics(
 
 @asset(
     name="observability_chirpstackmqttmetrics",
+    output_required=False,
     group_name="carlsjr",
     key_prefix=["carlsjr"],
     ins={
@@ -373,7 +375,7 @@ def observability_chirpstackmetrics(
 def observability_chirpstackmqttmetrics(
     context: AssetExecutionContext,
     chirpstack_scope: dict,
-) -> MaterializeResult:
+) -> Iterator[MaterializeResult]:
     start_time = perf_counter()
     mqtt_history: MqttEventHistoryApiResource = (
         context.resources.mqtt_event_history_api
@@ -396,6 +398,45 @@ def observability_chirpstackmqttmetrics(
         - timedelta(hours=mqtt_history.lookback_hours - 1)
     )
     to_utc = extracted_at
+    windows = []
+    window_from_utc = from_utc
+    while window_from_utc < to_utc:
+        window_to_utc = window_from_utc + timedelta(hours=1)
+        window_from_local = window_from_utc.replace(tzinfo=timezone.utc).astimezone(
+            OPERATIONS_TIMEZONE
+        )
+        window_to_local = window_to_utc.replace(tzinfo=timezone.utc).astimezone(
+            OPERATIONS_TIMEZONE
+        )
+        offset_decrease = window_from_local.utcoffset() - window_to_local.utcoffset()
+        if offset_decrease > timedelta(0):
+            window_to_utc += offset_decrease
+        if (
+            (offset_decrease > timedelta(0) or window_from_local.fold)
+            and window_to_utc > to_utc
+        ):
+            context.log.info(
+                f"Deferring ChirpStack MQTT until {window_to_utc} UTC "
+                "to recover the complete repeated local hour; watermark unchanged"
+            )
+            context.log_event(AssetObservation(
+                asset_key=context.asset_key,
+                metadata={
+                    "status": "DEFERRED_DST",
+                    "resume_after_utc": str(window_to_utc),
+                    "from_utc": str(from_utc),
+                    "to_utc": str(to_utc),
+                },
+            ))
+            return
+        window_to_utc = min(window_to_utc, to_utc)
+        windows.append((
+            window_from_local.replace(tzinfo=None),
+            window_to_utc.replace(tzinfo=timezone.utc)
+            .astimezone(OPERATIONS_TIMEZONE)
+            .replace(tzinfo=None),
+        ))
+        window_from_utc = window_to_utc
     sql.mark_run_started(MQTT_INGESTION_NAME)
     run_id = context.run_id
     device_event_staged_rows = 0
@@ -408,23 +449,13 @@ def observability_chirpstackmqttmetrics(
     try:
         sql.clear_chirpstack_mqtt_metrics_stage(run_id)
         event_rows = []
-        window_from_utc = from_utc
-        while window_from_utc < to_utc:
-            window_to_utc = min(
-                window_from_utc + timedelta(hours=1),
-                to_utc,
-            )
+        for window_from_local, window_to_local in windows:
             event_rows.extend(
                 mqtt_history.fetch_range(
-                    window_from_utc.replace(tzinfo=timezone.utc)
-                    .astimezone(OPERATIONS_TIMEZONE)
-                    .replace(tzinfo=None),
-                    window_to_utc.replace(tzinfo=timezone.utc)
-                    .astimezone(OPERATIONS_TIMEZONE)
-                    .replace(tzinfo=None),
+                    window_from_local,
+                    window_to_local,
                 )
             )
-            window_from_utc = window_to_utc
 
         (
             device_event_rows,
@@ -498,7 +529,7 @@ def observability_chirpstackmqttmetrics(
             context.log.warning("Could not persist the failed ChirpStack MQTT run state")
         raise
 
-    return MaterializeResult(
+    yield MaterializeResult(
         metadata={
             "device_event_row_count": device_event_merged_rows,
             "device_event_staged_rows": device_event_staged_rows,

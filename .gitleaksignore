@@ -19,3 +19,9 @@ dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-a
 dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:619
 dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:664
 dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:721
+dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1336
+dagster/carlsjr/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1466
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1137
+dagster/emerson/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1267
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1137
+dagster/valledelencino/tests/test_chirpstack_observability.py:hardcoded-secret-assignment:1267

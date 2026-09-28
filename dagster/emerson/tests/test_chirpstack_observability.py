@@ -8,9 +8,10 @@ import unittest
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from email.message import Message
 from pathlib import Path
-from unittest.mock import patch
-from urllib.error import URLError
+from unittest.mock import Mock, PropertyMock, patch
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -1100,6 +1101,200 @@ def test_mqtt_replay_preserves_radio_triplets(count, signal, previous, incoming,
             list(updated.values()),
         ).fetchone()[0]
         assert valid != 0
+
+
+@pytest.mark.parametrize("lookback", (1, 6))
+@pytest.mark.parametrize("mode", ("events", "empty", "504", "limit", "failure"))
+def test_mqtt_dst_defers_then_recovers_both_utc_hours(lookback, mode):
+    from dagster import AssetKey, AssetSpec, IOManager, IOManagerDefinition, RetryPolicy, materialize
+    from pyspark.sql.types import _make_type_verifier
+
+    module = importlib.import_module("emerson.defs.assets.observability_chirpstack_metrics")
+    mqtt_module = importlib.import_module("emerson.defs.resources.mqtt_event_history")
+    dev_eui = "0000000000000001"
+    tenant_id = "00000000-0000-0000-0000-000000000003"
+    scope = {"devices": {dev_eui: tenant_id}}
+    source_rows = []
+    for index, (hour, minute) in enumerate(((7, 0), (7, 15), (8, 0), (8, 45), (9, 0)), 1):
+        event_time = datetime(2026, 11, 1, hour, minute, tzinfo=timezone.utc)
+        source_rows.append({
+            "id": f"00000000-0000-0000-0000-{index:012d}",
+            "deveui": dev_eui,
+            "tenant": mqtt_module.EVENT_API_TENANT,
+            "fecha": event_time.astimezone(module.OPERATIONS_TIMEZONE).replace(tzinfo=None).isoformat(),
+            "mensaje_raw": json.dumps({
+                "time": event_time.isoformat(),
+                "deduplicationId": f"00000000-0000-0000-0000-{index:012d}",
+                "deviceInfo": {"devEui": dev_eui, "tenantId": tenant_id},
+                "rxInfo": [{"gatewayId": "0000000000000002", "rssi": -80, "snr": 5}],
+            }),
+        })
+    source_rows.append({**source_rows[1], "id": "00000000-0000-0000-0000-000000000006"})
+    watermark = datetime(2026, 11, 1, 6, 30, tzinfo=timezone.utc)
+    for hour in (7, 8, 9, 10):
+        now = datetime(2026, 11, 1, hour, 30, tzinfo=timezone.utc)
+        mqtt = module.MqttEventHistoryApiResource(
+            url="https://mqtt.test/history", user="synthetic", password="synthetic",
+            timeout_seconds=5, lookback_hours=lookback, limit=3 if mode == "limit" else 5000,
+        )
+        sql = Mock(spec=module.SqlServerResource)
+        sql.get_watermark.return_value = watermark
+        sql.write_mqtt_event_history_rejected_rows.return_value = (0, 0)
+        sql.merge_chirpstack_mqtt_metrics.return_value = (0, 0)
+        spark = Mock(spec=module.SparkResource)
+        spark.write_chirpstack_device_event_metrics_stage.return_value = 0
+        spark.write_chirpstack_device_gateway_metrics_stage.return_value = 0
+        io_manager = Mock(spec=IOManager)
+        io_manager.load_input.return_value = scope
+        requests = []
+        injected = False
+
+        def respond(request, timeout):
+            nonlocal injected
+            query = parse_qs(urlparse(request.full_url).query)
+            start = datetime.fromisoformat(query["fechaInicio"][0].removesuffix("Z"))
+            end = datetime.fromisoformat(query["fechaFin"][0].removesuffix("Z"))
+            assert start < end
+            requests.append((start, end))
+            if (
+                not injected and start == datetime(2026, 11, 1, 1)
+                and end == datetime(2026, 11, 1, 2)
+                and (mode == "504" or mode == "failure" and hour == 9)
+            ):
+                injected = True
+                raise HTTPError(request.full_url, 504 if mode == "504" else 401, "synthetic", {}, None)
+            rows = [
+                row for row in source_rows
+                if start <= datetime.fromisoformat(row["fecha"]) < end
+            ] if mode != "empty" else []
+            response = io.BytesIO(json.dumps({
+                "ok": True, "tenant": mqtt_module.EVENT_API_TENANT,
+                "fecha_inicio": query["fechaInicio"][0], "fecha_fin": query["fechaFin"][0],
+                "total": len(rows), "data": rows[:mqtt.limit],
+            }).encode())
+            response.status = 200
+            response.headers = Message()
+            response.headers["Content-Type"] = "application/json"
+            return response
+
+        with (
+            patch.object(module, "datetime", wraps=datetime) as clock,
+            patch.object(mqtt_module, "urlopen", side_effect=respond),
+            patch.object(mqtt_module, "sleep"),
+            patch.object(
+                type(module.observability_chirpstackmqttmetrics.op), "retry_policy",
+                new_callable=PropertyMock, return_value=RetryPolicy(max_retries=0),
+            ),
+        ):
+            clock.now.return_value = now
+            result = materialize(
+                [
+                    AssetSpec(key=AssetKey(["emerson", "observability_chirpstackmetrics"])),
+                    module.observability_chirpstackmqttmetrics,
+                ],
+                resources={
+                    "mqtt_event_history_api": mqtt, "sqlserver": sql, "spark": spark,
+                    "io_manager": IOManagerDefinition.hardcoded_io_manager(io_manager),
+                },
+                raise_on_error=False,
+            )
+        materializations = result.get_asset_materialization_events()
+        if hour < 9:
+            assert result.success
+            assert materializations == []
+            observations = result.get_asset_observation_events()
+            assert len(observations) == 1
+            metadata = observations[0].event_specific_data.asset_observation.metadata
+            assert metadata["status"].value == "DEFERRED_DST"
+            assert metadata["resume_after_utc"].value == "2026-11-01 09:00:00"
+            assert requests == []
+            assert [method[0] for method in sql.mock_calls] == ["get_watermark"]
+            assert spark.mock_calls == []
+            continue
+        assert (datetime(2026, 11, 1, 1), datetime(2026, 11, 1, 2)) in requests or (
+            hour == 10 and lookback == 1 and mode != "failure"
+        )
+        if mode == "failure" and hour == 9:
+            assert not result.success
+            assert materializations == []
+            sql.merge_chirpstack_mqtt_metrics.assert_not_called()
+            assert sql.mark_run_completed.call_args.kwargs["succeeded"] is False
+            assert sql.mark_run_completed.call_args.kwargs["new_last_loaded_at"] == watermark.replace(tzinfo=None)
+            continue
+        assert result.success
+        assert len(materializations) == 1
+        frame_calls = spark.get_spark.return_value.createDataFrame.call_args_list
+        assert len(frame_calls) == 2
+        for frame_call in frame_calls:
+            rows, schema = frame_call.args
+            for row in rows:
+                _make_type_verifier(schema)(row)
+        device_rows = frame_calls[0].args[0]
+        from_utc = watermark.replace(tzinfo=None, minute=0, second=0) - timedelta(hours=lookback - 1)
+        expected = {}
+        cursor = from_utc
+        while cursor < now.replace(tzinfo=None):
+            expected[cursor] = 0 if mode == "empty" else {7: 2, 8: 2, 9: 1}.get(cursor.hour, 0)
+            cursor += timedelta(hours=1)
+        assert {row["TimeSpan"]: row["CapturedUplinkCount"] for row in device_rows} == expected
+        assert len(device_rows) == len(expected)
+        assert mqtt.rejected_rows == []
+        if mode in ("504", "limit") and (hour == 9 or lookback == 6):
+            assert mqtt.windows_split > 0
+        sql.mark_run_completed.assert_called_once_with(
+            ingestion_name=module.MQTT_INGESTION_NAME,
+            new_last_loaded_at=now.replace(tzinfo=None), succeeded=True, error_message=None,
+        )
+        watermark = now
+
+
+@pytest.mark.parametrize(
+    "watermark,now,deferred,expected_windows",
+    (
+        (datetime(2026, 11, 1, 7, 30), datetime(2026, 11, 1, 9), False, ((1, 2),)),
+        (datetime(2026, 11, 1, 8), datetime(2026, 11, 1, 8, 59), True, ()),
+        (datetime(2026, 11, 1, 8), datetime(2026, 11, 1, 9), False, ((1, 2),)),
+        (None, datetime(2026, 11, 1, 8, 30), True, ()),
+        (datetime(2026, 3, 8, 8), datetime(2026, 3, 8, 10), False, ((1, 3), (3, 4))),
+        (datetime(2026, 11, 2, 8), datetime(2026, 11, 2, 10), False, ((1, 2), (2, 3))),
+    ),
+)
+def test_mqtt_dst_window_boundaries(watermark, now, deferred, expected_windows):
+    from dagster import build_asset_context
+
+    module = importlib.import_module("emerson.defs.assets.observability_chirpstack_metrics")
+    mqtt = module.MqttEventHistoryApiResource(
+        url="https://mqtt.test/history", user="synthetic", password="synthetic",
+        timeout_seconds=5, lookback_hours=1,
+    )
+    sql = Mock(spec=module.SqlServerResource)
+    sql.get_watermark.return_value = watermark
+    sql.write_mqtt_event_history_rejected_rows.return_value = (0, 0)
+    sql.merge_chirpstack_mqtt_metrics.return_value = (0, 0)
+    spark = Mock(spec=module.SparkResource)
+    spark.write_chirpstack_device_event_metrics_stage.return_value = 0
+    spark.write_chirpstack_device_gateway_metrics_stage.return_value = 0
+    with (
+        build_asset_context(resources={"mqtt_event_history_api": mqtt, "sqlserver": sql, "spark": spark}) as context,
+        patch.object(module, "datetime", wraps=datetime) as clock,
+        patch.object(mqtt, "_request_window", return_value=[]) as request,
+    ):
+        clock.now.return_value = now.replace(tzinfo=timezone.utc)
+        results = list(module.observability_chirpstackmqttmetrics(
+            context,
+            {"devices": {"0000000000000001": "00000000-0000-0000-0000-000000000003"},
+             "original_last_loaded_at": None},
+        ))
+    assert len(results) == (0 if deferred else 1)
+    assert [(c.args[0].hour, c.args[1].hour) for c in request.call_args_list] == list(expected_windows)
+    if deferred:
+        sql.mark_run_started.assert_not_called()
+        sql.mark_run_completed.assert_not_called()
+    else:
+        sql.mark_run_completed.assert_called_once_with(
+            ingestion_name=module.MQTT_INGESTION_NAME,
+            new_last_loaded_at=now, succeeded=True, error_message=None,
+        )
 
 
 if __name__ == "__main__":
