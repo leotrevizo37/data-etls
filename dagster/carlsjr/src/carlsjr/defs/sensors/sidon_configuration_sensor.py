@@ -220,7 +220,7 @@ def _candidates(snapshot):
 
 @sensor(
     minimum_interval_seconds=30,
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
     required_resource_keys={"sqlserver", "dim_sqlserver", "sidon_configuration_ai"},
 )
 def sidon_configuration_sensor(context):
