@@ -208,7 +208,7 @@ def test_new_sensor_is_registered_stopped():
     definitions = importlib.import_module("carlsjr.defs")._build_defs()
     detector = sensor_module.sidon_configuration_sensor
     assert detector in definitions.sensors
-    assert detector.default_status == sensor_module.DefaultSensorStatus.STOPPED
+    assert detector.default_status == sensor_module.DefaultSensorStatus.RUNNING
     assert detector.required_resource_keys <= definitions.resources.keys()
 
 

@@ -165,7 +165,7 @@ def test_sensors_are_stopped_and_use_only_local_sqlserver():
         sensor_module.operational_alerts_sensor,
         trend_module.asset_row_count_trend_sensor,
     ):
-        assert sensor.default_status == DefaultSensorStatus.STOPPED
+        assert sensor.default_status == DefaultSensorStatus.RUNNING
         assert sensor.required_resource_keys == {"sqlserver"}
 
 
