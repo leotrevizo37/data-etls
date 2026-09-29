@@ -103,6 +103,7 @@ def _candidates(snapshot):
             problems.append("El tipo del dispositivo no existe o está inactivo.")
         payload = {
             "kind": "device_configuration",
+            "device_id": device_id,
             "device": device["Name"] if device else None,
             "device_type": device_type["Name"] if device_type else None,
             "sensors": [],
@@ -148,6 +149,7 @@ def _candidates(snapshot):
             problems.append("La alerta activa no tiene condiciones activas.")
         payload = {
             "kind": "alert_configuration",
+            "alert_id": alert_id,
             "device_type": device_type["Name"] if device_type else None,
             "devices": [],
         }
@@ -175,6 +177,7 @@ def _candidates(snapshot):
                 if not matching:
                     problems.append("Una condición no tiene sensores activos de su tipo en un dispositivo aplicable.")
                 item = {
+                    "alert_condition_id": str(condition["AlertConditionId"]),
                     "sensor_type": sensor_type["Name"] if sensor_type else None,
                     "unit": sensor_type["UnitAbbreviation"] if sensor_type else None,
                     "unit_name": sensor_type["UnitName"] if sensor_type else None,
@@ -207,7 +210,6 @@ def _candidates(snapshot):
                             and reference["EndTime"] is not None
                             and reference["scheduledDays"]
                         )
-                    complete = complete and bool(ranges)
                     item["sensors"].append({"sensor": row["Name"], "expected_ranges": ranges})
                 evaluation["conditions"].append(item)
             payload["devices"].append(evaluation)
@@ -317,7 +319,10 @@ def sidon_configuration_sensor(context):
                     connection, rule, "sensor_monitoring", entity_key, entity_key,
                     now, "; ".join(assessment["reasons"]), metadata,
                 )
-            elif candidate["complete"] and incidents:
+            elif candidate["complete"] and incidents and all(
+                sensor["expected_ranges"] for device in candidate["payload"].get("devices", [])
+                for condition in device["conditions"] for sensor in condition["sensors"]
+            ):
                 incident = incidents[0]
                 previous = json.loads(incident["metadata_json"])
                 if (

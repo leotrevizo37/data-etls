@@ -42,28 +42,33 @@ def snapshot():
     }
 
 
-def test_payload_preserves_ranges_and_omits_source_ids(snapshot):
+def test_payload_preserves_ranges_and_includes_entity_ids(snapshot):
     second = dict(snapshot["expected"][0], StartTime=time(12), min_expected_value=None, max_expected_value=Decimal("12"), scheduledDays="6,7")
     snapshot["expected"].append(second)
     candidates = sensor_module._candidates(snapshot)
     alert = candidates[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     assert alert["complete"] and not alert["problems"]
+    assert candidates[(sensor_module._DEVICE_TYPE, "device:device-id")]["payload"]["device_id"] == "device-id"
+    assert alert["payload"]["alert_id"] == "alert-id"
     item = alert["payload"]["devices"][0]["conditions"][0]
+    assert item["alert_condition_id"] == "condition-id"
     assert item["threshold"] == 10 and item["operator"] == ">="
     ranges = item["sensors"][0]["expected_ranges"]
     assert ranges[0]["min"] == 0 and ranges[1]["min"] is None
     assert ranges[1]["start"] == "12:00:00" and ranges[1]["days"] == "6,7"
     for candidate in candidates.values():
-        assert "-id" not in json.dumps(candidate["payload"])
+        assert "source_ids" not in candidate["payload"]
 
 
 @pytest.mark.parametrize("missing", ["expected", "device_types", "sensor_types", "conditions", "sensors"])
 def test_missing_evidence_is_not_consistent(snapshot, missing):
     snapshot[missing] = []
     alert = sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
-    assert alert["problems"] or not alert["complete"]
     if missing == "expected":
-        assert not alert["problems"]
+        assert alert["complete"] and not alert["problems"]
+        assert alert["payload"]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
+    else:
+        assert alert["problems"] or not alert["complete"]
 
 
 def test_stopped_devices_and_inactive_alerts_are_excluded(snapshot):
@@ -159,14 +164,36 @@ def test_structural_detection_does_not_need_azure(evaluation, snapshot):
     assert detected.called and not evaluator.evaluate.called
 
 
-def test_alert_without_expected_ranges_cannot_clear(evaluation, snapshot):
+@pytest.mark.parametrize("status,detects", [("consistent", False), ("suspicious", True)])
+def test_alert_without_expected_ranges_is_evaluated_without_unsafe_clear(evaluation, snapshot, status, detects):
     context, evaluator, detected, cleared, config, _ = evaluation
     snapshot["expected"] = []
+    evaluator.evaluate.return_value["status"] = status
+    rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
+    rule["alert_type"] = sensor_module._ALERT_TYPE
+    config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
+    sensor_module._rows.return_value = [{"metadata_json": json.dumps({
+        "source_fingerprint": "previous-source", "policy": evaluator.policy,
+        "assessment": {"model": "test-model"},
+    })}]
+    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert evaluator.evaluate.call_args.args[0]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
+    assert detected.called == detects and not cleared.called
+
+
+def test_alert_with_mixed_expected_ranges_evaluates_all_devices(evaluation, snapshot):
+    context, evaluator, detected, cleared, config, _ = evaluation
+    snapshot["devices"].append(dict(snapshot["devices"][0], DeviceId="device-two", Name="Otro congelador"))
+    snapshot["sensors"].append(dict(snapshot["sensors"][0], SensorId="sensor-two", DeviceId="device-two"))
     rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
     rule["alert_type"] = sensor_module._ALERT_TYPE
     config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
     sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert not evaluator.evaluate.called and not detected.called and not cleared.called
+    devices = evaluator.evaluate.call_args.args[0]["devices"]
+    assert len(devices) == 2
+    assert devices[0]["conditions"][0]["sensors"][0]["expected_ranges"]
+    assert devices[1]["conditions"][0]["sensors"][0]["expected_ranges"] == []
+    assert detected.called and not cleared.called
 
 
 def test_disabled_entity_override_is_respected(evaluation):
