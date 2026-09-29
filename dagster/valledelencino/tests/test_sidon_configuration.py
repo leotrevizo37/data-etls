@@ -110,6 +110,7 @@ def evaluation(monkeypatch, snapshot):
         "alert_type": sensor_module._DEVICE_TYPE, "alert_type_id": "type-id",
         "is_enabled": True, "evaluation_interval_seconds": 3600,
         "rule_version": b"1", "alert_rule_id": "rule-id",
+        "severity": "WARNING", "severity_id": "warning-id",
     }
     config = {"version_token": "1", "rules": {(sensor_module._DEVICE_TYPE, None): rule}}
     evaluator = SimpleNamespace(policy="policy-1", evaluate=Mock(return_value={
@@ -181,16 +182,28 @@ def test_active_configuration_is_tenant_scoped():
     assert cursor.execute.call_args.args[1:] == ("valledelencino",)
 
 
-@pytest.mark.parametrize("status,confidence,error", [
-    ("insufficient_evidence", 1, None), ("suspicious", 0.89, None),
-    ("consistent", 0.95, TimeoutError()), ("consistent", 0.95, ValueError()),
+@pytest.mark.parametrize("status,confidence,error,detects", [
+    ("insufficient_evidence", 0.8, None, False), ("insufficient_evidence", 0.95, None, True),
+    ("suspicious", 0.89, None, True), ("consistent", 0.89, None, False),
+    ("consistent", 0.95, TimeoutError(), False), ("consistent", 0.95, ValueError(), False),
 ])
-def test_inconclusive_evaluation_emits_nothing(evaluation, status, confidence, error):
+def test_inconclusive_evaluation_warning(evaluation, status, confidence, error, detects):
     context, evaluator, detected, cleared, _, _ = evaluation
     evaluator.evaluate.return_value.update(status=status, confidence=confidence)
     evaluator.evaluate.side_effect = error
     sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert not detected.called and not cleared.called
+    assert detected.called == detects and not cleared.called
+    if detects:
+        assert detected.call_args.kwargs["severity_id"] == "warning-id"
+
+
+def test_low_confidence_uses_warning_severity_with_other_rule_severity(evaluation):
+    context, evaluator, detected, _, config, _ = evaluation
+    config["rules"][(sensor_module._DEVICE_TYPE, None)].update(severity="CRITICAL", severity_id="critical-id")
+    evaluator.evaluate.return_value["confidence"] = 0.8
+    sensor_module._rows.side_effect = [[], [{"severity_id": "warning-id"}]]
+    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert detected.call_args.kwargs["severity_id"] == "warning-id"
 
 
 def test_structural_detection_does_not_need_azure(evaluation, snapshot):
@@ -288,7 +301,7 @@ def azure(monkeypatch):
     connection = MagicMock()
     response = connection.getresponse.return_value
     response.status = 200
-    assessment = {"status": "consistent", "confidence": 0.95, "reasons": ["Tipos compatibles."]}
+    assessment = {"verdict": "valid", "confidence": 0.95, "reasons": ["Tipos compatibles."], "reasoning": {"analysis": "Comprobación de relaciones."}}
     result = {"model": "test-model", "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(assessment)}}]}
     response.read.side_effect = lambda _: json.dumps(result).encode()
     factory = Mock(return_value=connection)
@@ -299,7 +312,9 @@ def azure(monkeypatch):
 
 def test_azure_request_contract(azure):
     client, connection, _, _, _ = azure
-    assert client.evaluate({"kind": "device_configuration"})["model"] == "test-model"
+    evaluated = client.evaluate({"kind": "device_configuration"})
+    assert evaluated["model"] == "test-model" and evaluated["status"] == "consistent"
+    assert "reasoning" not in evaluated and "verdict" not in evaluated
     args = connection.request.call_args.args
     assert args[:2] == ("POST", "/openai/v1/chat/completions")
     body = json.loads(args[2])
@@ -309,7 +324,15 @@ def test_azure_request_contract(azure):
     connection.close.assert_called_once()
 
 
-@pytest.mark.parametrize("invalid", ["truncated", "refusal", "redirect", "nan", "bool", "empty", "extra", "status", "model"])
+@pytest.mark.parametrize("verdict,status", [("problem", "suspicious"), ("unknown", "insufficient_evidence")])
+def test_ai_verdict_maps_to_sensor_status(azure, verdict, status):
+    client, _, result, assessment, _ = azure
+    assessment["verdict"] = verdict
+    result["choices"][0]["message"]["content"] = json.dumps(assessment)
+    assert client.evaluate({})["status"] == status
+
+
+@pytest.mark.parametrize("invalid", ["truncated", "refusal", "redirect", "nan", "bool", "empty", "multiple", "reasoning", "extra", "status", "model"])
 def test_invalid_azure_response_is_rejected(azure, invalid):
     client, connection, result, assessment, _ = azure
     if invalid == "truncated":
@@ -324,12 +347,16 @@ def test_invalid_azure_response_is_rejected(azure, invalid):
         assessment["confidence"] = True
     elif invalid == "empty":
         assessment["reasons"] = []
+    elif invalid == "multiple":
+        assessment["reasons"].append("Otra razón.")
+    elif invalid == "reasoning":
+        assessment["reasoning"] = {"analysis": ""}
     elif invalid == "extra":
         assessment["unrequested"] = "data"
     elif invalid == "model":
         result["model"] = None
     else:
-        assessment["status"] = "unknown"
+        assessment["verdict"] = "invalid"
     result["choices"][0]["message"]["content"] = json.dumps(assessment)
     with pytest.raises(ValueError):
         client.evaluate({})

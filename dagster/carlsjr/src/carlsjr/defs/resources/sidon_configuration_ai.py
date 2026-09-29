@@ -15,14 +15,16 @@ device_configuration: relación entre dispositivo, tipo y sensores.
 alert_configuration: para cada condición, interpreta operador, umbral y unidad;
 compáralos con el nombre de la alerta, la función del equipo y cada rango esperado.
 Una alerta que se activa mucho después de perderse esa función es sospechosa.
-Si el tipo o unidad indica un estado binario 0/1 (puerta, presencia), prueba
-ambos valores: si ninguno satisface la condición, esta nunca se activará.
+Si tipo o unidad nombra dos estados (p. ej. Abierto/Cerrado), trata el sensor
+como 0/1: prueba ambos valores. Una condición >2 nunca se activa; verdict=problem
+aunque expected_ranges esté vacío.
 No supongas cuál valor significa abierto o presente ni una codificación distinta.
 La ausencia de rangos no impide detectar una contradicción; un umbral fuera
 del rango tampoco es sospechoso por sí solo. No asumas AND/OR entre condiciones.
-Devuelve suspicious ante cualquier contradicción fundada, aunque falten otros
-datos; insufficient_evidence solo si no puedes decidir y no hay anomalía
-identificable; consistent solo tras revisar todas las relaciones.
+En verdict responde problem si alguna condición contradice el rango esperado
+o dispararía demasiado tarde, aunque falten otros datos; valid solo si todas
+son congruentes; unknown solo si no puedes decidir ni identificar anomalías.
+Si reasoning o reasons describe una inconsistencia, verdict debe ser problem.
 Calibra confidence con la evidencia de la contradicción, no con datos ajenos.
 En reasons escribe una sola frase breve, concreta y sin especulaciones.
 Responde en español. No recomiendes cambios.
@@ -31,12 +33,12 @@ Responde en español. No recomiendes cambios.
 _SCHEMA = {
     "type": "object",
     "properties": {
-        "status": {
+        "verdict": {
             "type": "string",
-            "enum": ["consistent", "suspicious", "insufficient_evidence"],
+            "enum": ["valid", "problem", "unknown"],
         },
         "confidence": {"type": "number"},
-        "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 1},
+        "reasons": {"type": "array", "items": {"type": "string"}},
         "reasoning": {
             "type": "object",
             "properties": {"analysis": {"type": "string"}},
@@ -44,7 +46,7 @@ _SCHEMA = {
             "additionalProperties": False,
         },
     },
-    "required": ["status", "confidence", "reasons", "reasoning"],
+    "required": ["verdict", "confidence", "reasons", "reasoning"],
     "additionalProperties": False,
 }
 
@@ -132,8 +134,8 @@ class SidonConfigurationAI:
             assessment = json.loads(choice["message"]["content"])
             confidence = assessment["confidence"]
             if (
-                set(assessment) != {"status", "confidence", "reasons", "reasoning"}
-                or assessment["status"] not in _SCHEMA["properties"]["status"]["enum"]
+                set(assessment) != {"verdict", "confidence", "reasons", "reasoning"}
+                or assessment["verdict"] not in _SCHEMA["properties"]["verdict"]["enum"]
                 or type(confidence) not in (int, float)
                 or not math.isfinite(confidence)
                 or not 0 <= confidence <= 1
@@ -152,6 +154,7 @@ class SidonConfigurationAI:
             ):
                 raise ValueError("Evaluación SIDON AI inválida.")
             assessment.pop("reasoning")
+            assessment["status"] = {"valid": "consistent", "problem": "suspicious", "unknown": "insufficient_evidence"}[assessment.pop("verdict")]
             assessment["model"] = result["model"]
             return assessment
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:

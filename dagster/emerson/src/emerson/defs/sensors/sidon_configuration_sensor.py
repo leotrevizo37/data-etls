@@ -290,7 +290,9 @@ def sidon_configuration_sensor(context):
                 assessment = evaluator.evaluate(candidate["payload"])
             except (ValueError, OSError, http.client.HTTPException):
                 return SkipReason("Evaluación SIDON AI no disponible o inválida; no se emiten señales.")
-        if assessment["status"] == "insufficient_evidence" or assessment["confidence"] < 0.9:
+        warning = (assessment["status"] == "suspicious" and assessment["confidence"] < 0.9
+                   or assessment["status"] == "insufficient_evidence" and assessment["confidence"] >= 0.9)
+        if not warning and (assessment["status"] == "insufficient_evidence" or assessment["confidence"] < 0.9):
             state["pending"].remove([kind, entity_key])
             context.update_cursor(json.dumps(state))
             return SkipReason("Evaluación SIDON inconclusa; no se emiten señales.")
@@ -315,10 +317,15 @@ def sidon_configuration_sensor(context):
                         AND is_point_in_time = 0
                 """, rule["alert_type_id"], entity_key)
                 incidents = _rows(cursor)
-            if assessment["status"] == "suspicious":
+            if assessment["status"] == "suspicious" or warning:
+                severity_id = rule["severity_id"]
+                if warning and rule["severity"] != "WARNING":
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT severity_id FROM alerting.dim_severity WHERE code = N'WARNING'")
+                        severity_id = _rows(cursor)[0]["severity_id"]
                 _record_detected(
                     connection, rule, "sensor_monitoring", entity_key, entity_key,
-                    now, "; ".join(assessment["reasons"]), metadata,
+                    now, "; ".join(assessment["reasons"]), metadata, severity_id=severity_id,
                 )
             elif candidate["complete"] and incidents and all(
                 sensor["expected_ranges"] for device in candidate["payload"].get("devices", [])
