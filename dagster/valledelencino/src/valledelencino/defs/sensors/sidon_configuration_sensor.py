@@ -35,7 +35,7 @@ def _snapshot(source, warehouse, watermark_only=False):
         "device_types": "SELECT DeviceTyId, Name, Active FROM dbo.DeviceTys ORDER BY DeviceTyId",
         "sensors": "SELECT SensorId, DeviceId, SensorTyId, Name, Active FROM dbo.Sensors ORDER BY SensorId",
         "sensor_types": "SELECT SensorTyId, Name, UnitName, UnitAbbreviation, Active FROM dbo.SensorTys ORDER BY SensorTyId",
-        "alerts": "SELECT AlertId, DeviceTyId, Active FROM dbo.Alerts ORDER BY AlertId",
+        "alerts": "SELECT AlertId, Name, DeviceTyId, Active FROM dbo.Alerts ORDER BY AlertId",
         "conditions": "SELECT AlertConditionId, AlertId, SensorTyId, Operator, Value, Active FROM dbo.AlertConditions ORDER BY AlertConditionId",
         "stopped": "SELECT AlertId, DeviceId FROM dbo.AlertStoppedOnDevices WHERE Active = 1 ORDER BY AlertId, DeviceId",
     }
@@ -150,6 +150,7 @@ def _candidates(snapshot):
         payload = {
             "kind": "alert_configuration",
             "alert_id": alert_id,
+            "alert_name": alert["Name"],
             "device_type": device_type["Name"] if device_type else None,
             "devices": [],
         }

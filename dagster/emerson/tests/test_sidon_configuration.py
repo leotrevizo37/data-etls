@@ -36,7 +36,7 @@ def snapshot():
         "device_types": [{"DeviceTyId": "device-type-id", "Name": "Congelador", "Active": True}],
         "sensors": [{"SensorId": "sensor-id", "DeviceId": "device-id", "SensorTyId": "sensor-type-id", "Name": "Temperatura", "Active": True}],
         "sensor_types": [{"SensorTyId": "sensor-type-id", "Name": "Temperatura F", "UnitName": "Fahrenheit", "UnitAbbreviation": "F", "Active": True}],
-        "alerts": [{"AlertId": "alert-id", "DeviceTyId": "device-type-id", "Active": True}],
+        "alerts": [{"AlertId": "alert-id", "Name": "Temperatura alta", "DeviceTyId": "device-type-id", "Active": True}],
         "conditions": [{"AlertConditionId": "condition-id", "AlertId": "alert-id", "SensorTyId": "sensor-type-id", "Operator": ">=", "Value": 10.0, "Active": True}],
         "stopped": [],
         "expected": [{"SensorId": "sensor-id", "DeviceId": "device-id", "min_expected_value": Decimal("0"), "max_expected_value": Decimal("10"), "StartTime": time(0), "EndTime": time(23, 59), "scheduledDays": "1,2,3,4,5,6,7"}],
@@ -51,6 +51,7 @@ def test_payload_preserves_ranges_and_includes_entity_ids(snapshot):
     assert alert["complete"] and not alert["problems"]
     assert candidates[(sensor_module._DEVICE_TYPE, "device:device-id")]["payload"]["device_id"] == "device-id"
     assert alert["payload"]["alert_id"] == "alert-id"
+    assert alert["payload"]["alert_name"] == "Temperatura alta"
     item = alert["payload"]["devices"][0]["conditions"][0]
     assert item["alert_condition_id"] == "condition-id"
     assert item["threshold"] == 10 and item["operator"] == ">="
