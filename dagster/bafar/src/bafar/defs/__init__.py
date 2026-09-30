@@ -11,9 +11,6 @@ __all__ = ["defs"]
 def _build_defs() -> Any:
     from dagster import Definitions
 
-    from .assets import operational_alerts
-    from .jobs import operational_alerts_job
-
     from .resources import (
         dim_sqlserver_resource,
         manager_access_api_resource,
@@ -28,8 +25,6 @@ def _build_defs() -> Any:
     )
 
     return Definitions(
-        assets=[operational_alerts],
-        jobs=[operational_alerts_job],
         resources={
             "spark": spark_resource,
             "spark_df_io_manager": spark_df_io_manager,

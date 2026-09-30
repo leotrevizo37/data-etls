@@ -2,25 +2,21 @@ import json
 import re
 import unicodedata
 import uuid
-from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import pyodbc
 from dagster import (
     AssetKey,
     AssetRecordsFilter,
     DagsterEventType,
     DagsterRunStatus,
     DefaultSensorStatus,
-    Failure,
-    RunRequest,
     RunsFilter,
     SensorEvaluationContext,
     SkipReason,
     sensor,
 )
-
-from ..jobs.operational_alerts_job import operational_alerts_job
 
 
 _USER_CODE = "carlsjr"
@@ -562,20 +558,18 @@ def _failed_run_assets(
     lookback_minutes: int,
     batch_size: int,
     now: datetime,
-    run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     run_records = context.instance.get_run_records(
         filters=RunsFilter(
             statuses=[DagsterRunStatus.FAILURE],
-            updated_after=now - timedelta(minutes=lookback_minutes) if run_id is None else None,
-            run_ids=[run_id] if run_id is not None else None,
+            updated_after=now - timedelta(minutes=lookback_minutes),
         ),
         limit=batch_size,
     )
     failures: dict[tuple[str, str], dict[str, Any]] = {}
     for run_record in run_records:
         run = run_record.dagster_run
-        if _code_location(run) != _USER_CODE or run.job_name == "operational_alerts_job":
+        if _code_location(run) != _USER_CODE:
             continue
         snapshot_id = getattr(run, "execution_plan_snapshot_id", None)
         if snapshot_id is None:
@@ -643,8 +637,6 @@ def _clear_dagster_failures(
     config: dict[str, Any],
     checks: dict[str, Any],
     now: datetime,
-    incident_id: str | None = None,
-    results: list[dict[str, Any]] | None = None,
 ) -> int:
     with connection.cursor() as cursor:
         cursor.execute(
@@ -668,11 +660,7 @@ def _clear_dagster_failures(
         incidents = _rows(cursor)
     cleared = 0
     for incident in incidents:
-        if incident_id is not None and str(incident["alert_id"]) != incident_id:
-            continue
         entity_key = incident["entity_key"]
-        if incident_id is not None and entity_key != context.op_config["entity_key"]:
-            raise Failure("La incidencia no corresponde a la entidad solicitada.")
         rule = _select_rule(config, "dagster_run_failure", entity_key)
         recovery_key = f"recovery::{incident['alert_id']}"
         if not rule["is_enabled"] or not _is_due(
@@ -687,7 +675,6 @@ def _clear_dagster_failures(
         )
         cursor = None
         recovered = False
-        result = {"incident_id": str(incident["alert_id"]), "outcome": "no_recovery_evidence"}
         while not recovered:
             page = context.instance.fetch_materializations(
                 records_filter,
@@ -714,15 +701,6 @@ def _clear_dagster_failures(
                         "materialization_storage_id": record.storage_id,
                     }
                 }
-                if incident_id is not None:
-                    current, reason = _load_active_config(connection)
-                    if (
-                        current is None or current["version_token"] != config["version_token"]
-                        or _select_rule(current, "dagster_run_failure", entity_key) != rule
-                    ):
-                        raise Failure(reason or "La configuración del detector cambió antes de confirmar la recuperación.")
-                    metadata["evaluation_run_id"] = context.run_id
-                result.update(metadata, outcome="deduplicated")
                 if _record_cleared(
                     connection,
                     incident,
@@ -734,115 +712,311 @@ def _clear_dagster_failures(
                     metadata,
                 ):
                     cleared += 1
-                    result["outcome"] = "cleared"
                 recovered = True
                 break
             if not page.has_more:
                 break
             cursor = page.cursor
         _mark_checked(config, rule, recovery_key, checks, now)
-        if results is not None:
-            results.append(result)
     return cleared
 
 
 @sensor(
     name="operational_alerts_sensor",
-    job=operational_alerts_job,
     minimum_interval_seconds=30,
     required_resource_keys={"sqlserver"},
     default_status=DefaultSensorStatus.RUNNING,
 )
 def operational_alerts_sensor(
     context: SensorEvaluationContext,
-) -> RunRequest | SkipReason:
+) -> SkipReason:
     now = datetime.now(timezone.utc)
     try:
-        state = json.loads(context.cursor or "{}")
+        cursor_state = json.loads(context.cursor or "{}")
     except (json.JSONDecodeError, TypeError):
-        state = {}
-    pending = state.setdefault("pending", {})
-    checks = state.setdefault("checks", {})
-    in_flight = state.get("in_flight")
-    if in_flight:
-        runs = context.instance.get_runs(filters=RunsFilter(
-            job_name=operational_alerts_job.name,
-            tags={"user_code": _USER_CODE, "dagster/sensor_name": "operational_alerts_sensor", "dagster/run_key": in_flight["run_key"]},
-        ), limit=1)
-        if not runs:
-            return RunRequest(
-                run_key=in_flight["run_key"],
-                run_config={"ops": {"carlsjr__operational_alerts": {"config": in_flight["config"]}}},
-                tags={"alert_type": in_flight["config"]["alert_type"], "entity_key": in_flight["config"]["entity_key"]},
+        cursor_state = {}
+    checks = dict(cursor_state.get("checks", {}))
+    try:
+        with context.resources.sqlserver._get_connection() as connection:
+            config, reason = _load_active_config(connection)
+            if config is None:
+                return SkipReason(reason)
+            incidents = _load_active_incidents(connection)
+            detected = 0
+            cleared = 0
+            statuses = _sensor_statuses(
+                connection,
+                config["sensor_lookback_hours"],
             )
-        if not runs[0].is_finished:
-            return SkipReason("La evaluación operativa anterior sigue pendiente o en ejecución.")
-        if runs[0].status == DagsterRunStatus.SUCCESS:
-            del pending[in_flight["pending_key"]]
-        del state["in_flight"]
-        context.update_cursor(json.dumps(state))
-    with closing(context.resources.sqlserver._get_connection()) as connection:
-        config, reason = _load_active_config(connection)
-        if config is None:
-            return SkipReason(reason)
-        candidates = []
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT DISTINCT LOWER(CONVERT(VARCHAR(36), SensorId)) AS entity_key
-                FROM observability.factRedingsAudits
-                WHERE TimeSpan >= DATEADD(HOUR, ?, SYSUTCDATETIME())
-                ORDER BY entity_key
-            """, -config["sensor_lookback_hours"])
-            for row in _rows(cursor):
-                candidates.extend((kind, row["entity_key"], "", "") for kind in ("connection_lost", "late_readings"))
-            cursor.execute("""
-                SELECT IngestionName AS entity_key
-                FROM ctl.IngestionControl WHERE IsActive = 1
-                ORDER BY IngestionName
-            """)
-            for row in _rows(cursor):
-                candidates.extend((kind, row["entity_key"], "", "") for kind in ("pipeline_failure", "pipeline_stale"))
-            if any(rule["alert_type"] == "dagster_run_failure" and rule["is_enabled"] for rule in config["rules"].values()):
+            dimensions = _sensor_dimensions(
+                connection,
+                [status["sensor_id"] for status in statuses],
+            )
+            for status in statuses:
+                entity_key = status["sensor_id"]
+                for alert_type in ("connection_lost", "late_readings"):
+                    rule = _select_rule(config, alert_type, entity_key)
+                    if not rule["is_enabled"] or not _is_due(
+                        config,
+                        rule,
+                        entity_key,
+                        checks,
+                        now,
+                    ):
+                        continue
+                    _mark_checked(config, rule, entity_key, checks, now)
+                    incident = incidents.get((alert_type, entity_key))
+                    threshold = (
+                        incident["no_readings_minutes"]
+                        if incident is not None
+                        and incident["no_readings_minutes"] is not None
+                        else rule["no_readings_minutes"]
+                    )
+                    source_age = (
+                        incident["source_max_age_minutes"]
+                        if incident is not None
+                        and incident["source_max_age_minutes"] is not None
+                        else rule["source_max_age_minutes"]
+                    )
+                    values = (
+                        status["observed_at"],
+                        status["last_reading_at"],
+                        status["minutes_without_readings"],
+                        status["modified_at"],
+                    )
+                    if any(value is None for value in values):
+                        continue
+                    observed_at = _utc(status["observed_at"])
+                    last_reading_at = _utc(status["last_reading_at"])
+                    modified_at = _utc(status["modified_at"])
+                    if (
+                        observed_at > now
+                        or last_reading_at > now
+                        or modified_at > now
+                        or now - modified_at
+                        > timedelta(minutes=source_age)
+                    ):
+                        continue
+                    metadata = {
+                        "dimension": dimensions.get(entity_key),
+                        "measurements": {
+                            "observed_at": observed_at.isoformat(),
+                            "last_reading_at": last_reading_at.isoformat(),
+                            "minutes_without_readings": (
+                                status["minutes_without_readings"]
+                            ),
+                            "source_modified_at": modified_at.isoformat(),
+                        },
+                        "thresholds": {
+                            "no_readings_minutes": threshold,
+                            "source_max_age_minutes": source_age,
+                        },
+                    }
+                    if status["minutes_without_readings"] >= threshold:
+                        if incident is None:
+                            occurred_at = last_reading_at + timedelta(
+                                minutes=threshold
+                            )
+                            if occurred_at <= now and _record_detected(
+                                connection,
+                                rule,
+                                "sensor_monitoring",
+                                entity_key,
+                                entity_key,
+                                occurred_at,
+                                (
+                                    f"El sensor excedió {threshold} minutos "
+                                    "sin lecturas."
+                                ),
+                                metadata,
+                            ):
+                                detected += 1
+                        continue
+                    if (
+                        incident is not None
+                        and last_reading_at > _utc(incident["detected_at"])
+                        and _record_cleared(
+                            connection,
+                            incident,
+                            last_reading_at,
+                            "Una lectura posterior confirmó la recuperación.",
+                            metadata,
+                        )
+                    ):
+                        cleared += 1
+
+            for ingestion in _ingestions(connection):
+                entity_key = ingestion["ingestion_name"]
+                status_code = (ingestion["last_run_status"] or "").upper()
+                finished = ingestion["last_run_finished_at"]
+                for alert_type in ("pipeline_failure", "pipeline_stale"):
+                    rule = _select_rule(config, alert_type, entity_key)
+                    if not rule["is_enabled"] or not _is_due(
+                        config,
+                        rule,
+                        entity_key,
+                        checks,
+                        now,
+                    ):
+                        continue
+                    _mark_checked(config, rule, entity_key, checks, now)
+                    incident = incidents.get((alert_type, entity_key))
+                    metadata = {
+                        "evidence": {
+                            "last_run_status": status_code,
+                            "last_run_started_at": (
+                                _utc(ingestion["last_run_started_at"]).isoformat()
+                                if ingestion["last_run_started_at"] is not None
+                                else None
+                            ),
+                            "last_run_finished_at": (
+                                _utc(finished).isoformat()
+                                if finished is not None
+                                else None
+                            ),
+                            "last_run_error": ingestion["last_run_error"],
+                        }
+                    }
+                    if alert_type == "pipeline_failure":
+                        if (
+                            incident is not None
+                            and status_code == "SUCCESS"
+                            and finished is not None
+                            and _utc(finished) > _utc(incident["detected_at"])
+                            and _record_cleared(
+                                connection,
+                                incident,
+                                _utc(finished),
+                                (
+                                    "Una ejecución exitosa posterior confirmó "
+                                    "la recuperación."
+                                ),
+                                metadata,
+                            )
+                        ):
+                            cleared += 1
+                        elif (
+                            incident is None
+                            and status_code == "FAILED"
+                            and finished is not None
+                            and _utc(finished) <= now
+                            and _record_detected(
+                                connection,
+                                rule,
+                                "dagster_etl",
+                                entity_key,
+                                entity_key,
+                                _utc(finished),
+                                "La última ejecución de la ingesta falló.",
+                                metadata,
+                            )
+                        ):
+                            detected += 1
+                        continue
+
+                    if status_code != "SUCCESS" or finished is None:
+                        continue
+                    finished_at = _utc(finished)
+                    if (
+                        incident is not None
+                        and finished_at > _utc(incident["detected_at"])
+                    ):
+                        if _record_cleared(
+                            connection,
+                            incident,
+                            finished_at,
+                            (
+                                "Una ejecución exitosa posterior confirmó "
+                                "la recuperación."
+                            ),
+                            metadata,
+                        ):
+                            cleared += 1
+                        incident = None
+                    if incident is None:
+                        current_interval = rule["expected_interval_minutes"]
+                        occurred_at = finished_at + timedelta(
+                            minutes=current_interval
+                        )
+                        if occurred_at <= now:
+                            metadata["thresholds"] = {
+                                "expected_interval_minutes": current_interval
+                            }
+                            if _record_detected(
+                                connection,
+                                rule,
+                                "dagster_etl",
+                                entity_key,
+                                entity_key,
+                                occurred_at,
+                                (
+                                    "La ingesta excedió su intervalo esperado "
+                                    "sin una nueva ejecución exitosa."
+                                ),
+                                metadata,
+                            ):
+                                detected += 1
+
+            if any(
+                rule["alert_type"] == "dagster_run_failure"
+                and rule["is_enabled"]
+                for rule in config["rules"].values()
+            ):
                 for failure in _failed_run_assets(
-                    context, config["dagster_failure_lookback_minutes"], config["dagster_failure_batch_size"], now,
+                    context,
+                    config["dagster_failure_lookback_minutes"],
+                    config["dagster_failure_batch_size"],
+                    now,
                 ):
-                    candidates.append(("dagster_run_failure", failure["asset_key"], failure["run_id"], ""))
-                cursor.execute("""
-                    SELECT incident.alert_id, incident.entity_key
-                    FROM alerting.alert_incident AS incident
-                    INNER JOIN alerting.dim_alert_type AS alert_type ON alert_type.alert_type_id = incident.alert_type_id
-                    WHERE incident.user_code = ? AND alert_type.code = N'dagster_run_failure'
-                        AND incident.cleared_at IS NULL AND incident.entity_key IS NOT NULL
-                    ORDER BY incident.detected_at, incident.alert_id
-                """, _USER_CODE)
-                candidates.extend(("dagster_run_failure", row["entity_key"], "", str(row["alert_id"])) for row in _rows(cursor))
-        for kind, entity_key, source_run_id, incident_id in candidates:
-            evaluation_key = f"recovery::{incident_id}" if incident_id else f"{source_run_id}::{entity_key}" if source_run_id else entity_key
-            pending[f"{kind}::{evaluation_key}"] = {
-                "alert_type": kind, "entity_key": entity_key, "evaluation_key": evaluation_key,
-                "source_run_id": source_run_id, "incident_id": incident_id,
-            }
-        for key, candidate in list(pending.items()):
-            kind, entity_key = candidate["alert_type"], candidate["entity_key"]
-            if (kind, None) not in config["rules"] or not _select_rule(config, kind, entity_key)["is_enabled"]:
-                del pending[key]
-        context.update_cursor(json.dumps(state))
-        for key in sorted(pending, key=lambda key: checks.get(key, {}).get("at", 0)):
-            candidate = pending[key]
-            rule = _select_rule(config, candidate["alert_type"], candidate["entity_key"])
-            if not _is_due(config, rule, candidate["evaluation_key"], checks, now):
-                continue
-            _mark_checked(config, rule, candidate["evaluation_key"], checks, now)
-            state["attempt"] = state.get("attempt", 0) + 1
-            run_key = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps([
-                _USER_CODE, "operational_alerts", key, state["attempt"], config["version_token"], _version(rule["rule_version"]),
-            ])))
-            run_config = {**candidate, "config_version": config["version_token"], "rule_version": _version(rule["rule_version"])}
-            state["in_flight"] = {"pending_key": key, "run_key": run_key, "config": run_config}
-            context.update_cursor(json.dumps(state))
-            return RunRequest(
-                run_key=run_key,
-                run_config={"ops": {"carlsjr__operational_alerts": {"config": run_config}}},
-                tags={"alert_type": candidate["alert_type"], "entity_key": candidate["entity_key"]},
-            )
-    return SkipReason("No hay entidades operativas pendientes de evaluación o esperan su intervalo.")
+                    entity_key = failure["asset_key"]
+                    failure_key = f"{failure['run_id']}::{entity_key}"
+                    rule = _select_rule(
+                        config,
+                        "dagster_run_failure",
+                        entity_key,
+                    )
+                    if not rule["is_enabled"] or not _is_due(
+                        config,
+                        rule,
+                        failure_key,
+                        checks,
+                        now,
+                    ):
+                        continue
+                    _mark_checked(config, rule, failure_key, checks, now)
+                    if failure["occurred_at"] > now:
+                        continue
+                    metadata = {
+                        "evidence": {
+                            "run_id": failure["run_id"],
+                            "job_name": failure["job_name"],
+                            "step_key": failure["step_key"],
+                            "asset_key": entity_key,
+                        }
+                    }
+                    if _record_detected(
+                        connection,
+                        rule,
+                        "dagster",
+                        failure["run_id"],
+                        entity_key,
+                        failure["occurred_at"],
+                        (
+                            f"El fallo del paso {failure['step_key']} impidió "
+                            f"materializar {entity_key}."
+                        ),
+                        metadata,
+                    ):
+                        detected += 1
+                cleared += _clear_dagster_failures(
+                    context, connection, config, checks, now
+                )
+    except pyodbc.Error:
+        return SkipReason("No fue posible consultar la configuración local.")
+
+    context.update_cursor(json.dumps({"checks": checks}))
+    summary = (
+        f"Señales detectadas: {detected}; señales finalizadas: {cleared}."
+    )
+    context.log.info(summary)
+    return SkipReason(summary)

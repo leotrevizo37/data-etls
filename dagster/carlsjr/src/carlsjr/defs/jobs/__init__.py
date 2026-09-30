@@ -1,4 +1,3 @@
-from .operational_alerts_job import operational_alerts_job
 from .sidon_configuration_job import sidon_configuration_job
 from .factLecturas_ingestion import fact_lecturas_ingestion_job
 from .factAudiencia_ingestion import fact_audiencia_ingestion_job
@@ -24,7 +23,6 @@ from .smartaudits_classifier_training_job import smartaudits_classifier_training
 from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck_job
 
 __all__ = [
-    "operational_alerts_job",
     "sidon_configuration_job",
     "fact_lecturas_ingestion_job",
     "fact_audiencia_ingestion_job",
