@@ -124,6 +124,7 @@ class _ConfigCursor:
 class _ConfigConnection:
     def __init__(self, mode):
         self.cursor_value = _ConfigCursor(mode)
+        self.close = Mock()
 
     def __enter__(self):
         return self

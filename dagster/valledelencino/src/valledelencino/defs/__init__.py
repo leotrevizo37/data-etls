@@ -12,6 +12,7 @@ def _build_defs() -> Any:
 
     from .asset_checks import quality_asset_checks
     from .assets import (
+        operational_alerts,
         sidon_configuration,
         cleanup_old_runs,
         dbo_devices,
@@ -28,6 +29,7 @@ def _build_defs() -> Any:
         operations_assets,
     )
     from .jobs import (
+        operational_alerts_job,
         sidon_configuration_job,
         cleanup_job,
         fact_lecturas_backfill_daily_job,
@@ -74,6 +76,7 @@ def _build_defs() -> Any:
 
     return Definitions(
         jobs=[
+            operational_alerts_job,
             sidon_configuration_job,
             fact_lecturas_ingestion_job,
             fact_lecturas_backfill_daily_job,
@@ -118,6 +121,7 @@ def _build_defs() -> Any:
             sidon_configuration_sensor,
         ],
         assets=[
+            operational_alerts,
             sidon_configuration,
             dbo_sensors,
             dbo_sensor_tys,

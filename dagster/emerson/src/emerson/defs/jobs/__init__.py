@@ -1,3 +1,4 @@
+from .operational_alerts_job import operational_alerts_job
 from .sidon_configuration_job import sidon_configuration_job
 from .factLecturas_ingestion import fact_lecturas_ingestion_job
 from .fact_operations_tables_job import fact_operations_tables_job
@@ -16,6 +17,7 @@ from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck
 
 
 __all__ = [
+    "operational_alerts_job",
     "sidon_configuration_job",
     "fact_lecturas_ingestion_job",
     "fact_operations_tables_job",

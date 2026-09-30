@@ -36,6 +36,7 @@ try:
         op,
     )
 
+    asset_module = importlib.import_module("carlsjr.defs.assets.operational_alerts")
     trend_module = importlib.import_module(
         "carlsjr.defs.sensors.asset_row_count_trend_sensor"
     )
@@ -136,6 +137,7 @@ class _ConfigCursor:
 class _ConfigConnection:
     def __init__(self, mode):
         self.cursor_value = _ConfigCursor(mode)
+        self.close = Mock()
 
     def __enter__(self):
         return self
@@ -488,7 +490,7 @@ def test_dagster_failures_follow_real_asset_dependencies(
     }
 
 
-def test_sensor_applies_exact_threshold_and_default(monkeypatch):
+def test_asset_applies_exact_threshold_and_default(monkeypatch):
     now = datetime.now(timezone.utc)
     sensor_20 = "00000000-0000-0000-0000-000000000020"
     sensor_200 = "00000000-0000-0000-0000-000000000200"
@@ -529,27 +531,27 @@ def test_sensor_applies_exact_threshold_and_default(monkeypatch):
     ]
     detected = Mock(return_value=True)
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_load_active_config",
         lambda _connection: (config, None),
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_load_active_incidents",
         lambda _connection: {},
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_sensor_statuses",
         lambda _connection, _lookback: statuses,
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_sensor_dimensions",
         lambda _connection, _sensor_ids: {},
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_ingestions",
         lambda _connection: [{
             "ingestion_name": "ingestion-without-status",
@@ -559,14 +561,19 @@ def test_sensor_applies_exact_threshold_and_default(monkeypatch):
             "last_run_error": None,
         }],
     )
-    monkeypatch.setattr(sensor_module, "_record_detected", detected)
+    monkeypatch.setattr(asset_module, "_record_detected", detected)
     context = SimpleNamespace(
         resources=SimpleNamespace(sqlserver=_SqlResource("missing")),
         cursor=None,
         update_cursor=Mock(),
         log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor._raw_fn(context)
+    context.run_id = "evaluation-run"
+    context.op_config = {"alert_type": "connection_lost", "source_run_id": "", "incident_id": "", "config_version": "config-1", "rule_version": "31"}
+    results = []
+    for entity_key in (sensor_20, sensor_200):
+        context.op_config.update(entity_key=entity_key, evaluation_key=entity_key)
+        results.append(asset_module.operational_alerts.op.compute_fn.decorated_fn(context))
     detected.assert_called_once()
     parameters = detected.call_args.args
     assert parameters[4] == sensor_20
@@ -574,7 +581,7 @@ def test_sensor_applies_exact_threshold_and_default(monkeypatch):
         minutes=20
     )
     assert parameters[7]["thresholds"]["no_readings_minutes"] == 20
-    assert "Señales detectadas: 1" in result.skip_message
+    assert [result.metadata["detected_count"] for result in results] == [1, 0]
 
 
 @pytest.mark.parametrize(
@@ -631,45 +638,52 @@ def test_recovery_requires_later_evidence_and_enabled_rule(
     }
     cleared = Mock(return_value=True)
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_load_active_config",
         lambda _connection: (config, None),
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_load_active_incidents",
         lambda _connection: {("connection_lost", sensor_id): incident},
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_sensor_statuses",
         lambda _connection, _lookback: [status],
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_sensor_dimensions",
         lambda _connection, _sensor_ids: {},
     )
     monkeypatch.setattr(
-        sensor_module,
+        asset_module,
         "_ingestions",
         lambda _connection: [],
     )
-    monkeypatch.setattr(sensor_module, "_record_cleared", cleared)
+    monkeypatch.setattr(asset_module, "_record_cleared", cleared)
     context = SimpleNamespace(
         resources=SimpleNamespace(sqlserver=_SqlResource("missing")),
         cursor=None,
         update_cursor=Mock(),
         log=Mock(),
     )
-    result = sensor_module.operational_alerts_sensor._raw_fn(context)
+    context.run_id = "evaluation-run"
+    context.op_config = {"alert_type": "connection_lost", "source_run_id": "", "incident_id": "", "config_version": "config-1", "rule_version": "31", "entity_key": sensor_id, "evaluation_key": sensor_id}
+    if not enabled:
+        with pytest.raises(Failure):
+            asset_module.operational_alerts.op.compute_fn.decorated_fn(context)
+        cleared.assert_not_called()
+        return
+    result = asset_module.operational_alerts.op.compute_fn.decorated_fn(context)
     if should_clear:
         cleared.assert_called_once()
         assert cleared.call_args.args[2] == status["last_reading_at"]
-        assert "señales finalizadas: 1" in result.skip_message
+        assert result.metadata["cleared_count"] == 1
     else:
         cleared.assert_not_called()
-        assert "señales finalizadas: 0" in result.skip_message
+        assert result.metadata["cleared_count"] == 0
 
 
 @pytest.mark.parametrize(
