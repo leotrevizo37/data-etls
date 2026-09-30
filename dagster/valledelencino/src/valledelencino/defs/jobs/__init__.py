@@ -1,3 +1,4 @@
+from .sidon_configuration_job import sidon_configuration_job
 from .factLecturas_ingestion import fact_lecturas_ingestion_job
 from .fact_operations_tables_job import fact_operations_tables_job
 from .refresh_dimensions_job import refresh_dimensions_job
@@ -15,6 +16,7 @@ from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck
 
 
 __all__ = [
+    "sidon_configuration_job",
     "fact_lecturas_ingestion_job",
     "fact_operations_tables_job",
     "refresh_dimensions_job",

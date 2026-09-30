@@ -1,4 +1,5 @@
 from .sql_server import sqlserver_resource, SqlServerResource
+from .sidon_configuration_ai import sidon_configuration_ai_resource
 from .spark import spark_resource, SparkResource
 from .sql_server_dimensions import dim_sqlserver_resource, SqlDimServerResource
 from .smartaudits_mysql import (
@@ -18,6 +19,7 @@ from .mqtt_event_history import (
 )
 
 __all__ = [
+    "sidon_configuration_ai_resource",
     "sqlserver_resource",
     "SqlServerResource",
     "spark_resource",

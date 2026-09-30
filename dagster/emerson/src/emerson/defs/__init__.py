@@ -12,6 +12,7 @@ def _build_defs() -> Any:
 
     from .asset_checks import quality_asset_checks
     from .assets import (
+        sidon_configuration,
         cleanup_old_runs,
         dbo_devices,
         dbo_sensor_tys,
@@ -27,6 +28,7 @@ def _build_defs() -> Any:
         operations_assets,
     )
     from .jobs import (
+        sidon_configuration_job,
         cleanup_job,
         fact_lecturas_backfill_daily_job,
         fact_lecturas_ingestion_job,
@@ -45,6 +47,7 @@ def _build_defs() -> Any:
         spark_df_io_manager,
         spark_resource,
         sqlserver_resource,
+        sidon_configuration_ai_resource,
         transformation_ops,
     )
     from .schedules import (
@@ -66,10 +69,12 @@ def _build_defs() -> Any:
         asset_row_count_trend_sensor,
         dwh_dimsidonproddimensions_sensor,
         operational_alerts_sensor,
+        sidon_configuration_sensor,
     )
 
     return Definitions(
         jobs=[
+            sidon_configuration_job,
             fact_lecturas_ingestion_job,
             fact_lecturas_backfill_daily_job,
             fact_lecturas_sensor_backfill_job,
@@ -84,6 +89,7 @@ def _build_defs() -> Any:
         ],
         resources={
             "sqlserver": sqlserver_resource,
+            "sidon_configuration_ai": sidon_configuration_ai_resource,
             "chirpstack_api": chirpstack_api_resource,
             "spark": spark_resource,
             "dim_sqlserver": dim_sqlserver_resource,
@@ -109,8 +115,10 @@ def _build_defs() -> Any:
             asset_row_count_trend_sensor,
             dwh_dimsidonproddimensions_sensor,
             operational_alerts_sensor,
+            sidon_configuration_sensor,
         ],
         assets=[
+            sidon_configuration,
             dbo_sensors,
             dbo_sensor_tys,
             dbo_devices,
