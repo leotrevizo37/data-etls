@@ -20,13 +20,9 @@ tickets ni reintentos.
 
 Cada code location de `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y
 `valledelencino` tendrá copias independientes de
-`operational_alerts_sensor` y `asset_row_count_trend_sensor`. Ambos usan el recurso
-SQL Server local. El sensor operativo descubre pendientes y dispara
-`operational_alerts_job`; el asset `operational_alerts` evalúa una entidad por run
-y escribe únicamente incidencias y señales append-only `DETECTED` o `CLEARED`.
-El cursor confirma la entidad al terminar el run correctamente y conserva los
-fallos para reintentar respetando su intervalo. Los estados iniciales de los
-sensores y el procesamiento del sensor de tendencias se conservan.
+`operational_alerts_sensor` y `asset_row_count_trend_sensor`. Los sensores usan
+el recurso SQL Server local, comienzan en estado `STOPPED` y escriben únicamente
+incidencias y señales append-only `DETECTED` o `CLEARED`.
 
 Cada base tenant almacena catálogos con GUID estables, versiones inmutables de
 configuración, reglas default y overrides exactos, incidencias y bitácoras de

@@ -25,8 +25,6 @@ Los scripts globales se aplican en orden numérico a cada base tenant:
 9. `031_serving_alert_state.sql` crea la vista consolidada de alertas.
 10. `032_alerting_state_guards.sql` crea protecciones y activación.
 11. `033_alerting_catalog_guards.sql` protege los GUID de catálogo.
-12. `038_alerting_email_recipients.sql` crea destinatarios, rutas, etapas,
-    asignaciones y decisiones de correo para el sistema externo.
 
 La inicialización no crea una configuración de alertas por defecto. Cada
 tenant permanece sin configuración activa hasta que se prepare y active
@@ -35,11 +33,6 @@ explícitamente una versión válida. Los scripts globales son repetibles.
 Las políticas antiguas de correo, tickets, reintentos y horarios silenciosos
 permanecen preservadas en las tablas `*_legacy`; no se migran a la
 configuración de detección.
-
-El script `038` no migra correos ni habilita rutas. Su mantenimiento y
-consumo corresponden al sistema externo, siguiendo
-[Destinatarios y rutas de correo](../data_model/alerting_email.md).
-Estas tablas no participan en la validación o activación de la detección.
 
 ## Catálogos
 
