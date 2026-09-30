@@ -265,7 +265,7 @@ def azure(monkeypatch):
     connection = MagicMock()
     response = connection.getresponse.return_value
     response.status = 200
-    assessment = {"verdict": "valid", "confidence": 0.95, "reasons": ["Tipos compatibles."], "reasoning": {"analysis": "Comprobación de relaciones."}}
+    assessment = {"verdict": "no_problem_found", "confidence": 0.95, "reasons": ["Tipos compatibles."], "reasoning": {"analysis": "Comprobación de relaciones."}}
     result = {"model": "test-model", "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(assessment)}}]}
     response.read.side_effect = lambda _: json.dumps(result).encode()
     factory = Mock(return_value=connection)
@@ -288,7 +288,7 @@ def test_azure_request_contract(azure):
     connection.close.assert_called_once()
 
 
-@pytest.mark.parametrize("verdict,status", [("problem", "suspicious"), ("unknown", "insufficient_evidence")])
+@pytest.mark.parametrize("verdict,status", [("problem", "suspicious"), ("no_problem_found", "consistent"), ("insufficient_evidence", "insufficient_evidence")])
 def test_ai_verdict_maps_to_sensor_status(azure, verdict, status):
     client, _, result, assessment, _ = azure
     assessment["verdict"] = verdict
