@@ -21,6 +21,9 @@ sys.path[:] = [str(PROJECT_SRC), *[
 original_dagster_module = sys.modules.pop("dagster", None)
 try:
     sensor_module = importlib.import_module("emerson.defs.sensors.sidon_configuration_sensor")
+    asset_module = importlib.import_module("emerson.defs.assets.sidon_configuration")
+    transformation_module = importlib.import_module("emerson.defs.transformations.sidon_configuration")
+    dagster_module = importlib.import_module("dagster")
     ai_module = importlib.import_module("emerson.defs.resources.sidon_configuration_ai")
     operational_module = importlib.import_module("emerson.defs.sensors.operational_alerts_sensor")
 finally:
@@ -46,7 +49,7 @@ def snapshot():
 def test_payload_preserves_ranges_and_includes_entity_ids(snapshot):
     second = dict(snapshot["expected"][0], StartTime=time(12), min_expected_value=None, max_expected_value=Decimal("12"), scheduledDays="6,7")
     snapshot["expected"].append(second)
-    candidates = sensor_module._candidates(snapshot)
+    candidates = transformation_module._candidates(snapshot)
     alert = candidates[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     assert alert["complete"] and not alert["problems"]
     assert candidates[(sensor_module._DEVICE_TYPE, "device:device-id")]["payload"]["device_id"] == "device-id"
@@ -65,7 +68,7 @@ def test_payload_preserves_ranges_and_includes_entity_ids(snapshot):
 @pytest.mark.parametrize("missing", ["expected", "device_types", "sensor_types", "conditions", "sensors"])
 def test_missing_evidence_is_not_consistent(snapshot, missing):
     snapshot[missing] = []
-    alert = sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
+    alert = transformation_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     if missing == "expected":
         assert alert["complete"] and not alert["problems"]
         assert alert["payload"]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
@@ -75,31 +78,31 @@ def test_missing_evidence_is_not_consistent(snapshot, missing):
 
 def test_stopped_devices_and_inactive_alerts_are_excluded(snapshot):
     snapshot["stopped"] = [{"AlertId": "alert-id", "DeviceId": "device-id"}]
-    alert = sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
+    alert = transformation_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     assert not alert["complete"] and alert["payload"]["devices"] == []
     snapshot["alerts"][0]["Active"] = False
-    assert all(key[0] != sensor_module._ALERT_TYPE for key in sensor_module._candidates(snapshot))
+    assert all(key[0] != sensor_module._ALERT_TYPE for key in transformation_module._candidates(snapshot))
 
 
 def test_orphans_invalid_operator_and_inverted_range(snapshot):
     snapshot["devices"] = []
-    assert sensor_module._candidates(snapshot)[(sensor_module._DEVICE_TYPE, "device:device-id")]["problems"]
+    assert transformation_module._candidates(snapshot)[(sensor_module._DEVICE_TYPE, "device:device-id")]["problems"]
     snapshot["alerts"] = []
-    assert sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "condition:condition-id")]["problems"]
+    assert transformation_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "condition:condition-id")]["problems"]
 
 
 @pytest.mark.parametrize("value", [None, float("nan"), float("inf")])
 def test_invalid_threshold_is_structural_and_serializable(snapshot, value):
     snapshot["conditions"][0]["Value"] = value
-    alert = sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
+    alert = transformation_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     assert alert["problems"]
-    assert sensor_module._fingerprint(alert)
+    assert transformation_module._fingerprint(alert)
 
 
 def test_invalid_operator_and_range(snapshot):
     snapshot["conditions"][0]["Operator"] = None
     snapshot["expected"][0]["min_expected_value"] = Decimal("20")
-    alert = sensor_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
+    alert = transformation_module._candidates(snapshot)[(sensor_module._ALERT_TYPE, "alert:alert-id")]
     assert len(alert["problems"]) == 2
 
 
@@ -118,33 +121,38 @@ def evaluation(monkeypatch, snapshot):
         "reasons": ["Incongruencia semántica comprobable."], "model": "test-model",
     }))
     context = SimpleNamespace(
-        cursor=None, update_cursor=Mock(), resources=SimpleNamespace(
+        cursor=None, update_cursor=Mock(), instance=Mock(), run_id="synthetic-run",
+        op_config={"alert_type": sensor_module._DEVICE_TYPE, "entity_key": "device:device-id",
+                   "config_version": "1", "rule_version": "31", "policy": "policy-1"},
+        resources=SimpleNamespace(
             sqlserver=SimpleNamespace(_get_connection=lambda: connection),
             dim_sqlserver=Mock(), sidon_configuration_ai=evaluator,
         ),
     )
     monkeypatch.setattr(sensor_module, "_load_active_config", Mock(return_value=(config, None)))
-    monkeypatch.setattr(sensor_module, "_snapshot", Mock(side_effect=lambda source, warehouse, watermark_only=False: (
+    context.instance.get_runs.return_value = []
+    monkeypatch.setattr(asset_module, "_load_active_config", sensor_module._load_active_config)
+    monkeypatch.setattr(asset_module, "_snapshot", Mock(return_value=snapshot))
+    monkeypatch.setattr(sensor_module, "_snapshot", Mock(side_effect=lambda source, warehouse, watermark_only=False, entities_only=False: (
         {"devices": [{"modified_at": "2026-09-28T12:00:00", "row_count": 1}]}
-        if watermark_only else snapshot
+        if watermark_only else {key: [row for row in snapshot[key] if key in ("devices", "alerts") or row["Active"]]
+                                for key in ("devices", "sensors", "alerts", "conditions")}
     )))
-    monkeypatch.setattr(sensor_module, "_rows", Mock(return_value=[]))
-    detected = Mock()
-    cleared = Mock()
-    monkeypatch.setattr(sensor_module, "_record_detected", detected)
-    monkeypatch.setattr(sensor_module, "_record_cleared", cleared)
+    monkeypatch.setattr(asset_module, "_rows", Mock(return_value=[]))
+    detected = Mock(return_value=True)
+    cleared = Mock(return_value=True)
+    monkeypatch.setattr(asset_module, "_record_detected", detected)
+    monkeypatch.setattr(asset_module, "_record_cleared", cleared)
     return context, evaluator, detected, cleared, config, connection
 
 
-def test_detects_using_existing_signal_writer_and_honors_interval(evaluation):
+def test_detects_using_existing_signal_writer(evaluation):
     context, evaluator, detected, cleared, _, connection = evaluation
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert detected.call_count == 1 and not cleared.called
     assert detected.call_args.args[2] == "sensor_monitoring"
     assert detected.call_args.args[3] == "device:device-id"
     connection.__exit__.assert_called_once_with(None, None, None)
-    context.cursor = context.update_cursor.call_args.args[0]
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
     assert evaluator.evaluate.call_count == 1
 
 
@@ -157,10 +165,11 @@ def test_incident_lookup_and_signal_writer_are_tenant_scoped(monkeypatch, evalua
     rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
     rule.update(alert_type=kind, severity_id="severity-id", alert_config_id="config-id")
     config["rules"][(kind, None)] = rule
+    context.op_config.update(alert_type=kind, entity_key=entity_key)
     connection.cursor.return_value.__enter__.return_value.fetchone.return_value = (1,)
-    monkeypatch.setattr(sensor_module, "_record_detected", operational_module._record_detected)
+    monkeypatch.setattr(asset_module, "_record_detected", operational_module._record_detected)
 
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
 
     lookup, write = connection.cursor.return_value.__enter__.return_value.execute.call_args_list
     assert "WHERE user_code = N'emerson'" in lookup.args[0]
@@ -191,7 +200,11 @@ def test_inconclusive_evaluation_warning(evaluation, status, confidence, error, 
     context, evaluator, detected, cleared, _, _ = evaluation
     evaluator.evaluate.return_value.update(status=status, confidence=confidence)
     evaluator.evaluate.side_effect = error
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    if error is None:
+        asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    else:
+        with pytest.raises(dagster_module.Failure):
+            asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert detected.called == detects and not cleared.called
     if detects:
         assert detected.call_args.kwargs["severity_id"] == "warning-id"
@@ -201,15 +214,15 @@ def test_low_confidence_uses_warning_severity_with_other_rule_severity(evaluatio
     context, evaluator, detected, _, config, _ = evaluation
     config["rules"][(sensor_module._DEVICE_TYPE, None)].update(severity="CRITICAL", severity_id="critical-id")
     evaluator.evaluate.return_value["confidence"] = 0.8
-    sensor_module._rows.side_effect = [[], [{"severity_id": "warning-id"}]]
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    asset_module._rows.side_effect = [[], [{"severity_id": "warning-id"}]]
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert detected.call_args.kwargs["severity_id"] == "warning-id"
 
 
 def test_structural_detection_does_not_need_azure(evaluation, snapshot):
     context, evaluator, detected, _, _, _ = evaluation
     snapshot["sensor_types"] = []
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert detected.called and not evaluator.evaluate.called
 
 
@@ -221,11 +234,12 @@ def test_alert_without_expected_ranges_is_evaluated_without_unsafe_clear(evaluat
     rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
     rule["alert_type"] = sensor_module._ALERT_TYPE
     config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
-    sensor_module._rows.return_value = [{"metadata_json": json.dumps({
+    context.op_config.update(alert_type=sensor_module._ALERT_TYPE, entity_key="alert:alert-id")
+    asset_module._rows.return_value = [{"metadata_json": json.dumps({
         "source_fingerprint": "previous-source", "policy": evaluator.policy,
         "assessment": {"model": "test-model"},
     })}]
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert evaluator.evaluate.call_args.args[0]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
     assert detected.called == detects and not cleared.called
 
@@ -237,7 +251,8 @@ def test_alert_with_mixed_expected_ranges_evaluates_all_devices(evaluation, snap
     rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
     rule["alert_type"] = sensor_module._ALERT_TYPE
     config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    context.op_config.update(alert_type=sensor_module._ALERT_TYPE, entity_key="alert:alert-id")
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     devices = evaluator.evaluate.call_args.args[0]["devices"]
     assert len(devices) == 2
     assert devices[0]["conditions"][0]["sensors"][0]["expected_ranges"]
@@ -253,10 +268,15 @@ def test_disabled_entity_override_is_respected(evaluation):
     assert not evaluator.evaluate.called and not detected.called and not cleared.called
 
 
-def test_new_sensor_is_registered_stopped():
+def test_sensor_asset_and_job_are_registered():
     definitions = importlib.import_module("emerson.defs")._build_defs()
     detector = sensor_module.sidon_configuration_sensor
     assert detector in definitions.sensors
+    assert asset_module.sidon_configuration in definitions.assets
+    assert sensor_module.sidon_configuration_job in definitions.jobs
+    loaded = importlib.import_module("emerson.definitions").defs()
+    job = loaded.resolve_job_def("sidon_configuration_job")
+    assert job.has_node_named("emerson__sidon_configuration")
     assert detector.default_status == sensor_module.DefaultSensorStatus.RUNNING
     assert detector.required_resource_keys <= definitions.resources.keys()
     assert definitions.resources["sidon_configuration_ai"] is ai_module.sidon_configuration_ai_resource
@@ -268,11 +288,12 @@ def test_changes_during_evaluation_emit_nothing(monkeypatch, evaluation, snapsho
     if change == "source":
         changed = copy.deepcopy(snapshot)
         changed["devices"][0]["Name"] = "Otra configuración"
-        sensor_module._snapshot.side_effect = [{"devices": []}, snapshot, changed]
+        asset_module._snapshot.side_effect = [snapshot, changed]
     else:
         changed = dict(config, version_token="2")
         sensor_module._load_active_config.side_effect = [(config, None), (changed, None)]
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    with pytest.raises(dagster_module.Failure):
+        asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert not detected.called and not cleared.called
 
 
@@ -286,14 +307,17 @@ def test_changes_during_evaluation_emit_nothing(monkeypatch, evaluation, snapsho
 def test_recovery_requires_changed_evidence_and_same_policy(monkeypatch, evaluation, snapshot, same_source, policy, model, expected_clear):
     context, evaluator, detected, cleared, _, _ = evaluation
     evaluator.evaluate.return_value["status"] = "consistent"
-    candidate = sensor_module._candidates(snapshot)[(sensor_module._DEVICE_TYPE, "device:device-id")]
+    candidate = transformation_module._candidates(snapshot)[(sensor_module._DEVICE_TYPE, "device:device-id")]
     previous = {
-        "source_fingerprint": sensor_module._fingerprint(candidate) if same_source else "previous-source",
+        "source_fingerprint": transformation_module._fingerprint(candidate) if same_source else "previous-source",
         "policy": policy, "assessment": {"model": model},
     }
-    monkeypatch.setattr(sensor_module, "_rows", Mock(return_value=[{"alert_id": "incident-id", "metadata_json": json.dumps(previous)}]))
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    monkeypatch.setattr(asset_module, "_rows", Mock(return_value=[{"alert_id": "incident-id", "metadata_json": json.dumps(previous)}]))
+    result = asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     assert cleared.called == expected_clear and not detected.called
+    assert result.metadata["outcome"] == ("cleared" if expected_clear else "recovery_not_confirmed")
+    assert result.metadata["signal"] == ("CLEARED" if expected_clear else "NONE")
+    assert all(result.metadata["evaluation"].value["recovery_conditions"].values()) == expected_clear
 
 
 @pytest.fixture
@@ -382,14 +406,14 @@ def test_invalid_endpoint_is_not_contacted(azure, endpoint):
 
 def test_snapshot_reads_only_required_configuration(monkeypatch):
     connection = MagicMock()
-    connection.cursor.return_value.__enter__.return_value = MagicMock(spec_set=sensor_module.pyodbc.Cursor)
+    connection.cursor.return_value.__enter__.return_value = MagicMock(spec_set=transformation_module.pyodbc.Cursor)
     connection.cursor.return_value.__enter__.return_value.description = []
     connection.cursor.return_value.__enter__.return_value.fetchall.return_value = []
     connect = Mock(return_value=connection)
-    monkeypatch.setattr(sensor_module.pyodbc, "connect", connect)
+    monkeypatch.setattr(transformation_module.pyodbc, "connect", connect)
     source = SimpleNamespace(host="localhost", port=1433, database="synthetic", user="test", password="fake", connect_timeout=10)
     warehouse = SimpleNamespace(_get_connection=lambda: connection)
-    snapshot = sensor_module._snapshot(source, warehouse)
+    snapshot = transformation_module._snapshot(source, warehouse)
     assert len(snapshot) == 8 and all(rows == [] for rows in snapshot.values())
     assert connect.call_args.kwargs["driver"] == "{ODBC Driver 18 for SQL Server}"
     assert connection.close.call_count == 2
@@ -398,14 +422,14 @@ def test_snapshot_reads_only_required_configuration(monkeypatch):
 
 def test_watermark_covers_all_tables_and_counts_inactive_rows(monkeypatch):
     connection = MagicMock()
-    connection.cursor.return_value.__enter__.return_value = MagicMock(spec_set=sensor_module.pyodbc.Cursor)
+    connection.cursor.return_value.__enter__.return_value = MagicMock(spec_set=transformation_module.pyodbc.Cursor)
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.description = [("modified_at",), ("row_count",)]
     cursor.fetchall.side_effect = [[("2026-09-28T12:00:00.1234567", 3)]] * 7 + [[(None, 0)]]
-    monkeypatch.setattr(sensor_module.pyodbc, "connect", Mock(return_value=connection))
+    monkeypatch.setattr(transformation_module.pyodbc, "connect", Mock(return_value=connection))
     source = SimpleNamespace(host="localhost", port=1433, database="synthetic", user="test", password="fake", connect_timeout=10)
     warehouse = SimpleNamespace(_get_connection=lambda: connection)
-    watermark = sensor_module._snapshot(source, warehouse, watermark_only=True)
+    watermark = transformation_module._snapshot(source, warehouse, watermark_only=True)
     assert set(watermark) == {"devices", "device_types", "sensors", "sensor_types", "alerts", "conditions", "stopped", "expected"}
     assert watermark["devices"] == [{"modified_at": "2026-09-28T12:00:00.1234567", "row_count": 3}]
     assert watermark["expected"] == [{"modified_at": None, "row_count": 0}]
@@ -415,27 +439,35 @@ def test_watermark_covers_all_tables_and_counts_inactive_rows(monkeypatch):
     assert "dwh.dimSensorExpectedVal" in queries[7]
 
 
-def test_unchanged_watermark_skips_snapshot_and_ai_even_after_interval(evaluation):
-    context, evaluator, _, _, _, _ = evaluation
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+def test_sensor_dispatches_without_evaluation_or_writes_and_waits_for_success(evaluation):
+    context, evaluator, detected, cleared, _, _ = evaluation
+    request = sensor_module.sidon_configuration_sensor._raw_fn(context)
     state = json.loads(context.update_cursor.call_args.args[0])
-    assert state["pending"] == []
-    for check in state["checks"].values():
-        check["at"] = 0
+    assert isinstance(request, dagster_module.RunRequest)
+    assert state["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-id"]]
+    assert state["in_flight"]["run_key"] == request.run_key
+    assert request.run_config["ops"]["emerson__sidon_configuration"]["config"] == context.op_config
+    assert not evaluator.evaluate.called and not detected.called and not cleared.called
+    assert not asset_module._snapshot.called
     context.cursor = json.dumps(state)
+    context.instance.get_runs.return_value = [SimpleNamespace(is_finished=True, status=dagster_module.DagsterRunStatus.SUCCESS)]
     sensor_module._snapshot.reset_mock()
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert evaluator.evaluate.call_count == 1
+    result = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert isinstance(result, dagster_module.SkipReason)
+    state = json.loads(context.update_cursor.call_args.args[0])
+    assert state["pending"] == [] and "in_flight" not in state
     assert sensor_module._snapshot.call_count == 1
     assert sensor_module._snapshot.call_args.kwargs == {"watermark_only": True}
+    assert not evaluator.evaluate.called
 
 
 @pytest.mark.parametrize("change", ["modified_at", "row_count", "config", "rule", "policy"])
 def test_watermark_or_evaluation_changes_restart_processing(evaluation, snapshot, change):
     context, evaluator, detected, _, config, _ = evaluation
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    first = sensor_module.sidon_configuration_sensor._raw_fn(context)
     state = json.loads(context.update_cursor.call_args.args[0])
     context.cursor = json.dumps(state)
+    context.instance.get_runs.return_value = [SimpleNamespace(is_finished=True, status=dagster_module.DagsterRunStatus.SUCCESS)]
     watermark = copy.deepcopy(state["watermark"])
     if change == "modified_at":
         watermark["devices"][0]["modified_at"] = "2026-09-28T13:00:00"
@@ -447,53 +479,74 @@ def test_watermark_or_evaluation_changes_restart_processing(evaluation, snapshot
         config["rules"][(sensor_module._DEVICE_TYPE, None)]["rule_version"] = b"2"
     else:
         evaluator.policy = "policy-2"
-    sensor_module._snapshot.side_effect = lambda source, warehouse, watermark_only=False: watermark if watermark_only else snapshot
+    sensor_module._snapshot.side_effect = lambda source, warehouse, watermark_only=False, entities_only=False: (
+        watermark if watermark_only else snapshot
+    )
+    request = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert isinstance(request, dagster_module.RunRequest) and request.run_key != first.run_key
+    assert not evaluator.evaluate.called and not detected.called
+
+
+@pytest.mark.parametrize("status", ["NOT_STARTED", "QUEUED", "STARTING", "STARTED", "CANCELING"])
+def test_in_flight_run_blocks_new_dispatch_even_if_source_changes(evaluation, status):
+    context, evaluator, detected, _, _, _ = evaluation
     sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert evaluator.evaluate.call_count == 2 and detected.call_count == 2
-    assert json.loads(context.update_cursor.call_args.args[0])["pending"] == []
+    context.cursor = context.update_cursor.call_args.args[0]
+    context.instance.get_runs.return_value = [SimpleNamespace(is_finished=False, status=getattr(dagster_module.DagsterRunStatus, status))]
+    sensor_module._snapshot.reset_mock()
+    assert isinstance(sensor_module.sidon_configuration_sensor._raw_fn(context), dagster_module.SkipReason)
+    assert not sensor_module._snapshot.called and not evaluator.evaluate.called and not detected.called
+
+
+def test_missing_run_reuses_original_request_and_key(evaluation):
+    context, _, _, _, _, _ = evaluation
+    request = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    context.cursor = context.update_cursor.call_args.args[0]
+    sensor_module._snapshot.reset_mock()
+    retry = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert retry == request
+    assert not sensor_module._snapshot.called
 
 
 def test_pending_entities_survive_between_ticks(evaluation, snapshot):
     context, evaluator, detected, _, _, _ = evaluation
     snapshot["devices"].append(dict(snapshot["devices"][0], DeviceId="device-two"))
     snapshot["sensors"].append(dict(snapshot["sensors"][0], DeviceId="device-two", SensorId="sensor-two"))
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    first = sensor_module.sidon_configuration_sensor._raw_fn(context)
     state = json.loads(context.update_cursor.call_args.args[0])
-    assert state["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-two"]]
+    assert len(state["pending"]) == 2
     context.cursor = json.dumps(state)
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert evaluator.evaluate.call_count == 2 and detected.call_count == 2
-    assert json.loads(context.update_cursor.call_args.args[0])["pending"] == []
+    context.instance.get_runs.return_value = [SimpleNamespace(is_finished=True, status=dagster_module.DagsterRunStatus.SUCCESS)]
+    second = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert first.tags["entity_key"] == "device:device-id" and second.tags["entity_key"] == "device:device-two"
+    assert json.loads(context.update_cursor.call_args.args[0])["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-two"]]
+    assert not evaluator.evaluate.called and not detected.called
 
 
-def test_azure_failure_remains_pending_and_retries_after_interval(evaluation):
+@pytest.mark.parametrize("status", ["FAILURE", "CANCELED"])
+def test_failed_run_remains_pending_and_retries_after_interval(evaluation, status):
     context, evaluator, detected, _, _, _ = evaluation
-    evaluator.evaluate.side_effect = TimeoutError()
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    first = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    context.cursor = context.update_cursor.call_args.args[0]
+    context.instance.get_runs.return_value = [SimpleNamespace(is_finished=True, status=getattr(dagster_module.DagsterRunStatus, status))]
+    assert isinstance(sensor_module.sidon_configuration_sensor._raw_fn(context), dagster_module.SkipReason)
     state = json.loads(context.update_cursor.call_args.args[0])
     assert state["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-id"]]
-    assert not detected.called
-    context.cursor = json.dumps(state)
-    sensor_module._snapshot.reset_mock()
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert evaluator.evaluate.call_count == 1
-    assert sensor_module._snapshot.call_count == 1
     for check in state["checks"].values():
         check["at"] = 0
     context.cursor = json.dumps(state)
-    evaluator.evaluate.side_effect = None
-    sensor_module.sidon_configuration_sensor._raw_fn(context)
-    assert detected.call_count == 1
-    assert json.loads(context.update_cursor.call_args.args[0])["pending"] == []
+    retry = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    assert isinstance(retry, dagster_module.RunRequest) and retry.run_key != first.run_key
+    assert retry.run_config == first.run_config
+    assert not evaluator.evaluate.called and not detected.called
 
 
-def test_persistence_failure_does_not_complete_entity(evaluation):
-    context, _, detected, _, _, _ = evaluation
+def test_persistence_failure_does_not_materialize(evaluation):
+    context, _, detected, _, _, connection = evaluation
     detected.side_effect = RuntimeError("Synthetic persistence failure")
     with pytest.raises(RuntimeError):
-        sensor_module.sidon_configuration_sensor._raw_fn(context)
-    state = json.loads(context.update_cursor.call_args.args[0])
-    assert state["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-id"]]
+        asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    assert connection.__exit__.call_args.args[0] is RuntimeError
 
 
 @pytest.mark.parametrize("endpoint,host,port,tls", [
@@ -595,3 +648,152 @@ def test_invalid_local_timeout_is_rejected(timeout):
 def test_unknown_provider_is_rejected():
     with pytest.raises(ValueError):
         ai_module.SidonConfigurationAI("http://localhost:1234", "local-model", provider="unknown")
+
+
+@pytest.mark.parametrize("status,confidence,inserted,outcome,signal,passed", [
+    ("suspicious", 0.95, True, "detected", "DETECTED", False),
+    ("suspicious", 0.95, False, "deduplicated", "NONE", False),
+    ("suspicious", 0.8, True, "detected", "DETECTED", False),
+    ("insufficient_evidence", 0.95, True, "detected", "DETECTED", False),
+    ("insufficient_evidence", 0.8, False, "inconclusive", "NONE", False),
+    ("consistent", 0.8, False, "inconclusive", "NONE", False),
+    ("consistent", 0.95, False, "consistent", "NONE", True),
+])
+def test_job_materialization_checks_and_sensor_acknowledgement(evaluation, status, confidence, inserted, outcome, signal, passed):
+    context, evaluator, detected, _, _, _ = evaluation
+    evaluator.evaluate.return_value.update(status=status, confidence=confidence)
+    detected.return_value = inserted
+    request = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    context.cursor = context.update_cursor.call_args.args[0]
+    definitions = dagster_module.Definitions(
+        assets=[asset_module.sidon_configuration], jobs=[sensor_module.sidon_configuration_job],
+        resources={key: dagster_module.ResourceDefinition.hardcoded_resource(value)
+                   for key, value in vars(context.resources).items()},
+    )
+    job = definitions.resolve_job_def("sidon_configuration_job")
+    with dagster_module.DagsterInstance.ephemeral() as instance:
+        instance.create_run_for_job(job, run_config=request.run_config, status=dagster_module.DagsterRunStatus.SUCCESS, tags={
+            "user_code": "other-tenant", "dagster/run_key": request.run_key, "dagster/sensor_name": "sidon_configuration_sensor",
+        })
+        context.instance = instance
+        assert sensor_module.sidon_configuration_sensor._raw_fn(context) == request
+        result = job.execute_in_process(
+            instance=instance, run_config=request.run_config,
+            tags={**request.tags, "dagster/run_key": request.run_key, "dagster/sensor_name": "sidon_configuration_sensor"},
+        )
+        assert result.success
+        materializations = result.get_asset_materialization_events()
+        assert len(materializations) == 1
+        metadata = materializations[0].event_specific_data.materialization.metadata
+        assert metadata["outcome"].value == outcome and metadata["signal"].value == signal
+        assert metadata["entity_key"].value == "device:device-id"
+        assert metadata["evaluation"].value["run_id"] == result.run_id
+        check = result.get_asset_check_evaluations()[0]
+        assert check.passed == passed and check.severity == dagster_module.AssetCheckSeverity.WARN
+        context.instance = instance
+        assert isinstance(sensor_module.sidon_configuration_sensor._raw_fn(context), dagster_module.SkipReason)
+        assert json.loads(context.update_cursor.call_args.args[0])["pending"] == []
+
+
+@pytest.mark.parametrize("failure", ["provider", "source", "persistence", "commit"])
+def test_job_failure_keeps_entity_pending_without_materialization(evaluation, failure):
+    context, evaluator, detected, _, _, connection = evaluation
+    request = sensor_module.sidon_configuration_sensor._raw_fn(context)
+    context.cursor = context.update_cursor.call_args.args[0]
+    if failure == "provider":
+        evaluator.evaluate.side_effect = TimeoutError("Synthetic provider failure")
+    elif failure == "source":
+        asset_module._snapshot.side_effect = RuntimeError("Synthetic source failure")
+    elif failure == "commit":
+        connection.__exit__.side_effect = RuntimeError("Synthetic commit failure")
+    else:
+        detected.side_effect = RuntimeError("Synthetic persistence failure")
+    definitions = dagster_module.Definitions(
+        assets=[asset_module.sidon_configuration], jobs=[sensor_module.sidon_configuration_job],
+        resources={key: dagster_module.ResourceDefinition.hardcoded_resource(value)
+                   for key, value in vars(context.resources).items()},
+    )
+    with dagster_module.DagsterInstance.ephemeral() as instance:
+        result = definitions.resolve_job_def("sidon_configuration_job").execute_in_process(
+            instance=instance, run_config=request.run_config, raise_on_error=False,
+            tags={"dagster/run_key": request.run_key, "dagster/sensor_name": "sidon_configuration_sensor"},
+        )
+        assert not result.success and not result.get_asset_materialization_events()
+        context.instance = instance
+        assert isinstance(sensor_module.sidon_configuration_sensor._raw_fn(context), dagster_module.SkipReason)
+        state = json.loads(context.update_cursor.call_args.args[0])
+        assert state["pending"] == [[sensor_module._DEVICE_TYPE, "device:device-id"]]
+        assert "in_flight" not in state
+
+
+@pytest.mark.parametrize("change", ["disabled", "config", "rule", "policy", "missing_entity"])
+def test_job_revalidates_request_before_evaluation(evaluation, snapshot, change):
+    context, evaluator, detected, cleared, config, _ = evaluation
+    if change == "disabled":
+        config["rules"][(sensor_module._DEVICE_TYPE, None)]["is_enabled"] = False
+    elif change == "config":
+        config["version_token"] = "2"
+    elif change == "rule":
+        config["rules"][(sensor_module._DEVICE_TYPE, None)]["rule_version"] = b"2"
+    elif change == "policy":
+        evaluator.policy = "policy-2"
+    else:
+        snapshot["devices"] = []
+        snapshot["sensors"] = []
+    with pytest.raises(dagster_module.Failure):
+        asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    assert not evaluator.evaluate.called and not detected.called and not cleared.called
+
+
+def test_changed_rule_without_config_version_change_prevents_write(evaluation):
+    context, _, detected, cleared, config, _ = evaluation
+    changed = copy.deepcopy(config)
+    changed["rules"][(sensor_module._DEVICE_TYPE, None)]["rule_version"] = b"2"
+    asset_module._load_active_config.side_effect = [(config, None), (changed, None)]
+    with pytest.raises(dagster_module.Failure):
+        asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    assert not detected.called and not cleared.called
+
+
+def test_incomplete_evidence_materializes_without_signal(evaluation, snapshot):
+    context, evaluator, detected, cleared, _, _ = evaluation
+    snapshot["sensors"] = []
+    result = asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    assert result.metadata["outcome"] == "inconclusive"
+    assert result.metadata["evidence_complete"] is False
+    assert not result.check_results[0].passed
+    assert not evaluator.evaluate.called and not detected.called and not cleared.called
+
+
+def test_sensor_inventory_matches_existing_candidate_eligibility(monkeypatch, evaluation, snapshot):
+    context, _, _, _, config, _ = evaluation
+    rule = config["rules"][(sensor_module._DEVICE_TYPE, None)]
+    config["rules"][(sensor_module._ALERT_TYPE, None)] = dict(rule, alert_type=sensor_module._ALERT_TYPE)
+    snapshot["devices"][0]["Active"] = False
+    snapshot["devices"].append(dict(snapshot["devices"][0], DeviceId="inactive-without-sensors"))
+    snapshot["sensors"].append(dict(snapshot["sensors"][0], DeviceId="orphan-device"))
+    snapshot["sensors"].append(dict(snapshot["sensors"][0], DeviceId="inactive-sensor", Active=False))
+    snapshot["alerts"].append(dict(snapshot["alerts"][0], AlertId="inactive-alert", Active=False))
+    snapshot["conditions"].append(dict(snapshot["conditions"][0], AlertId="missing-alert", AlertConditionId="orphan-condition"))
+    snapshot["conditions"].append(dict(snapshot["conditions"][0], AlertId="missing-alert", AlertConditionId="inactive-condition", Active=False))
+    expected = set(transformation_module._candidates(snapshot))
+    monkeypatch.setattr(transformation_module, "_candidates", Mock(side_effect=AssertionError("Sensor must not evaluate evidence")))
+    sensor_module.sidon_configuration_sensor._raw_fn(context)
+    state = json.loads(context.update_cursor.call_args.args[0])
+    assert {tuple(key) for key in state["pending"]} == expected
+
+
+def test_entity_inventory_reads_identifiers_without_warehouse_evidence(monkeypatch):
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.description = []
+    cursor.fetchall.return_value = []
+    monkeypatch.setattr(transformation_module.pyodbc, "connect", Mock(return_value=connection))
+    source = SimpleNamespace(host="localhost", port=1433, database="synthetic", user="test", password="fake", connect_timeout=10)
+    warehouse = Mock()
+    snapshot = transformation_module._snapshot(source, warehouse, entities_only=True)
+    assert set(snapshot) == {"devices", "sensors", "alerts", "conditions"}
+    assert cursor.execute.call_count == 4
+    assert all("Name" not in call.args[0] and "Value" not in call.args[0] for call in cursor.execute.call_args_list)
+    warehouse._get_connection.assert_not_called()
+    connection.close.assert_called_once()

@@ -16,3 +16,9 @@ dagster/valledelencino/src/valledelencino/defs/resources/sidon_configuration_ai.
 dagster/valledelencino/src/valledelencino/defs/sensors/sidon_configuration_sensor.py:hardcoded-secret-assignment:60
 dagster/valledelencino/src/valledelencino/defs/sensors/sidon_configuration_sensor.py:connection-string-password:60
 compose-data_etls/.env.example:hardcoded-secret-assignment:148
+dagster/carlsjr/src/carlsjr/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
+dagster/carlsjr/src/carlsjr/defs/transformations/sidon_configuration.py:connection-string-password:56
+dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
+dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:connection-string-password:56
+dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
+dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:connection-string-password:56
