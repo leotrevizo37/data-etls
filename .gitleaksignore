@@ -22,3 +22,8 @@ dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:hardcode
 dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:connection-string-password:56
 dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
 dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:connection-string-password:56
+dagster/bafar/tests/test_operational_alerts_job.py:generic-api-key:320
+dagster/carlsjr/tests/test_operational_alerts_job.py:generic-api-key:320
+dagster/bafar_poc_gabinete/tests/test_operational_alerts_job.py:generic-api-key:320
+dagster/emerson/tests/test_operational_alerts_job.py:generic-api-key:320
+dagster/valledelencino/tests/test_operational_alerts_job.py:generic-api-key:320
