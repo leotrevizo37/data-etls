@@ -296,7 +296,15 @@ def test_ai_verdict_maps_to_sensor_status(azure, verdict, status):
     assert client.evaluate({})["status"] == status
 
 
-@pytest.mark.parametrize("invalid", ["truncated", "refusal", "redirect", "nan", "bool", "empty", "multiple", "reasoning", "extra", "status", "model"])
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_ai_accepts_up_to_three_reasons(azure, count):
+    client, _, result, assessment, _ = azure
+    assessment["reasons"] = ["Razón válida."] * count
+    result["choices"][0]["message"]["content"] = json.dumps(assessment)
+    assert client.evaluate({})["reasons"] == assessment["reasons"]
+
+
+@pytest.mark.parametrize("invalid", ["truncated", "refusal", "redirect", "nan", "bool", "empty", "excessive", "reasoning", "extra", "status", "model"])
 def test_invalid_azure_response_is_rejected(azure, invalid):
     client, connection, result, assessment, _ = azure
     if invalid == "truncated":
@@ -311,8 +319,8 @@ def test_invalid_azure_response_is_rejected(azure, invalid):
         assessment["confidence"] = True
     elif invalid == "empty":
         assessment["reasons"] = []
-    elif invalid == "multiple":
-        assessment["reasons"].append("Otra razón.")
+    elif invalid == "excessive":
+        assessment["reasons"].extend(["Otra razón."] * 3)
     elif invalid == "reasoning":
         assessment["reasoning"] = {"analysis": ""}
     elif invalid == "extra":
