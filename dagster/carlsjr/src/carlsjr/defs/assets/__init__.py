@@ -1,3 +1,4 @@
+from .sidon_configuration import sidon_configuration
 from .operations_assets import operations_assets
 from .source_assets import (dbo_sensors,
                             dbo_sensor_tys,
@@ -21,6 +22,7 @@ from .dwh_dimSidonProdDimensions import dwh_dimsidonproddimensions
 from .cleanup_old_runs import cleanup_old_runs
 
 __all__ = [
+    "sidon_configuration",
     "dbo_sensors",
     "dbo_sensor_tys",
     "dbo_devices",

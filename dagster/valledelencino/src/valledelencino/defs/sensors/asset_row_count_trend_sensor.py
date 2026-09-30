@@ -420,7 +420,7 @@ def _active_trend_incidents(
     name="asset_row_count_trend_sensor",
     minimum_interval_seconds=21600,
     required_resource_keys={"sqlserver"},
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def asset_row_count_trend_sensor(
     context: SensorEvaluationContext,

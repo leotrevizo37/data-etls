@@ -8,6 +8,7 @@ from .mqtt_event_history import (
     mqtt_event_history_api_resource,
     MqttEventHistoryApiResource,
 )
+from .sidon_configuration_ai import sidon_configuration_ai_resource
 
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ChirpStackApiResource",
     "mqtt_event_history_api_resource",
     "MqttEventHistoryApiResource",
+    "sidon_configuration_ai_resource",
 ]
