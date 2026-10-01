@@ -872,7 +872,7 @@ SET NOCOUNT ON;
 INSERT INTO #ChirpStackMqttAccepted
 SELECT source.*
 FROM stg.factChirpStackDeviceEventMetrics AS source
-LEFT JOIN observability.factChirpStackDeviceEventMetrics WITH (UPDLOCK, HOLDLOCK) AS target
+LEFT JOIN observability.factChirpStackDeviceEventMetrics AS target WITH (UPDLOCK, HOLDLOCK)
     ON target.DevEui = source.DevEui
     AND target.TimeSpan = source.TimeSpan
 WHERE source.RunId = ?
@@ -895,7 +895,7 @@ WHERE source.RunId = ?
     )
     AND NOT EXISTS (
         SELECT 1
-        FROM observability.factChirpStackDeviceGatewayMetrics WITH (UPDLOCK, HOLDLOCK) AS existing
+        FROM observability.factChirpStackDeviceGatewayMetrics AS existing WITH (UPDLOCK, HOLDLOCK)
         LEFT JOIN stg.factChirpStackDeviceGatewayMetrics AS candidate
             ON candidate.RunId = source.RunId
             AND candidate.DevEui = existing.DevEui
