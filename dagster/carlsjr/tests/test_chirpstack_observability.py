@@ -1160,6 +1160,7 @@ def test_mqtt_merge_source_preserves_gateway_evidence(scenario):
     module = importlib.import_module("carlsjr.defs.resources.sql_server")
     statement = module.FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL
     source_select = statement.split("USING (", 1)[1].split(") AS source", 1)[0]
+    source_select = source_select.replace("#ChirpStackMqttAccepted", "accepted")
     radio_update = statement.split("target.AverageRssi = ", 1)[1].split(
         ",\n        target.MinRssi", 1
     )[0]
@@ -1200,6 +1201,11 @@ def test_mqtt_merge_source_preserves_gateway_evidence(scenario):
                 f"INSERT INTO {table} VALUES ({', '.join('?' for _ in row)})",
                 tuple(row.values()),
             )
+        database.execute("CREATE TABLE accepted (RunId, DevEui, TimeSpan)")
+        database.execute(
+            "INSERT INTO accepted VALUES (?, ?, ?)",
+            (source["RunId"], source["DevEui"], source["TimeSpan"]),
+        )
         selected = database.execute(source_select, ("synthetic-run",)).fetchall()
         if scenario == "different_run":
             assert selected == []

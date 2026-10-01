@@ -869,6 +869,47 @@ SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL = """
 SET NOCOUNT ON;
 
+INSERT INTO #ChirpStackMqttAccepted
+SELECT source.*
+FROM stg.factChirpStackDeviceEventMetrics AS source
+LEFT JOIN observability.factChirpStackDeviceEventMetrics WITH (UPDLOCK, HOLDLOCK) AS target
+    ON target.DevEui = source.DevEui
+    AND target.TimeSpan = source.TimeSpan
+WHERE source.RunId = ?
+    AND (
+        target.DevEui IS NULL
+        OR (
+            source.CapturedUplinkCount >= target.CapturedUplinkCount
+            AND source.ObservedGatewayCount >= target.ObservedGatewayCount
+            AND source.MultiGatewayUplinkCount >= target.MultiGatewayUplinkCount
+            AND NOT EXISTS (
+                SELECT 1
+                FROM OPENJSON(target.EventLogCountsJson) AS targetLog
+                LEFT JOIN OPENJSON(source.EventLogCountsJson) AS sourceLog
+                    ON sourceLog.[key] = targetLog.[key]
+                WHERE
+                    sourceLog.[key] IS NULL
+                    OR CONVERT(BIGINT, sourceLog.[value]) < CONVERT(BIGINT, targetLog.[value])
+            )
+        )
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM observability.factChirpStackDeviceGatewayMetrics WITH (UPDLOCK, HOLDLOCK) AS existing
+        LEFT JOIN stg.factChirpStackDeviceGatewayMetrics AS candidate
+            ON candidate.RunId = source.RunId
+            AND candidate.DevEui = existing.DevEui
+            AND candidate.GatewayId = existing.GatewayId
+            AND candidate.TimeSpan = existing.TimeSpan
+        WHERE
+            existing.DevEui = source.DevEui
+            AND existing.TimeSpan = source.TimeSpan
+            AND (
+                candidate.GatewayId IS NULL
+                OR candidate.GatewayReceptionCount < existing.GatewayReceptionCount
+            )
+    );
+
 DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
 
 MERGE observability.factChirpStackDeviceEventMetrics WITH (HOLDLOCK) AS target
@@ -882,8 +923,7 @@ USING (
         MultiGatewayUplinkCount,
         EventLogCountsJson,
         ExtractedAt
-    FROM stg.factChirpStackDeviceEventMetrics
-    WHERE RunId = ?
+    FROM #ChirpStackMqttAccepted
 ) AS source
     ON target.DevEui = source.DevEui
     AND target.TimeSpan = source.TimeSpan
@@ -993,6 +1033,13 @@ USING (
         END AS IsNonDecreasing
     FROM stg.factChirpStackDeviceGatewayMetrics AS stage
     WHERE RunId = ?
+        AND EXISTS (
+            SELECT 1
+            FROM #ChirpStackMqttAccepted AS accepted
+            WHERE accepted.RunId = stage.RunId
+                AND accepted.DevEui = stage.DevEui
+                AND accepted.TimeSpan = stage.TimeSpan
+        )
 ) AS source
     ON target.DevEui = source.DevEui
     AND target.GatewayId = source.GatewayId
@@ -1090,6 +1137,8 @@ WHEN NOT MATCHED BY TARGET AND source.IsNonDecreasing = 1 THEN
         source.ExtractedAt
     )
 OUTPUT $action INTO @MergeActions;
+
+DROP TABLE #ChirpStackMqttAccepted;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
@@ -1483,6 +1532,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         with self._get_connection() as conn:
             try:
                 with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT TOP (0) * INTO #ChirpStackMqttAccepted "
+                        "FROM stg.factChirpStackDeviceEventMetrics"
+                    )
                     cursor.execute(
                         FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL,
                         run_id,
