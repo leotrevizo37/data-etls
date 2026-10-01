@@ -389,13 +389,13 @@ def build_device_event_metric_rows(
                 if not isinstance(deduplication_id, str):
                     raise TypeError("uplink event deduplicationId must be text")
                 try:
-                    str(UUID(deduplication_id))
+                    deduplication_id = str(UUID(deduplication_id))
                 except ValueError as ex:
                     raise ValueError(
                         "uplink event deduplicationId must be a UUID"
                     ) from ex
                 canonical_payload = json.dumps(
-                    raw_message,
+                    {**raw_message, "deduplicationId": deduplication_id},
                     ensure_ascii=False,
                     sort_keys=True,
                     separators=(",", ":"),
