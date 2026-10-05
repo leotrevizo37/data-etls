@@ -884,6 +884,16 @@ WHERE source.RunId = ?
             AND source.MultiGatewayUplinkCount >= target.MultiGatewayUplinkCount
             AND NOT EXISTS (
                 SELECT 1
+                FROM OPENJSON(target.RadioFieldQualityJson) AS previousQuality
+                LEFT JOIN OPENJSON(source.RadioFieldQualityJson) AS incomingQuality
+                    ON incomingQuality.[key] = previousQuality.[key]
+                WHERE
+                    incomingQuality.[key] IS NULL
+                    OR CONVERT(BIGINT, JSON_VALUE(incomingQuality.[value], '$.valid'))
+                        < CONVERT(BIGINT, JSON_VALUE(previousQuality.[value], '$.valid'))
+            )
+            AND NOT EXISTS (
+                SELECT 1
                 FROM OPENJSON(target.EventLogCountsJson) AS targetLog
                 LEFT JOIN OPENJSON(source.EventLogCountsJson) AS sourceLog
                     ON sourceLog.[key] = targetLog.[key]
@@ -907,6 +917,23 @@ WHERE source.RunId = ?
             AND (
                 candidate.GatewayId IS NULL
                 OR candidate.GatewayReceptionCount < existing.GatewayReceptionCount
+                OR EXISTS (
+                    SELECT 1
+                    FROM OPENJSON(existing.ReceptionFieldQualityJson) AS previousQuality
+                    LEFT JOIN OPENJSON(candidate.ReceptionFieldQualityJson) AS incomingQuality
+                        ON incomingQuality.[key] = previousQuality.[key]
+                    WHERE
+                        incomingQuality.[key] IS NULL
+                        OR CONVERT(BIGINT, JSON_VALUE(incomingQuality.[value], '$.valid'))
+                            < CONVERT(BIGINT, JSON_VALUE(previousQuality.[value], '$.valid'))
+                )
+                OR (
+                    candidate.ReceptionFieldQualityJson IS NOT NULL
+                    AND (
+                        (existing.AverageRssi IS NOT NULL AND candidate.AverageRssi IS NULL)
+                        OR (existing.AverageSnr IS NOT NULL AND candidate.AverageSnr IS NULL)
+                    )
+                )
             )
     );
 
@@ -922,6 +949,10 @@ USING (
         ObservedGatewayCount,
         MultiGatewayUplinkCount,
         EventLogCountsJson,
+        RadioProfileCountsJson,
+        UplinkContextCountsJson,
+        RadioFieldQualityJson,
+        FrameCounterSummaryJson,
         ExtractedAt
     FROM #ChirpStackMqttAccepted
 ) AS source
@@ -944,6 +975,10 @@ WHEN MATCHED AND
         source.CapturedUplinkCount > target.CapturedUplinkCount
         OR source.ObservedGatewayCount > target.ObservedGatewayCount
         OR source.MultiGatewayUplinkCount > target.MultiGatewayUplinkCount
+        OR ISNULL(source.RadioProfileCountsJson, N'') <> ISNULL(target.RadioProfileCountsJson, N'')
+        OR ISNULL(source.UplinkContextCountsJson, N'') <> ISNULL(target.UplinkContextCountsJson, N'')
+        OR ISNULL(source.RadioFieldQualityJson, N'') <> ISNULL(target.RadioFieldQualityJson, N'')
+        OR ISNULL(source.FrameCounterSummaryJson, N'') <> ISNULL(target.FrameCounterSummaryJson, N'')
         OR EXISTS (
             SELECT 1
             FROM OPENJSON(source.EventLogCountsJson) AS sourceLog
@@ -960,6 +995,10 @@ WHEN MATCHED AND
         target.ObservedGatewayCount = source.ObservedGatewayCount,
         target.MultiGatewayUplinkCount = source.MultiGatewayUplinkCount,
         target.EventLogCountsJson = source.EventLogCountsJson,
+        target.RadioProfileCountsJson = source.RadioProfileCountsJson,
+        target.UplinkContextCountsJson = source.UplinkContextCountsJson,
+        target.RadioFieldQualityJson = source.RadioFieldQualityJson,
+        target.FrameCounterSummaryJson = source.FrameCounterSummaryJson,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -971,6 +1010,10 @@ WHEN NOT MATCHED BY TARGET THEN
         ObservedGatewayCount,
         MultiGatewayUplinkCount,
         EventLogCountsJson,
+        RadioProfileCountsJson,
+        UplinkContextCountsJson,
+        RadioFieldQualityJson,
+        FrameCounterSummaryJson,
         ExtractedAt
     )
     VALUES (
@@ -981,6 +1024,10 @@ WHEN NOT MATCHED BY TARGET THEN
         source.ObservedGatewayCount,
         source.MultiGatewayUplinkCount,
         source.EventLogCountsJson,
+        source.RadioProfileCountsJson,
+        source.UplinkContextCountsJson,
+        source.RadioFieldQualityJson,
+        source.FrameCounterSummaryJson,
         source.ExtractedAt
     )
 OUTPUT $action INTO @MergeActions;
@@ -1009,6 +1056,8 @@ USING (
         AverageSnr,
         MinSnr,
         MaxSnr,
+        RadioReceptionStatsJson,
+        ReceptionFieldQualityJson,
         FirstReceivedAt,
         LastReceivedAt,
         ExtractedAt,
@@ -1050,6 +1099,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
         target.GatewayReceptionCount = source.GatewayReceptionCount,
         target.ReceptionShare = source.ReceptionShare,
         target.AverageRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.AverageRssi
             WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
                 AND (
                     source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
@@ -1058,6 +1108,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
             ELSE source.AverageRssi
         END,
         target.MinRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MinRssi
             WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
                 AND (
                     source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
@@ -1066,6 +1117,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
             ELSE source.MinRssi
         END,
         target.MaxRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MaxRssi
             WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
                 AND (
                     source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
@@ -1074,6 +1126,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
             ELSE source.MaxRssi
         END,
         target.AverageSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.AverageSnr
             WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
                 AND (
                     source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
@@ -1082,6 +1135,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
             ELSE source.AverageSnr
         END,
         target.MinSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MinSnr
             WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
                 AND (
                     source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
@@ -1090,6 +1144,7 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
             ELSE source.MinSnr
         END,
         target.MaxSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MaxSnr
             WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
                 AND (
                     source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
@@ -1097,6 +1152,8 @@ WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
                 ) THEN target.MaxSnr
             ELSE source.MaxSnr
         END,
+        target.RadioReceptionStatsJson = source.RadioReceptionStatsJson,
+        target.ReceptionFieldQualityJson = source.ReceptionFieldQualityJson,
         target.FirstReceivedAt = source.FirstReceivedAt,
         target.LastReceivedAt = source.LastReceivedAt,
         target.ExtractedAt = source.ExtractedAt,
@@ -1115,6 +1172,8 @@ WHEN NOT MATCHED BY TARGET AND source.IsNonDecreasing = 1 THEN
         AverageSnr,
         MinSnr,
         MaxSnr,
+        RadioReceptionStatsJson,
+        ReceptionFieldQualityJson,
         FirstReceivedAt,
         LastReceivedAt,
         ExtractedAt
@@ -1132,6 +1191,8 @@ WHEN NOT MATCHED BY TARGET AND source.IsNonDecreasing = 1 THEN
         source.AverageSnr,
         source.MinSnr,
         source.MaxSnr,
+        source.RadioReceptionStatsJson,
+        source.ReceptionFieldQualityJson,
         source.FirstReceivedAt,
         source.LastReceivedAt,
         source.ExtractedAt

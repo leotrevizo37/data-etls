@@ -85,6 +85,10 @@ DEVICE_EVENT_METRICS_SCHEMA = StructType(
         StructField("ObservedGatewayCount", IntegerType(), False),
         StructField("MultiGatewayUplinkCount", LongType(), False),
         StructField("EventLogCountsJson", StringType(), False),
+        StructField("RadioProfileCountsJson", StringType(), False),
+        StructField("UplinkContextCountsJson", StringType(), False),
+        StructField("RadioFieldQualityJson", StringType(), False),
+        StructField("FrameCounterSummaryJson", StringType(), False),
         StructField("ExtractedAt", TimestampType(), False),
     ]
 )
@@ -102,6 +106,8 @@ DEVICE_GATEWAY_METRICS_SCHEMA = StructType(
         StructField("AverageSnr", DecimalType(18, 6), True),
         StructField("MinSnr", DecimalType(18, 6), True),
         StructField("MaxSnr", DecimalType(18, 6), True),
+        StructField("RadioReceptionStatsJson", StringType(), False),
+        StructField("ReceptionFieldQualityJson", StringType(), False),
         StructField("FirstReceivedAt", TimestampType(), False),
         StructField("LastReceivedAt", TimestampType(), False),
         StructField("ExtractedAt", TimestampType(), False),
