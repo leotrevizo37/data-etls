@@ -36,7 +36,7 @@ class IndexMaintenanceTests(unittest.TestCase):
         defaults = _assignment_value(JOB_FILE, "INDEX_MAINTENANCE_DEFAULTS")
 
         self.assertIn("EXEC ctl.usp_IndexMaintenance_Run", query)
-        self.assertEqual(defaults["schema_name"], "dwh")
+        self.assertIsNone(defaults["schema_name"])
         self.assertEqual(defaults["min_page_count"], 1000)
         self.assertEqual(defaults["reorganize_threshold"], 30.0)
         self.assertEqual(defaults["rebuild_threshold"], 80.0)

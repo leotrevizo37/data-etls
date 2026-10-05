@@ -4,7 +4,7 @@ GO
 
 CREATE OR ALTER PROCEDURE ctl.usp_IndexMaintenance_Run
     (
-        @SchemaName SYSNAME = N'dwh',
+        @SchemaName SYSNAME = NULL,
         @MinPageCount INT = 1000,
         @ReorganizeThreshold DECIMAL(9, 4) = 30.0,
         @RebuildThreshold DECIMAL(9, 4) = 80.0,
@@ -14,12 +14,11 @@ CREATE OR ALTER PROCEDURE ctl.usp_IndexMaintenance_Run
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @SchemaName IS NULL
-        BEGIN
-            RAISERROR ('usp_IndexMaintenance_Run: @SchemaName must not be NULL.', 16, 1);
-            RETURN;
-        END;
+    SET ANSI_PADDING ON;
+    SET ANSI_WARNINGS ON;
+    SET CONCAT_NULL_YIELDS_NULL ON;
+    SET ARITHABORT ON;
+    SET NUMERIC_ROUNDABORT OFF;
 
     IF @MinPageCount IS NULL OR @MinPageCount < 0
         BEGIN
@@ -39,7 +38,7 @@ BEGIN
             RETURN;
         END;
 
-    IF SCHEMA_ID(@SchemaName) IS NULL
+    IF @SchemaName IS NOT NULL AND SCHEMA_ID(@SchemaName) IS NULL
         BEGIN
             RAISERROR ('usp_IndexMaintenance_Run: target schema not found.', 16, 1);
             RETURN;
@@ -117,12 +116,13 @@ BEGIN
         ON
             stats.object_id = i.object_id
             AND stats.index_id = i.index_id
-    INNER JOIN sys.tables AS t
+    INNER JOIN sys.objects AS t
         ON stats.object_id = t.object_id
     INNER JOIN sys.schemas AS s
         ON t.schema_id = s.schema_id
     WHERE
-        s.name = @SchemaName
+        (@SchemaName IS NULL OR s.name = @SchemaName)
+        AND t.type IN ('U', 'V')
         AND t.is_ms_shipped = 0
         AND i.type IN (1, 2)
         AND i.is_disabled = 0
