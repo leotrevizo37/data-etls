@@ -12,7 +12,7 @@ INDEX_MAINTENANCE_QUERY = (
 )
 
 INDEX_MAINTENANCE_DEFAULTS = {
-    "schema_name": "dwh",
+    "schema_name": None,
     "min_page_count": 1000,
     "reorganize_threshold": 30.0,
     "rebuild_threshold": 80.0,
@@ -39,7 +39,7 @@ def run_index_maintenance_op(context):
     if isinstance(result, Exception):
         raise RuntimeError("Index maintenance procedure failed.") from result
 
-    context.log.info("Completed dwh index maintenance.")
+    context.log.info("Completed index maintenance for tables and indexed views in all schemas.")
     return Output(value=result, metadata=INDEX_MAINTENANCE_DEFAULTS)
 
 
