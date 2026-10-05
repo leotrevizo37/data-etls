@@ -10,7 +10,7 @@ El proyecto requiere ejecutar pipelines incrementales, backfills, schedules, ass
 
 ## Decision
 
-Usar Dagster como orquestador principal con seis code locations gRPC, una por `user_code`.
+Usar Dagster como orquestador principal con code locations independientes por `user_code`. Tras la retirada descrita en [ADR 0005](0005-remove-code-locations.md), `dagster/workspace.yaml` registra cuatro locations: `bafar_poc_gabinete`, `valledelencino`, `carlsjr` y `emerson`. `bafar` mantiene código propio sin registro en ese workspace; `alerting` conserva sensores inertes conforme al [ADR 0007](0007-tenant-alert-detection.md).
 
 ## Consecuencias
 
