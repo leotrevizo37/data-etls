@@ -2,7 +2,7 @@
 
 ## Runtime
 
-El repositorio corre con Docker Compose, Dagster y Spark standalone. `dagster/workspace.yaml` registra por gRPC `bafar_poc_gabinete`, `valledelencino`, `carlsjr` y `emerson`. El código de `bafar` y la location inerte `alerting` existen, pero no están registrados en ese workspace; su existencia no acredita un servicio desplegado.
+El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.yaml` registra por gRPC `bafar_poc_gabinete`, `valledelencino`, `carlsjr`, `emerson` y `bafar`. La location inerte `alerting` existe, pero no está registrada en ese workspace; su existencia no acredita un servicio desplegado.
 
 | Servicio logico | Referencia |
 |---|---|
