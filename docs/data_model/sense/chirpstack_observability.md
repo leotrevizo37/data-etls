@@ -9,6 +9,7 @@ El modelo conserva evidencia horaria de comunicacion LoRaWAN y la integra con la
 - `dwh.dimSidonProdDimensions.PhysicalIdentifier`.
 - APIs de devices, aplicaciones, perfiles y metricas de ChirpStack.
 - APIs de inventario, detalle y metricas de gateways de ChirpStack.
+- API de historial de eventos MQTT para `carlsjr`, `emerson` y `valledelencino`.
 - `observability.factRedingsAudits`.
 - Pipeline `023_sense_chirpstack_metrics`.
 
@@ -26,6 +27,11 @@ El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs s
 | `observability.factChirpStackDeviceMetrics` | device-hora | `DevEui`, `TimeSpan` |
 | `stg.factChirpStackGatewayMetrics` | corrida-gateway-hora | `RunId`, `GatewayId`, `TimeSpan` |
 | `observability.factChirpStackGatewayMetrics` | gateway-hora | `GatewayId`, `TimeSpan` |
+| `stg.factChirpStackDeviceEventMetrics` | corrida-device-hora | `RunId`, `DevEui`, `TimeSpan` |
+| `observability.factChirpStackDeviceEventMetrics` | device-hora | `DevEui`, `TimeSpan` |
+| `stg.factChirpStackDeviceGatewayMetrics` | corrida-device-gateway-hora | `RunId`, `DevEui`, `GatewayId`, `TimeSpan` |
+| `observability.factChirpStackDeviceGatewayMetrics` | device-gateway-hora | `DevEui`, `GatewayId`, `TimeSpan` |
+| `raw.MqttEventHistoryRejectedRow` | fila MQTT rechazada | `RejectedRowId` |
 
 ## Columnas principales de devices
 
@@ -39,6 +45,7 @@ El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs s
 | `ReceivedUplinkCount` | Uplinks recibidos por ChirpStack |
 | `AverageRssi`, `AverageSnr` | Calidad agregada del enlace recibido |
 | `LinkErrorCount` | Errores reportados para el bucket |
+| `LinkErrorCountsJson` | Conteo por tipo de error del bucket; `NULL` si no existe evidencia |
 | `BatteryLevel`, `ExternalPowerSource` | Evidencia de bateria o alimentacion disponible |
 | `BatteryLevelSource`, `BatteryObservedAt` | Origen y momento del valor de bateria |
 | `MetricsAvailable` | Distingue bucket disponible de falta de evidencia |
@@ -54,6 +61,7 @@ El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs s
 | `StatsIntervalSeconds` | Intervalo configurado de estadisticas |
 | `ReceivedPacketCount`, `TransmittedPacketCount` | Actividad RX y TX |
 | `TxOkCount`, `TxErrorCount` | Resultado agregado de transmisiones |
+| `TxPacketStatusCountsJson` | Conteo por estado de transmision del bucket |
 | `MetricsAvailable` | Disponibilidad del bucket horario |
 
 ## Distribuciones MQTT por hora
@@ -112,6 +120,12 @@ El historico tiene retencion configurable y no es un archivo permanente ni una c
 
 Los objetos `RadioFieldQualityJson` y `ReceptionFieldQualityJson` mantienen respectivamente nueve y cuatro campos, cada uno con tres contadores. Su estructura es fija bajo este contrato; los bytes cambian con los digitos de los conteos. Los arreglos de distribuciones tienen cardinalidad variable. `ISJSON` valida sintaxis, no todas las relaciones semanticas entre columnas. La aceptacion compara conteos validos de calidad, no cada grupo de `RadioReceptionStatsJson`.
 
+## Columnas de eventos MQTT
+
+`factChirpStackDeviceEventMetrics` conserva uplinks capturados, gateways observados, uplinks recibidos por mas de un gateway y conteos de logs por codigo. `factChirpStackDeviceGatewayMetrics` conserva recepciones, participacion sobre los uplinks del device, RSSI, SNR y primera/ultima recepcion para cada relacion observada. RSSI y SNR se agregan de forma independiente y permanecen `NULL` cuando ninguna recepcion del bucket aporta la medicion.
+
+`raw.MqttEventHistoryRejectedRow` conserva el JSON de la fila recibida truncado a 4000 caracteres, el motivo del rechazo, los parametros exactos de la consulta, `RunId`, `FetchedAt` y `CreatedAt`. Su retencion se aplica por `CreatedAt` durante la ejecucion del pipeline.
+
 ## Vistas
 
 | Vista | Granularidad | Uso |
@@ -121,6 +135,7 @@ Los objetos `RadioFieldQualityJson` y `ReceptionFieldQualityJson` mantienen resp
 | `serving.vwSenseSensorCommunicationHealthHourly` | sensor-hora | Diagnostico integrado DATA-ChirpStack-gateway |
 | `serving.vwSenseSensorCommunicationHealthDaily` | sensor-device-dia | Tendencia diaria |
 | `serving.vwSenseSensorCommunicationHealthWeekly` | sensor-device-semana | Tendencia semanal |
+| `observability.vwSenseDevEuiUplinkReadingsDaily` | DevEUI-día local | Compara uplinks y lecturas sin sumar el mismo uplink por cada sensor |
 
 ## Estados de comunicacion
 
@@ -140,4 +155,6 @@ RSSI, SNR y bateria se exponen como valores crudos. El modelo no crea estados de
 - `ReadingsCount` puede no corresponder uno a uno con uplinks.
 - Una hora ausente permanece `NULL` con `MetricsAvailable = 0`.
 - `GatewayState` y `GatewayLastSeenAt` representan el snapshot observado en `ExtractedAt`.
-- No se infiere una relacion device-gateway especifica sin evidencia del evento.
+- La relacion device-gateway solo se materializa cuando `rxInfo[]` del evento MQTT contiene el `GatewayId`; no se infiere desde metricas agregadas.
+- La indisponibilidad de la API MQTT no se representa como cero y no reemplaza hechos MQTT previamente persistidos.
+- En replays MQTT con `ReceptionFieldQualityJson`, un cero explícito es válido y los escalares de señal se reemplazan con el snapshot aceptado conjuntamente. La rama legacy, sin ese contrato de calidad, conserva una terna RSSI/SNR previa completa si la nueva contiene algún `NULL` o sus tres valores son cero. La aceptación sigue protegiendo conteos y señal previa frente a su desaparición; no demuestra completitud del conjunto de eventos.

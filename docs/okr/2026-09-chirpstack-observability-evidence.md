@@ -45,7 +45,7 @@ Las vistas resultantes soportan el tooltip del mapa de calor, la comparacion ent
 | Recurso | Cliente HTTP validado de ChirpStack | `dagster/<user_code>/src/<user_code>/defs/resources/chirpstack.py` |
 | Transformacion | Normalizacion de devices y gateways | `dagster/<user_code>/src/<user_code>/defs/transformations/chirpstack_metrics.py` |
 | Job | Seleccion del asset de observabilidad | `dagster/<user_code>/src/<user_code>/defs/jobs/chirpstack_metrics_job.py` |
-| Schedule | Ejecucion cada 30 minutos | `dagster/<user_code>/src/<user_code>/defs/schedules/chirpstack_metrics_scheduler.py` |
+| Schedule | Ejecucion una vez por hora al minuto 30 | `dagster/<user_code>/src/<user_code>/defs/schedules/chirpstack_metrics_scheduler.py` |
 | Pruebas | Contratos HTTP, transformaciones, SQL y paridad multi-tenant | `dagster/carlsjr/tests/test_chirpstack_observability.py` |
 
 `<user_code>` representa `carlsjr`, `emerson` o `valledelencino`. Las tres implementaciones conservan el mismo contrato sin introducir una abstraccion compartida nueva.
@@ -129,6 +129,8 @@ La estructura, contratos y pruebas del repositorio no sustituyen una validacion 
 | Septiembre 2026 | Incorporar trazabilidad de comunicacion LoRaWAN al monitoreo de lecturas Sense | El release agrega evidencia horaria de devices y gateways, la integra con DATA y habilita diagnosticos diferenciados para sensores, enlace, gateways e ingestion. |
 
 ## Documentacion base
+
+La evidencia anterior corresponde a las métricas oficiales. La extensión MQTT posterior agrega los hechos de eventos y recepciones, calidad por campo, rechazos con retención y aceptación conjunta de snapshots. Sus contratos están en el modelo y [ADR 0008](../adr/0008-chirpstack-partial-mqtt-evidence.md). Esta referencia no añade una validación productiva a la evidencia histórica.
 
 - `docs/features/chirpstack_observability.md`.
 - `docs/pipelines/chirpstack_observability.md`.
