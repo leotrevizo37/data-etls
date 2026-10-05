@@ -1,5 +1,7 @@
 # Pipeline `100_mantiz_tickets` - text insights
 
+Estado: desactivado. El flujo y los jobs relacionados se conservan como referencia; no se documentan como operación activa.
+
 ## Proposito
 
 Extraer conceptos medibles desde textos Mantiz y consolidarlos en `dwh.factMantizTicketTextInsights`.

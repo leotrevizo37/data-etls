@@ -42,4 +42,5 @@ Cada elemento de `SensorsJson` contiene:
 - La vista agrupa por dispositivo, ubicacion, sububicacion y hora.
 - Los sensores se ordenan por tipo, nombre y `SensorId`.
 - `INCLUDE_NULL_VALUES` conserva valores nulos en JSON.
+- La agrupación y el JSON utilizan `LocalTimeSpan`; no distinguen las dos ocurrencias UTC de una hora local repetida por DST. Para identidad temporal utilizar el contrato de [mediciones](fact_readings_measurement.md).
 

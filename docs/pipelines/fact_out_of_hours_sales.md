@@ -7,7 +7,7 @@ Materializar las ventas Bafar fuera de horario en `dwh.factOutOfHoursSales`.
 ## Entradas
 
 - Ventas Bafar desde SQL Server.
-- `dwh.dimStoreSchedules`.
+- `dwh.dimStoreSchedules`, alimentada por el pipeline `010_bafar_store_schedules`.
 - Watermark `FactOutOfHoursSales`.
 
 ## Salida
@@ -25,7 +25,7 @@ Materializar las ventas Bafar fuera de horario en `dwh.factOutOfHoursSales`.
 ## Flujo
 
 1. Lee el watermark o usa la fecha inicial configurada.
-2. Retrocede 15 minutos para reprocesar ventas cercanas al ultimo punto cargado.
+2. Define el inicio de la ventana a las 00:00 del dia anterior en `America/Ciudad_Juarez`.
 3. Lee las ventas Bafar desde el inicio de la ventana.
 4. Lee los horarios de sucursales desde `dwh.dimStoreSchedules`.
 5. Clasifica cada venta con `OutOfHoursType` y `DeviationMinutes`.

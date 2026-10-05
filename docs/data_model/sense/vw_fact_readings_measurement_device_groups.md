@@ -70,4 +70,5 @@ Cada elemento de `Sensors` contiene:
 - Los dispositivos se ordenan por sububicacion, tipo, nombre y `DeviceId`.
 - Los sensores se ordenan por tipo, nombre y `SensorId`.
 - `INCLUDE_NULL_VALUES` conserva valores nulos en los JSON generados.
+- La agrupación utiliza hora local y no distingue por sí sola horas repetidas por DST; la identidad UTC se conserva en el [hecho base](fact_readings_measurement.md).
 

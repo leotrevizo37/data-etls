@@ -1,5 +1,7 @@
 # MantizTicketTextInsightDetail
 
+Estado: Mantiz desactivado. El contrato existente se conserva como referencia.
+
 ## Proposito
 
 `stg.MantizTicketTextInsightDetail` conserva el detalle de cada frase o concepto extraido desde textos Mantiz durante una corrida.

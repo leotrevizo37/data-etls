@@ -18,10 +18,10 @@ Obtener los horarios de las sucursales Bafar desde la API de horarios y consolid
 ## Programacion
 
 - Job: `010_bafar_store_schedules`.
-- Schedule: `010_bafar_store_schedules_every_1d`.
-- Frecuencia: diariamente a las 02:30.
+- Schedule: `010_bafar_store_schedules_every_12h`, a las 10:00 y 22:00 en `America/Ciudad_Juarez`.
+- Frecuencia: dos veces al día, a las 10:00 y 22:00.
 - Zona horaria: `America/Ciudad_Juarez`.
-- Estado inicial: detenido.
+- Estado inicial: activo (`RUNNING`); el estado persistido en Dagster puede diferir.
 
 ## Flujo
 

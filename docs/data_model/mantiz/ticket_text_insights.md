@@ -1,5 +1,7 @@
 # factMantizTicketTextInsights
 
+Estado: Mantiz desactivado. El contrato existente se conserva como referencia.
+
 ## Proposito
 
 `dwh.factMantizTicketTextInsights` convierte textos libres de tickets Mantiz en categorias medibles: falla principal, solucion, refaccion y evidencia textual.

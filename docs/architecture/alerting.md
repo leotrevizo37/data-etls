@@ -21,7 +21,7 @@ valledelencino registra copias independientes de:
 - asset_row_count_trend_sensor.
 
 Ambos usan exclusivamente el recurso sqlserver del tenant. En `carlsjr` y
-`emerson` se registran en estado inicial `RUNNING`; en los demás tenants,
+`emerson` y `valledelencino` se registran en estado inicial `RUNNING`; en los demás tenants,
 `STOPPED`.
 
 La code location alerting conserva esos dos nombres para compatibilidad. Sus
@@ -60,7 +60,7 @@ activa por tenant. alerting.usp_AlertConfig_Activate valida el borrador, retira
 la versión vigente y activa la nueva dentro de una transacción.
 
 Cada versión válida contiene exactamente una regla default por cada uno de
-los seis tipos. Puede agregar overrides completos por entity_key; la
+los tipos activos del catálogo, actualmente ocho, incluidos los dos tipos SIDON. Puede agregar overrides completos por entity_key; la
 coincidencia exacta gana y, si no existe, se usa el default. En
 connection_lost y late_readings, entity_key es el SensorId canónico.
 
@@ -82,11 +82,13 @@ existe evidencia posterior a la detección:
 La ausencia de datos, una fuente obsoleta, un cambio de configuración o una
 regla deshabilitada no producen CLEARED.
 
-dagster_run_failure es puntual y solo produce DETECTED. El detector usa las
+dagster_run_failure identifica una ocurrencia por run y asset. Puede producir CLEARED cuando una materialización posterior del mismo asset y de la misma code location confirma recuperación. El detector usa las
 APIs públicas de Dagster, exige el origen de la code location y relaciona cada
 paso fallido con los assets declarados en el execution plan. Un paso
 multi-asset produce una incidencia por asset; sin asset comprobable no produce
-señal. En este tipo, entity_id es el run_id y entity_key es el asset afectado.
+señal. También recorre dependencias downstream y excluye assets materializados en la corrida fallida. En este tipo, entity_id es el run_id y entity_key es el asset afectado.
+
+Carlsjr, Emerson y Valle incorporan además `sidon_configuration_sensor`, que solicita un job por entidad y separa la evaluación de IA del tick. Sus contratos y recuperación están descritos en el [pipeline SIDON](../pipelines/sidon_configuration_signals.md).
 
 ## Códigos de alerta
 
@@ -107,13 +109,9 @@ Si no existe metadata descriptiva, se usa entity_key.
 Los scripts 026 a 029 archivan las tablas anteriores como
 alert_workflow_state_legacy, alert_config_legacy y alert_rule_legacy, y crean
 catálogos, configuración, incidencias y eventos. Los scripts 030 a 033 crean
-las vistas, protecciones y el procedimiento de activación. Los scripts 034 y
-035 materializan la configuración efectiva anterior y migran únicamente
-evidencia histórica demostrable.
+las vistas, protecciones y el procedimiento de activación. `038_alerting_email_recipients.sql` incorpora el [contrato de destinatarios y correo](../data_model/alerting_email.md), administrado por el sistema externo.
 
-Los scripts son repetibles. La inicialización no crea una configuración de
-alertas por defecto; cada tenant permanece sin configuración activa hasta que
-se prepare y active explícitamente una versión válida.
+Los scripts son repetibles. La inicialización global no crea una configuración por defecto. Los scripts `sql/user_codes/<user_code>/init/020_alerting_default_config.sql` de Carlsjr, Emerson y Valle crean y activan una versión con ocho reglas únicamente cuando no existe historial de configuración del tenant. Si ya existe, no lo sustituyen ni corrigen. Bafar y Gabinete requieren preparar y activar su configuración explícitamente. El estado inicial declarado de los sensores no acredita su estado efectivo en Dagster.
 
 `029_alerting_event_model.sql` debe terminar antes de crear
 `serving.vwEstadoAlertas` en `031`. La migración usa `SET NOCOUNT ON` porque el

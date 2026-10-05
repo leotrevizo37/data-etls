@@ -21,7 +21,7 @@ tickets ni reintentos.
 Cada code location de `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y
 `valledelencino` tendrá copias independientes de
 `operational_alerts_sensor` y `asset_row_count_trend_sensor`. Los sensores usan
-el recurso SQL Server local, comienzan en estado `STOPPED` y escriben únicamente
+el recurso SQL Server local y escriben únicamente
 incidencias y señales append-only `DETECTED` o `CLEARED`.
 
 Cada base tenant almacena catálogos con GUID estables, versiones inmutables de
@@ -44,7 +44,8 @@ no solicitan recursos y no conservan rutas de escritura o entrega.
   alterar el contrato de señales.
 - Las implementaciones de los cinco tenants permanecen duplicadas de forma
   deliberada para conservar su independencia.
-- La activación de sensores es manual después de validar DDL y configuración.
+- El estado inicial declarado es `RUNNING` para ambos sensores en `carlsjr`, `emerson` y `valledelencino`, y `STOPPED` en `bafar` y `bafar_poc_gabinete`. El estado persistido en Dagster puede diferir de ese default.
+- Los scripts específicos `020_alerting_default_config.sql` de Carlsjr, Emerson y Valle crean y activan una versión inicial solo si no existe historial de configuración para el tenant. La inicialización global no crea esa versión. Antes de operar se deben comprobar DDL y configuración efectiva.
 - La vista de serving puede reportar workflow y acciones cuando el sistema
   externo los escriba, sin inventar valores mientras no existan.
 - El servicio central conserva compatibilidad de registro, pero deja de

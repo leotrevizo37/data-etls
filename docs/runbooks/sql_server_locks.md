@@ -10,9 +10,10 @@ Los pipelines usan tres patrones:
 
 | Patron | Tablas |
 |---|---|
-| Borrado por ventana e insercion | `dwh.factLecturas`, `dwh.factSensorEvents` |
-| Staging + `MERGE` | `dwh.factReadingsMeasurement`, `dwh.factSmartauditsCategories`, `dwh.factMantizTicketLifecycle` |
-| Reemplazo por llaves cambiadas | `dwh.factMantizTicketTextInsights` |
+| Borrado por ventana e insercion | `dwh.factLecturas`, `dwh.factAudiencia` |
+| Staging + `MERGE` | `dwh.factReadingsMeasurement`, `dwh.factSensorEvents`, `dwh.factSmartauditsCategories`, hechos ChirpStack/MQTT y ventas Bafar |
+
+Mantiz está desactivado; sus patrones de escritura no representan una carga programada activa.
 
 ## Diagnostico
 

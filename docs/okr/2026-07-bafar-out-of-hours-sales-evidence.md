@@ -1,6 +1,6 @@
 # Bafar ventas fuera de horario - Evidencia técnica del ETL - 2026-07-24
 
-Estado: PENDIENTE DE EVIDENCIA PRODUCTIVA
+Estado: PENDIENTE DE API BAFAR PRODUCTIVA
 
 ## Objetivo cubierto
 
@@ -48,7 +48,7 @@ Habilita la integración del dato de ventas fuera de horario en BI solicitada po
 
 ## Flujo técnico
 
-1. El asset obtiene el watermark de `FactOutOfHoursSales` y retrocede 15 minutos para reprocesar ventas cercanas al último punto cargado.
+1. El asset obtiene el watermark de `FactOutOfHoursSales` y reprocesa desde las 00:00 del día anterior en `America/Ciudad_Juarez`.
 2. Spark lee las ventas Bafar desde SQL Server y los horarios vigentes desde `dwh.dimStoreSchedules`.
 3. La transformación identifica ventas antes de apertura, durante el horario de comida, después del cierre o sin horario aplicable.
 4. El resultado se escribe en `stg.factOutOfHoursSales` con el `RunId` de la corrida.

@@ -1,5 +1,7 @@
 # MantizTextInsightReviewQueue
 
+Estado: Mantiz desactivado. El contrato existente se conserva como referencia.
+
 ## Proposito
 
 `ctl.MantizTextInsightReviewQueue` concentra conceptos extraidos de textos Mantiz que requieren revision o aprobacion.

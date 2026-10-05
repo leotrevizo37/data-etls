@@ -217,6 +217,8 @@ def _alert_code(
         "pipeline_stale": "ingesta-atrasada",
         "dagster_run_failure": "fallo-dagster",
         "asset_row_count_trend": "caida-volumen",
+        "sidon_device_configuration": "configuracion-dispositivo",
+        "sidon_alert_configuration": "configuracion-alerta",
     }
     return f"{prefixes[alert_type]}-{_slug(entity_key)}"
 

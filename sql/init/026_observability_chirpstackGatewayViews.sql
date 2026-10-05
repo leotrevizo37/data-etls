@@ -7,6 +7,7 @@ SELECT
     SUM(CONVERT(BIGINT, CASE WHEN GatewayState = N'ONLINE' THEN 1 ELSE 0 END)) AS OnlineGatewayCount,
     SUM(CONVERT(BIGINT, CASE WHEN GatewayState = N'OFFLINE' THEN 1 ELSE 0 END)) AS OfflineGatewayCount,
     SUM(CONVERT(BIGINT, CASE WHEN GatewayState = N'NEVER_SEEN' THEN 1 ELSE 0 END)) AS NeverSeenGatewayCount,
+    SUM(CONVERT(BIGINT, CASE WHEN GatewayState = N'UNKNOWN' THEN 1 ELSE 0 END)) AS UnknownGatewayCount,
     SUM(CONVERT(BIGINT, CASE WHEN MetricsAvailable = 1 THEN 1 ELSE 0 END)) AS GatewaysWithMetricsCount,
     SUM(ReceivedPacketCount) AS ReceivedPacketCount,
     SUM(TransmittedPacketCount) AS TransmittedPacketCount,

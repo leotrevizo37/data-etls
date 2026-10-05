@@ -4,6 +4,8 @@
 
 R&D. Deliberando
 
+Spark standalone ya está implementado en el repositorio. Este estado conserva la deliberación de la decisión arquitectónica; no indica ausencia de implementación ni acredita validación de capacidad o despliegue. La aceptación final sigue pendiente de decisión del responsable.
+
 ## Contexto
 
 Las lecturas y fuentes operativas pueden ser voluminosas, y varias transformaciones requieren joins, agregaciones, ventanas y escritura JDBC particionada.

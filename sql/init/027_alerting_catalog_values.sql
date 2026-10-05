@@ -9,7 +9,9 @@ USING (
     ('10000000-0000-0000-0000-000000000003', N'pipeline_failure', N'Fallo de ingesta', N'La última ejecución terminal de una ingesta terminó con error.', 1, 1, 30),
     ('10000000-0000-0000-0000-000000000004', N'pipeline_stale', N'Ingesta atrasada', N'La última ejecución exitosa superó su intervalo esperado.', 1, 1, 40),
     ('10000000-0000-0000-0000-000000000005', N'dagster_run_failure', N'Fallo de ejecución Dagster', N'Una corrida Dagster falló mientras materializaba un asset comprobable.', 1, 1, 50),
-    ('10000000-0000-0000-0000-000000000006', N'asset_row_count_trend', N'Caída de volumen del asset', N'El volumen materializado cayó frente a los promedios configurados.', 1, 1, 60)
+    ('10000000-0000-0000-0000-000000000006', N'asset_row_count_trend', N'Caída de volumen del asset', N'El volumen materializado cayó frente a los promedios configurados.', 1, 1, 60),
+    ('10000000-0000-0000-0000-000000000007', N'sidon_device_configuration', N'Configuración de dispositivo sospechosa', N'Incongruencias entre dispositivos, sensores y sus tipos en SIDON.', 1, 1, 70),
+    ('10000000-0000-0000-0000-000000000008', N'sidon_alert_configuration', N'Configuración de alerta sospechosa', N'Incongruencias entre condiciones SIDON, sensores y rangos esperados.', 1, 1, 80)
 )
     AS source (
         alert_type_id, code, name_es, description_es, is_continuous,

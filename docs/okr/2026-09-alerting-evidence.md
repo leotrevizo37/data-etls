@@ -8,7 +8,7 @@ Detectar de forma aislada por tenant el inicio y fin comprobable de condiciones 
 
 ## Entregable
 
-Las code locations `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores locales. En `carlsjr` y `emerson` comienzan en estado `RUNNING`; en los demás tenants permanecen `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
+Las code locations `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores operativos locales. En `carlsjr`, `emerson` y `valledelencino` su default es `RUNNING`; en los demás tenants es `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
 
 La code location `alerting` conserva ambos nombres de sensor solo por compatibilidad operativa. Sus sensores permanecen `STOPPED`, no solicitan recursos y siempre devuelven `SkipReason`; no realizan detección, persistencia ni entrega.
 
@@ -22,10 +22,10 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 |---|---|
 | Alcance | `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` |
 | Deteccion | Copias locales de `operational_alerts_sensor` y `asset_row_count_trend_sensor` |
-| Estado inicial | Ambos sensores están `RUNNING` en `carlsjr` y `emerson`; permanecen `STOPPED` en los demás tenants |
+| Estado inicial declarado | Ambos sensores están `RUNNING` en `carlsjr`, `emerson` y `valledelencino`; `STOPPED` en los demás tenants; no acredita estado efectivo |
 | Recurso | `sqlserver` de la code location correspondiente |
 | Sensor operativo | Intervalo minimo de 30 segundos; la cadencia efectiva de cada regla se obtiene de la configuración activa |
-| Sensor de tendencias | Intervalo minimo de 21600 segundos, consistente con `capture_interval_seconds` |
+| Sensor de tendencias | Intervalo minimo de 21600 segundos; los defaults SQL de Carlsjr, Emerson y Valle configuran captura de 3600, sin reducir ese mínimo del sensor |
 | Persistencia | Esquema `alerting` en la base SQL Server de cada tenant |
 | Serving | `serving.vwEstadoAlertas` y `serving.vwValidacionConfiguracionesAlerta` |
 | Acciones externas | Dagster no envia correo, no crea tickets y no escribe estados de workflow |
@@ -44,7 +44,7 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 | Incidencias | Identidad y evidencia raiz | `sql/init/029_alerting_event_model.sql` |
 | Serving | Estado consolidado y validacion de configuración | `sql/init/030_serving_alert_config_validation.sql` y `sql/init/031_serving_alert_state.sql` |
 | Protecciones | Inmutabilidad, referencias y activacion transaccional | `sql/init/032_alerting_state_guards.sql` y `sql/init/033_alerting_catalog_guards.sql` |
-| Provisionamiento | Sin configuracion por defecto; cada version se crea y activa explícitamente por tenant | `docs/runbooks/alerting_sql_configuration.md` |
+| Provisionamiento | Init global sin defaults; init específico de Carlsjr, Emerson y Valle crea y activa una versión solo si no existe historial | `docs/runbooks/alerting_sql_configuration.md` |
 
 ## Señales cubiertas
 
@@ -56,6 +56,8 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 | Pipeline atrasado | `ctl.IngestionControl` | Ultima ejecucion exitosa fuera de la cadencia configurada |
 | Corrida fallida | Event log de Dagster | Paso fallido relacionado con assets comprobables de la misma code location |
 | Tendencia de volumen | Event log de Dagster | Caida simultanea contra promedios de 7 y 28 dias en metadata `row_count` |
+| Configuración de dispositivo SIDON | Dimensiones del tenant | Hallazgos estructurales y evaluación semántica por job |
+| Configuración de alerta SIDON | Condiciones y rangos esperados | Evaluación por entidad y recuperación comprobada |
 
 Las condiciones continuas solo se cierran cuando existe evidencia posterior a su deteccion. Para sensores se requiere una lectura nueva; para ingestiones, una ejecución exitosa posterior; para fallos Dagster, una materializacion posterior del mismo asset en la misma code location; y para tendencias, una materializacion posterior con volumen saludable. La ausencia de datos, una fuente obsoleta o una regla deshabilitada no producen `CLEARED`.
 
@@ -93,6 +95,8 @@ La configuracion sigue el ciclo `DRAFT` → `ACTIVE` → `RETIRED`. Cada versió
 | `dagster/alerting/tests/test_asset_row_count_trends.py` | Paridad de las copias tenant-specific y contratos de captura y tendencias |
 
 ## Evidencia pendiente
+
+Los dos tipos SIDON y su sensor adicional están descritos en el [pipeline](../pipelines/sidon_configuration_signals.md). Su incorporación no convierte las pruebas históricas en evidencia de precisión semántica ni de operación productiva.
 
 La evidencia del repositorio demuestra la topologia, los contratos SQL, la configuracion inicial, la deteccion y las pruebas automatizadas. Para acreditar operacion en un entorno real todavía se requiere comprobar, por tenant:
 
