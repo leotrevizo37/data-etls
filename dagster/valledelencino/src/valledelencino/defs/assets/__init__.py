@@ -9,7 +9,10 @@ from .source_assets import (dbo_sensors,
 from .dwh_factLecturas import dwh_factlecturas
 from .dwh_factSensorEvents import dwh_factsensorevents
 from .observability_factRedingsAudits import observability_factredingsaudits
-from .observability_chirpstack_metrics import observability_chirpstackmetrics
+from .observability_chirpstack_metrics import (
+    observability_chirpstackmetrics,
+    observability_chirpstackmqttmetrics,
+)
 from .data_transformations import data_transformations
 from .dwh_dimSidonProdDimensions import dwh_dimsidonproddimensions
 from .cleanup_old_runs import cleanup_old_runs
@@ -27,6 +30,7 @@ __all__ = [
     "dwh_factsensorevents",
     "observability_factredingsaudits",
     "observability_chirpstackmetrics",
+    "observability_chirpstackmqttmetrics",
     "operations_assets",
     "data_transformations",
     "dwh_dimsidonproddimensions",

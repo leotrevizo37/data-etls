@@ -14,6 +14,8 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
             AverageSnr DECIMAL(18, 6) NULL,
             MinSnr DECIMAL(18, 6) NULL,
             MaxSnr DECIMAL(18, 6) NULL,
+            RadioReceptionStatsJson NVARCHAR(MAX) NULL,
+            ReceptionFieldQualityJson NVARCHAR(MAX) NULL,
             FirstReceivedAt DATETIME2(6) NOT NULL,
             LastReceivedAt DATETIME2(6) NOT NULL,
             ExtractedAt DATETIME2(0) NOT NULL,
@@ -32,7 +34,12 @@ IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
                 AND AverageSnr <= MaxSnr
             ),
             CONSTRAINT PK_factChirpStackDeviceGatewayMetrics
-            PRIMARY KEY CLUSTERED (DevEui, GatewayId, TimeSpan)
+            PRIMARY KEY CLUSTERED (DevEui, GatewayId, TimeSpan),
+            CONSTRAINT CK_observability_factChirpStackDeviceGatewayMetrics_RadioJson
+            CHECK (
+                (RadioReceptionStatsJson IS NULL OR ISJSON(RadioReceptionStatsJson) = 1)
+                AND (ReceptionFieldQualityJson IS NULL OR ISJSON(ReceptionFieldQualityJson) = 1)
+            )
         );
     END;
 GO
@@ -71,9 +78,16 @@ IF OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics', N'U') IS NULL
             AverageSnr DECIMAL(18, 6) NULL,
             MinSnr DECIMAL(18, 6) NULL,
             MaxSnr DECIMAL(18, 6) NULL,
+            RadioReceptionStatsJson NVARCHAR(MAX) NULL,
+            ReceptionFieldQualityJson NVARCHAR(MAX) NULL,
             FirstReceivedAt DATETIME2(6) NOT NULL,
             LastReceivedAt DATETIME2(6) NOT NULL,
-            ExtractedAt DATETIME2(0) NOT NULL
+            ExtractedAt DATETIME2(0) NOT NULL,
+            CONSTRAINT CK_stg_factChirpStackDeviceGatewayMetrics_RadioJson
+            CHECK (
+                (RadioReceptionStatsJson IS NULL OR ISJSON(RadioReceptionStatsJson) = 1)
+                AND (ReceptionFieldQualityJson IS NULL OR ISJSON(ReceptionFieldQualityJson) = 1)
+            )
         );
     END;
 GO
@@ -124,5 +138,69 @@ IF
         CREATE INDEX ix_stg_factChirpStackDeviceGatewayMetrics_run
             ON stg.factChirpStackDeviceGatewayMetrics
             (RunId, DevEui, GatewayId, TimeSpan);
+    END;
+GO
+
+IF COL_LENGTH(N'observability.factChirpStackDeviceGatewayMetrics', N'RadioReceptionStatsJson') IS NULL
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ADD RadioReceptionStatsJson NVARCHAR(MAX) NULL;
+    END;
+GO
+
+IF COL_LENGTH(N'observability.factChirpStackDeviceGatewayMetrics', N'ReceptionFieldQualityJson') IS NULL
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ADD ReceptionFieldQualityJson NVARCHAR(MAX) NULL;
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics')
+            AND name = N'CK_observability_factChirpStackDeviceGatewayMetrics_RadioJson'
+    )
+    BEGIN
+        ALTER TABLE observability.factChirpStackDeviceGatewayMetrics
+        ADD CONSTRAINT CK_observability_factChirpStackDeviceGatewayMetrics_RadioJson
+        CHECK (
+            (RadioReceptionStatsJson IS NULL OR ISJSON(RadioReceptionStatsJson) = 1)
+            AND (ReceptionFieldQualityJson IS NULL OR ISJSON(ReceptionFieldQualityJson) = 1)
+        );
+    END;
+GO
+
+IF COL_LENGTH(N'stg.factChirpStackDeviceGatewayMetrics', N'RadioReceptionStatsJson') IS NULL
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ADD RadioReceptionStatsJson NVARCHAR(MAX) NULL;
+    END;
+GO
+
+IF COL_LENGTH(N'stg.factChirpStackDeviceGatewayMetrics', N'ReceptionFieldQualityJson') IS NULL
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ADD ReceptionFieldQualityJson NVARCHAR(MAX) NULL;
+    END;
+GO
+
+IF
+    NOT EXISTS (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE
+            parent_object_id = OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics')
+            AND name = N'CK_stg_factChirpStackDeviceGatewayMetrics_RadioJson'
+    )
+    BEGIN
+        ALTER TABLE stg.factChirpStackDeviceGatewayMetrics
+        ADD CONSTRAINT CK_stg_factChirpStackDeviceGatewayMetrics_RadioJson
+        CHECK (
+            (RadioReceptionStatsJson IS NULL OR ISJSON(RadioReceptionStatsJson) = 1)
+            AND (ReceptionFieldQualityJson IS NULL OR ISJSON(ReceptionFieldQualityJson) = 1)
+        );
     END;
 GO

@@ -258,6 +258,18 @@ def build_gateway_metric_row(
         time_span,
         "gateway txPacketsPerStatus",
     )
+    if time_span < extracted_at.replace(minute=0, second=0, microsecond=0):
+        if gateway_state != "NEVER_SEEN":
+            gateway_state = "ONLINE" if any(
+                (value or 0) > 0
+                for value in (
+                    received_packet_count,
+                    transmitted_packet_count,
+                    tx_ok_count,
+                    tx_error_count,
+                )
+            ) else "UNKNOWN"
+        gateway_last_seen_at = None
 
     return {
         "GatewayId": gateway_id,
@@ -295,12 +307,32 @@ def build_device_event_metric_rows(
     while hour < to_utc:
         hours.append(hour)
         hour += timedelta(hours=1)
+    radio_fields = {
+        "regionConfigId": (("regionConfigId",), str, None, None),
+        "adr": (("adr",), bool, None, None),
+        "dr": (("dr",), int, 0, 15),
+        "spreadingFactor": (("txInfo", "modulation", "lora", "spreadingFactor"), int, 5, 12),
+        "bandwidthHz": (("txInfo", "modulation", "lora", "bandwidth"), int, 1, 4294967295),
+        "frequencyHz": (("txInfo", "frequency"), int, 1, 4294967295),
+        "devAddr": (("devAddr",), str, None, None),
+        "fPort": (("fPort",), int, 0, 255),
+        "fCnt": (("fCnt",), int, 0, 4294967295),
+    }
+    profile_fields = ("regionConfigId", "adr", "dr", "spreadingFactor", "bandwidthHz")
+    reception_fields = ("channel", "rfChain", "rssi", "snr")
     summaries = {
         (dev_eui, hour): {
             "uplinks": set(),
             "gateway_sets": {},
             "logs": defaultdict(int),
             "log_fingerprints": set(),
+            "radio_profiles": defaultdict(int),
+            "uplink_contexts": defaultdict(int),
+            "frame_counters": {},
+            "radio_quality": {
+                field: {"valid": 0, "missing": 0, "invalid": 0}
+                for field in radio_fields
+            },
         }
         for dev_eui in devices
         for hour in hours
@@ -377,13 +409,13 @@ def build_device_event_metric_rows(
                 if not isinstance(deduplication_id, str):
                     raise TypeError("uplink event deduplicationId must be text")
                 try:
-                    str(UUID(deduplication_id))
+                    deduplication_id = str(UUID(deduplication_id))
                 except ValueError as ex:
                     raise ValueError(
                         "uplink event deduplicationId must be a UUID"
                     ) from ex
                 canonical_payload = json.dumps(
-                    raw_message,
+                    {**raw_message, "deduplicationId": deduplication_id},
                     ensure_ascii=False,
                     sort_keys=True,
                     separators=(",", ":"),
@@ -398,6 +430,42 @@ def build_device_event_metric_rows(
                 rx_info = raw_message["rxInfo"]
                 if not isinstance(rx_info, list):
                     raise TypeError("uplink event rxInfo must be an array")
+                radio_values = {}
+                radio_status = {}
+                for field, (path, value_type, minimum, maximum) in radio_fields.items():
+                    value = raw_message
+                    status = "valid"
+                    for key in path:
+                        if value is None:
+                            status = "missing"
+                            break
+                        if not isinstance(value, dict):
+                            status = "invalid"
+                            break
+                        value = value.get(key)
+                    if status == "valid":
+                        if value is None:
+                            status = "missing"
+                        elif type(value) is not value_type:
+                            status = "invalid"
+                        elif value_type is int and not minimum <= value <= maximum:
+                            status = "invalid"
+                        elif value_type is str and (not value or value != value.strip()):
+                            status = "invalid"
+                        elif field == "devAddr":
+                            if re.fullmatch(r"[0-9a-fA-F]{8}", value) is None:
+                                status = "invalid"
+                            else:
+                                value = value.lower()
+                    radio_values[field] = value if status == "valid" else None
+                    radio_status[field] = status
+                radio_profile = {field: radio_values[field] for field in profile_fields}
+                profile_key = json.dumps(radio_profile, sort_keys=True, separators=(",", ":"))
+                context_key = json.dumps(
+                    {field: radio_values[field] for field in ("devAddr", "fPort")},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
                 for reception in rx_info:
                     if not isinstance(reception, dict):
                         raise TypeError("uplink event rxInfo must contain objects")
@@ -413,21 +481,33 @@ def build_device_event_metric_rows(
                             "uplink event contains a duplicate gateway reception"
                         )
                     gateway_ids.add(gateway_id)
-                    rssi = reception.get("rssi")
-                    if rssi is not None:
-                        rssi = _decimal_number(
-                            rssi,
-                            "uplink reception RSSI",
-                            DECIMAL_QUANTUM,
-                        )
-                    snr = reception.get("snr")
-                    if snr is not None:
-                        snr = _decimal_number(
-                            snr,
-                            "uplink reception SNR",
-                            DECIMAL_QUANTUM,
-                        )
-                    event_receptions.append((gateway_id, rssi, snr))
+                    reception_values = {}
+                    reception_status = {}
+                    for field in reception_fields:
+                        value = reception.get(field)
+                        status = "missing" if value is None else "valid"
+                        if status == "valid":
+                            if field in ("channel", "rfChain"):
+                                if type(value) is not int or not 0 <= value <= 4294967295:
+                                    status = "invalid"
+                            else:
+                                try:
+                                    value = _decimal_number(value, f"uplink reception {field}", DECIMAL_QUANTUM)
+                                except (TypeError, ValueError):
+                                    status = "invalid"
+                        reception_values[field] = value if status == "valid" else None
+                        reception_status[field] = status
+                    reception_key = json.dumps(
+                        {
+                            **radio_profile,
+                            "frequencyHz": radio_values["frequencyHz"],
+                            "channel": reception_values["channel"],
+                            "rfChain": reception_values["rfChain"],
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    event_receptions.append((gateway_id, reception_key, reception_values, reception_status))
         except (KeyError, TypeError, ValueError) as ex:
             if isinstance(event_row, dict):
                 rejected_rows.append(
@@ -450,7 +530,35 @@ def build_device_event_metric_rows(
         if deduplication_id is None:
             continue
         uplink_payloads[(dev_eui, deduplication_id)] = canonical_payload
-        for gateway_id, rssi, snr in event_receptions:
+        summary["radio_profiles"][profile_key] += 1
+        summary["uplink_contexts"][context_key] += 1
+        for field, status in radio_status.items():
+            summary["radio_quality"][field][status] += 1
+        frame_counter = summary["frame_counters"].setdefault(
+            radio_values["devAddr"],
+            {
+                "devAddr": radio_values["devAddr"], "count": 0, "fCntCount": 0,
+                "firstObservedAt": None, "firstValues": set(),
+                "lastObservedAt": None, "lastValues": set(),
+            },
+        )
+        frame_counter["count"] += 1
+        if radio_values["fCnt"] is not None:
+            frame_counter["fCntCount"] += 1
+            for boundary in ("first", "last"):
+                observed_at = frame_counter[f"{boundary}ObservedAt"]
+                if (
+                    observed_at is None
+                    or (boundary == "first" and event_time < observed_at)
+                    or (boundary == "last" and event_time > observed_at)
+                ):
+                    frame_counter[f"{boundary}ObservedAt"] = event_time
+                    frame_counter[f"{boundary}Values"] = {radio_values["fCnt"]}
+                elif event_time == observed_at:
+                    frame_counter[f"{boundary}Values"].add(radio_values["fCnt"])
+        for gateway_id, reception_key, reception, reception_status in event_receptions:
+            rssi = reception["rssi"]
+            snr = reception["snr"]
             reception_values = receptions.setdefault(
                 (dev_eui, gateway_id, time_span),
                 {
@@ -459,6 +567,11 @@ def build_device_event_metric_rows(
                     "snr": [],
                     "first": event_time,
                     "last": event_time,
+                    "radio_stats": {},
+                    "radio_quality": {
+                        field: {"valid": 0, "missing": 0, "invalid": 0}
+                        for field in reception_fields
+                    },
                 },
             )
             reception_values["count"] += 1
@@ -468,6 +581,27 @@ def build_device_event_metric_rows(
                 reception_values["snr"].append(snr)
             reception_values["first"] = min(reception_values["first"], event_time)
             reception_values["last"] = max(reception_values["last"], event_time)
+            radio_stats = reception_values["radio_stats"].setdefault(
+                reception_key,
+                {
+                    "receptionCount": 0,
+                    "rssiCount": 0, "rssiSum": None, "rssiMin": None, "rssiMax": None,
+                    "snrCount": 0, "snrSum": None, "snrMin": None, "snrMax": None,
+                },
+            )
+            radio_stats["receptionCount"] += 1
+            for field, status in reception_status.items():
+                reception_values["radio_quality"][field][status] += 1
+            for field, value in (("rssi", rssi), ("snr", snr)):
+                if value is not None:
+                    radio_stats[f"{field}Count"] += 1
+                    radio_stats[f"{field}Sum"] = (radio_stats[f"{field}Sum"] or Decimal(0)) + value
+                    radio_stats[f"{field}Min"] = (
+                        value if radio_stats[f"{field}Min"] is None else min(value, radio_stats[f"{field}Min"])
+                    )
+                    radio_stats[f"{field}Max"] = (
+                        value if radio_stats[f"{field}Max"] is None else max(value, radio_stats[f"{field}Max"])
+                    )
         summary["uplinks"].add(deduplication_id)
         summary["gateway_sets"][deduplication_id] = gateway_ids
 
@@ -491,6 +625,30 @@ def build_device_event_metric_rows(
                 "EventLogCountsJson": json.dumps(
                     dict(sorted(summary["logs"].items())),
                     ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "RadioProfileCountsJson": json.dumps(
+                    [{**json.loads(key), "count": count} for key, count in sorted(summary["radio_profiles"].items())],
+                    separators=(",", ":"),
+                ),
+                "UplinkContextCountsJson": json.dumps(
+                    [{**json.loads(key), "count": count} for key, count in sorted(summary["uplink_contexts"].items())],
+                    separators=(",", ":"),
+                ),
+                "RadioFieldQualityJson": json.dumps(summary["radio_quality"], sort_keys=True, separators=(",", ":")),
+                "FrameCounterSummaryJson": json.dumps(
+                    [
+                        {
+                            **counter,
+                            "firstObservedAt": counter["firstObservedAt"].isoformat(timespec="microseconds") + "Z"
+                            if counter["firstObservedAt"] is not None else None,
+                            "lastObservedAt": counter["lastObservedAt"].isoformat(timespec="microseconds") + "Z"
+                            if counter["lastObservedAt"] is not None else None,
+                            "firstValues": sorted(counter["firstValues"]),
+                            "lastValues": sorted(counter["lastValues"]),
+                        }
+                        for _, counter in sorted(summary["frame_counters"].items(), key=lambda item: item[0] or "")
+                    ],
                     separators=(",", ":"),
                 ),
                 "ExtractedAt": extracted_at,
@@ -531,6 +689,12 @@ def build_device_event_metric_rows(
                 else None,
                 "MinSnr": min(values["snr"]) if values["snr"] else None,
                 "MaxSnr": max(values["snr"]) if values["snr"] else None,
+                "RadioReceptionStatsJson": json.dumps(
+                    [{**json.loads(key), **stats} for key, stats in sorted(values["radio_stats"].items())],
+                    default=str,
+                    separators=(",", ":"),
+                ),
+                "ReceptionFieldQualityJson": json.dumps(values["radio_quality"], sort_keys=True, separators=(",", ":")),
                 "FirstReceivedAt": values["first"],
                 "LastReceivedAt": values["last"],
                 "ExtractedAt": extracted_at,
