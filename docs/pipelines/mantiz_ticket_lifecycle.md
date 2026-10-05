@@ -1,5 +1,7 @@
 # Pipeline `100_mantiz_tickets` - lifecycle
 
+Estado: desactivado. El schedule `100_mantiz_tickets_every_6h` declara `STOPPED`; el flujo descrito se conserva como referencia.
+
 ## Proposito
 
 Construir `dwh.factMantizTicketLifecycle` con estado y duraciones del ciclo de vida de tickets Mantiz.
