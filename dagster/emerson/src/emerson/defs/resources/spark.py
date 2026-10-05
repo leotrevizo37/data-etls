@@ -1182,6 +1182,10 @@ class SparkResource:
             "ObservedGatewayCount",
             "MultiGatewayUplinkCount",
             "EventLogCountsJson",
+            "RadioProfileCountsJson",
+            "UplinkContextCountsJson",
+            "RadioFieldQualityJson",
+            "FrameCounterSummaryJson",
             "ExtractedAt",
         ]
         df_stage = (
@@ -1216,6 +1220,8 @@ class SparkResource:
             "AverageSnr",
             "MinSnr",
             "MaxSnr",
+            "RadioReceptionStatsJson",
+            "ReceptionFieldQualityJson",
             "FirstReceivedAt",
             "LastReceivedAt",
             "ExtractedAt",
