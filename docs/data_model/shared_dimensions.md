@@ -24,6 +24,13 @@ Un registro representa un sensor activo o historico con su contexto operacional.
 | `SubLocationId` | `UNIQUEIDENTIFIER` | Sububicacion del dispositivo/sensor |
 | `LocationId` | `UNIQUEIDENTIFIER` | Sucursal o ubicacion |
 | `CityId` | `UNIQUEIDENTIFIER` | Ciudad |
+| `ModelId`, `SensorHubId` | `UNIQUEIDENTIFIER NULL` | Modelo y hub del sensor |
+| `PhysicalIdentifier` | `NVARCHAR(255) NULL` | Identificador físico; define el alcance DevEUI en ChirpStack |
+| `PerEvent` | `BIT NULL` | Contexto de emisión por evento |
+| `TimeZone` | `NVARCHAR(255)` | Zona horaria del sensor; obligatoria en tablas nuevas, nullable al agregarla a tablas existentes |
+| `model_name`, `hub_model_name`, `hub_name` | `NVARCHAR(255) NULL` | Contexto legible de modelo y hub |
+| `SubLocationTyId` | `UNIQUEIDENTIFIER` | Tipo de sububicación |
+| `sublocation_type` | `NVARCHAR(255) NULL` | Tipo legible de sububicación |
 | `sensor_name`, `sensor_type` | `NVARCHAR(255)` | Nombre y tipo funcional del sensor |
 | `device_name`, `device_type` | `NVARCHAR(255)` | Nombre y tipo funcional del dispositivo |
 | `sublocation_name`, `location_name`, `city_name` | `NVARCHAR(255)` | Jerarquia legible de ubicacion |
@@ -66,4 +73,4 @@ Un registro representa una regla de valores esperados para un sensor, dispositiv
 ## Dependencias
 
 - Fuentes dimensionales del sistema Sidon para horarios y programas.
-- Asset de refresh de sensor_expected_val en cada `user_code` o documentación de valores esperados.
+- El refresh depende de la implementación del tenant; la existencia del DDL global no demuestra que cada location tenga un asset de refresco. El contrato de consumo se precisa en [expected_values.md](sense/expected_values.md).
