@@ -43,7 +43,7 @@ BEGIN TRY
             FROM (
                 VALUES
                 (N'connection_lost', 1, N'CRITICAL', 300),
-                (N'late_readings', 0, N'INFO', 300),
+                (N'late_readings', 1, N'WARNING', 300),
                 (N'pipeline_failure', 1, N'CRITICAL', 300),
                 (N'pipeline_stale', 0, N'INFO', 300),
                 (N'dagster_run_failure', 1, N'WARNING', 300),
@@ -76,7 +76,7 @@ BEGIN TRY
             )
             SELECT
                 alert_rule.alert_rule_id,
-                1440 AS no_readings_minutes,
+                CASE WHEN alert_type.code = N'late_readings' THEN 59 ELSE 1440 END AS no_readings_minutes,
                 2880 AS source_max_age_minutes
             FROM alerting.alert_rule AS alert_rule
             INNER JOIN alerting.dim_alert_type AS alert_type
