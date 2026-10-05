@@ -17,12 +17,16 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 - `dwh.dimSidonProdDimensions.PhysicalIdentifier` como `DevEui`.
 - API de devices, aplicaciones, perfiles, link metrics y device metrics de ChirpStack.
 - API de inventario, detalle y metricas de gateways de ChirpStack.
+- API de historial de eventos MQTT para `carlsjr`, `emerson` y `valledelencino`.
 - `observability.factRedingsAudits` para la integracion posterior en vistas de serving.
 
 ## Salidas
 
 - `observability.factChirpStackDeviceMetrics`.
 - `observability.factChirpStackGatewayMetrics`.
+- `observability.factChirpStackDeviceEventMetrics`.
+- `observability.factChirpStackDeviceGatewayMetrics`.
+- `raw.MqttEventHistoryRejectedRow` para filas de la API MQTT que no cumplen el contrato.
 - Vistas horarias de comunicacion de sensores y salud de gateways.
 - Vistas diaria y semanal de comunicacion de sensores.
 - Watermark `factChirpStackMetrics` en `ctl.IngestionControl`.
@@ -31,7 +35,7 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 
 - Job: `023_sense_chirpstack_metrics`.
 - Schedule: `023_sense_chirpstack_metrics_hourly_at_30`, una vez por hora al minuto 30.
-- Frecuencia: cada 30 minutos.
+- Frecuencia: una vez por hora al minuto 30.
 - Zona horaria: `America/Ciudad_Juarez`.
 - Estado inicial: activo.
 
@@ -43,10 +47,11 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 4. Resuelve `ApplicationId`, `DeviceProfileId` y `TenantId` desde ChirpStack.
 5. Obtiene uplinks, RSSI, SNR, errores y bateria disponible por device.
 6. Obtiene inventario, estado oficial y metricas horarias de gateways por tenant.
-7. Construye DataFrames con esquemas explicitos.
-8. Escribe ambos hechos en staging por `RunId`.
-9. Ejecuta los dos `MERGE` dentro de una misma transaccion.
-10. Limpia staging y actualiza el watermark si la corrida termina correctamente.
+7. Consulta la API de historial MQTT y extrae uplinks, logs y `rxInfo[]`.
+8. Construye DataFrames con esquemas explicitos.
+9. Escribe los hechos disponibles en staging por `RunId`.
+10. Ejecuta los `MERGE` oficiales en una transacción; el asset MQTT utiliza otra consolidación transaccional con una decisión común de aceptación de snapshots para sus dos hechos.
+11. Limpia staging y actualiza el watermark si la corrida termina correctamente.
 
 ## Contrato HTTP
 
@@ -72,6 +77,18 @@ Las ventanas se expresan en UTC con formato RFC 3339, precision de segundos y su
 | `GET /api/gateways/{gatewayId}/metrics` | Obtener actividad RX/TX y resultados de transmision durante la hora cerrada | query: `start`, `end`, `aggregation=HOUR` | timestamps, paquetes RX/TX y estados TX | fila de gateway |
 
 No se consulta `GET /api/devices` para formar el inventario: el alcance de devices proviene de `dwh.dimSidonProdDimensions`. Tampoco se consulta un listado de tenants: cada `TenantId` se obtiene y valida mediante la aplicacion y el perfil de los devices activos.
+
+## API de historial MQTT
+
+Los tres code locations consultan `MQTT_EVENT_HISTORY_API_URL` mediante autenticacion Basic. La solicitud usa el tenant correspondiente (`carls`, `emerson` o `valle`), `fechaInicio`, `fechaFin` y `limit`. La respuesta aporta `mensaje_raw`; el pipeline consume el timestamp UTC, `deduplicationId`, `deviceInfo`, logs y `rxInfo[]`.
+
+La ventana movil se controla con `MQTT_EVENT_HISTORY_LOOKBACK_HOURS`. Si la respuesta alcanza el limite o devuelve HTTP 504, la ventana se divide hasta recuperar el rango. Las solicitudes respetan el limite configurado, reintentan HTTP 429, errores 5xx y fallas de transporte, y deduplican uplinks por `deduplicationId`.
+
+Antes de consultar MQTT se planifican las ventanas UTC. Al retroceder el reloj de `America/Ciudad_Juarez`, la ventana se amplia para cubrir las dos ocurrencias de la hora local repetida. Si aun no termina, la corrida registra una observacion `DEFERRED_DST` con `resume_after_utc`, sin materializar MQTT, escribir staging ni avanzar su watermark; el scheduler lo retoma sin mantener un worker esperando. Por ejemplo, el 1 de noviembre de 2026 se consulta `07:00-09:00 UTC` como `01:00-02:00` local cuando termina ese intervalo. La asignacion a buckets y el filtrado siguen usando el timestamp UTC del evento. Esta recuperacion requiere que la API devuelva ambas ocurrencias al consultar la hora local; no cambia su contrato HTTP.
+
+Esta fuente es complementaria. Si no esta configurada, no responde o incumple el contrato, las metricas oficiales de ChirpStack se consolidan y los hechos MQTT previamente persistidos no se reemplazan.
+
+Una fila invalida no descarta las demas filas de la respuesta. Se conserva en `raw.MqttEventHistoryRejectedRow` el JSON recibido truncado a 4000 caracteres, el motivo, `RunId`, `tenant`, `fechaInicio`, `fechaFin`, `limit`, `FetchedAt` y `CreatedAt`. La retencion se configura con `MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS` y se aplica en cada corrida.
 
 ## Ejemplos de requests
 
@@ -138,6 +155,12 @@ flowchart TD
     V --> U
     X["observability.factRedingsAudits"] --> U
     U --> Y["vistas diaria y semanal"]
+    B --> MQTT["Historial MQTT<br/>ventanas UTC y lookback"]
+    MQTT --> REJECTED["raw.MqttEventHistoryRejectedRow"]
+    MQTT --> MQTTSTG["staging MQTT por RunId"]
+    MQTTSTG --> ACCEPT["aceptación conjunta por device-hora"]
+    ACCEPT --> EVENTS["factChirpStackDeviceEventMetrics"]
+    ACCEPT --> RECEPTIONS["factChirpStackDeviceGatewayMetrics"]
 ```
 
 ### Devices
@@ -147,9 +170,10 @@ flowchart TD
 3. La aplicacion y el perfil resuelven y validan `TenantId`; sus respuestas se cachean durante la ejecucion.
 4. El perfil aporta `UplinkIntervalSeconds`, del cual se deriva `ExpectedUplinkCount` para la hora.
 5. Link metrics aporta `ReceivedUplinkCount`, `AverageRssi`, `AverageSnr` y `LinkErrorCount`.
-6. Device metrics se consulta solo cuando `measurements` declara `battery`; el estado actual del device puede complementar la evidencia de bateria.
-7. Las respuestas se normalizan en una fila por `(DevEui, TimeSpan)` y se convierten en `device_df` con esquema explicito.
-8. Spark escribe staging con `RunId` y SQL Server consolida la fila en el hecho de observabilidad.
+6. Los datasets de errores se conservan por tipo en `LinkErrorCountsJson`.
+7. Device metrics se consulta solo cuando `measurements` declara `battery`; el estado actual del device puede complementar la evidencia de bateria.
+8. Las respuestas se normalizan en una fila por `(DevEui, TimeSpan)` y se convierten en `device_df` con esquema explicito.
+9. Spark escribe staging con `RunId` y SQL Server consolida la fila en el hecho de observabilidad.
 
 ### Gateways
 
@@ -157,8 +181,18 @@ flowchart TD
 2. El inventario se pagina por tenant y conserva el estado oficial y `lastSeenAt` expuestos por ChirpStack.
 3. El detalle valida identidad y tenant y aporta nombre e intervalo de estadisticas.
 4. Gateway metrics aporta paquetes recibidos, transmitidos y resultados TX para la hora cerrada.
-5. Las respuestas se normalizan en una fila por `(GatewayId, TimeSpan)` y se convierten en `gateway_df` con esquema explicito.
-6. Spark escribe staging con el mismo `RunId`; el `MERGE` de devices y gateways se ejecuta en una sola transaccion.
+5. Los resultados TX se conservan por estado en `TxPacketStatusCountsJson`.
+6. Las respuestas se normalizan en una fila por `(GatewayId, TimeSpan)` y se convierten en `gateway_df` con esquema explicito.
+7. Spark escribe staging con el mismo `RunId`; el `MERGE` de devices y gateways se ejecuta en una sola transaccion.
+
+### Eventos MQTT
+
+1. Cada uplink se deduplica por `deduplicationId` y se asigna a la hora UTC de `mensaje_raw.time`.
+2. `rxInfo[]` produce una fila por `(DevEui, GatewayId, TimeSpan)` con recepciones, participacion, RSSI, SNR y primera/ultima recepcion.
+3. Los logs se cuentan por `code` en `EventLogCountsJson`.
+4. Una respuesta valida sin eventos materializa ceros; una llamada fallida no modifica los hechos MQTT existentes.
+
+El job selecciona `observability_chirpstackmetrics` y `observability_chirpstackmqttmetrics` como assets distintos. Una respuesta válida vacía no autoriza reducir evidencia persistida: los dos hechos MQTT comparten la aceptación por dispositivo y hora, conservando conteos y calidad previos conforme al [ADR 0008](../adr/0008-chirpstack-partial-mqtt-evidence.md). Una transacción por sí sola no demuestra la completitud de la captura.
 
 ## Validacion de respuestas
 
@@ -188,9 +222,11 @@ Cada code location usa su propio prefijo:
 
 Los contenedores exponen internamente `CHIRPSTACK_API_URL`, `CHIRPSTACK_API_TOKEN`, `CHIRPSTACK_API_TIMEOUT_SECONDS` y `CHIRPSTACK_API_PAGE_SIZE`. Los valores reales permanecen fuera del repositorio.
 
+Cada code location tambien expone `MQTT_EVENT_HISTORY_API_URL`, `MQTT_EVENT_HISTORY_API_USER`, `MQTT_EVENT_HISTORY_API_PASSWORD`, `MQTT_EVENT_HISTORY_API_TIMEOUT_SECONDS`, `MQTT_EVENT_HISTORY_API_LIMIT`, `MQTT_EVENT_HISTORY_API_REQUESTS_PER_MINUTE`, `MQTT_EVENT_HISTORY_LOOKBACK_HOURS` y `MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS` mediante su prefijo de configuracion.
+
 ## Backfill
 
-El pipeline no implementa backfill. ChirpStack no expone el historico horario requerido para reconstruir de forma confiable periodos anteriores al inicio de esta captura.
+El pipeline no implementa un job de backfill. Las APIs oficiales de ChirpStack no permiten reconstruir todo el historico; la ventana movil de la API MQTT recupera eventos tardios dentro del rango configurado.
 
 ## Documentacion relacionada
 

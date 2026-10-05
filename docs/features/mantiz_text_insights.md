@@ -1,5 +1,7 @@
 # Mantiz Text Insights
 
+Estado: desactivado. Este documento conserva el diseño existente y no acredita operación activa.
+
 ## Proposito
 
 Transformar texto libre de tickets Mantiz en fallas, soluciones y refacciones medibles.

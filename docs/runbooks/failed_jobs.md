@@ -13,6 +13,8 @@ Diagnosticar una corrida fallida sin modificar codigo ni contratos.
 5. Verificar disponibilidad de Spark y SQL Server.
 6. Reintentar desde Dagster si el error fue transitorio.
 
+Para `sidon_configuration_job`, utilizar el [runbook SIDON/MQTT](sidon_mqtt_recovery.md): el cursor y los reintentos pertenecen al sensor, no a `ctl.IngestionControl`. Una evaluación inconclusa puede tener run exitoso sin señal. Para URLs, un fallo posterior a un upsert puede dejar filas confirmadas; revisar el rango antes de interpretar el run como ausencia de datos escritos.
+
 ## Watermarks
 
 Los pipelines principales conservan el watermark anterior cuando fallan. Si una corrida fallo despues de staging, los recursos intentan limpiar `stg` al finalizar o al reintentar.

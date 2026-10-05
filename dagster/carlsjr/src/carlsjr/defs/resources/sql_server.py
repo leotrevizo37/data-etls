@@ -611,6 +611,7 @@ USING (
         AverageRssi,
         AverageSnr,
         LinkErrorCount,
+        LinkErrorCountsJson,
         BatteryLevel,
         ExternalPowerSource,
         BatteryLevelSource,
@@ -632,15 +633,64 @@ WHEN MATCHED AND (
         target.DeviceProfileId = source.DeviceProfileId,
         target.UplinkIntervalSeconds = source.UplinkIntervalSeconds,
         target.ExpectedUplinkCount = source.ExpectedUplinkCount,
-        target.ReceivedUplinkCount = source.ReceivedUplinkCount,
-        target.AverageRssi = source.AverageRssi,
-        target.AverageSnr = source.AverageSnr,
-        target.LinkErrorCount = source.LinkErrorCount,
-        target.BatteryLevel = source.BatteryLevel,
-        target.ExternalPowerSource = source.ExternalPowerSource,
-        target.BatteryLevelSource = source.BatteryLevelSource,
-        target.BatteryObservedAt = source.BatteryObservedAt,
-        target.MetricsAvailable = source.MetricsAvailable,
+        target.ReceivedUplinkCount = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.ReceivedUplinkCount
+            ELSE target.ReceivedUplinkCount
+        END,
+        target.AverageRssi = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.AverageRssi
+            ELSE target.AverageRssi
+        END,
+        target.AverageSnr = CASE
+            WHEN target.ReceivedUplinkCount IS NULL
+                OR source.ReceivedUplinkCount > target.ReceivedUplinkCount
+                THEN source.AverageSnr
+            ELSE target.AverageSnr
+        END,
+        target.LinkErrorCount = CASE
+            WHEN target.LinkErrorCount IS NULL
+                OR source.LinkErrorCount > target.LinkErrorCount
+                THEN source.LinkErrorCount
+            ELSE target.LinkErrorCount
+        END,
+        target.LinkErrorCountsJson = CASE
+            WHEN target.LinkErrorCount IS NULL
+                OR source.LinkErrorCount > target.LinkErrorCount
+                THEN source.LinkErrorCountsJson
+            ELSE target.LinkErrorCountsJson
+        END,
+        target.BatteryLevel = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryLevel
+            ELSE target.BatteryLevel
+        END,
+        target.ExternalPowerSource = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.ExternalPowerSource
+            ELSE target.ExternalPowerSource
+        END,
+        target.BatteryLevelSource = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryLevelSource
+            ELSE target.BatteryLevelSource
+        END,
+        target.BatteryObservedAt = CASE
+            WHEN target.BatteryObservedAt IS NULL
+                OR source.BatteryObservedAt > target.BatteryObservedAt
+                THEN source.BatteryObservedAt
+            ELSE target.BatteryObservedAt
+        END,
+        target.MetricsAvailable = CASE
+            WHEN target.MetricsAvailable = 1 OR source.MetricsAvailable = 1 THEN 1
+            ELSE 0
+        END,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -656,6 +706,7 @@ WHEN NOT MATCHED BY TARGET THEN
         AverageRssi,
         AverageSnr,
         LinkErrorCount,
+        LinkErrorCountsJson,
         BatteryLevel,
         ExternalPowerSource,
         BatteryLevelSource,
@@ -675,6 +726,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.AverageRssi,
         source.AverageSnr,
         source.LinkErrorCount,
+        source.LinkErrorCountsJson,
         source.BatteryLevel,
         source.ExternalPowerSource,
         source.BatteryLevelSource,
@@ -704,6 +756,7 @@ USING (
         TransmittedPacketCount,
         TxOkCount,
         TxErrorCount,
+        TxPacketStatusCountsJson,
         GatewayState,
         GatewayLastSeenAt,
         StatsIntervalSeconds,
@@ -721,14 +774,57 @@ WHEN MATCHED AND (
     UPDATE SET
         target.TenantId = source.TenantId,
         target.GatewayName = source.GatewayName,
-        target.ReceivedPacketCount = source.ReceivedPacketCount,
-        target.TransmittedPacketCount = source.TransmittedPacketCount,
-        target.TxOkCount = source.TxOkCount,
-        target.TxErrorCount = source.TxErrorCount,
-        target.GatewayState = source.GatewayState,
+        target.ReceivedPacketCount = CASE
+            WHEN target.ReceivedPacketCount IS NULL
+                OR source.ReceivedPacketCount > target.ReceivedPacketCount
+                THEN source.ReceivedPacketCount
+            ELSE target.ReceivedPacketCount
+        END,
+        target.TransmittedPacketCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TransmittedPacketCount
+            ELSE target.TransmittedPacketCount
+        END,
+        target.TxOkCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxOkCount
+            ELSE target.TxOkCount
+        END,
+        target.TxErrorCount = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxErrorCount
+            ELSE target.TxErrorCount
+        END,
+        target.TxPacketStatusCountsJson = CASE
+            WHEN target.TransmittedPacketCount IS NULL
+                OR source.TransmittedPacketCount > target.TransmittedPacketCount
+                THEN source.TxPacketStatusCountsJson
+            ELSE target.TxPacketStatusCountsJson
+        END,
+        target.GatewayState = CASE
+            WHEN source.GatewayLastSeenAt IS NOT NULL THEN source.GatewayState
+            WHEN source.GatewayState = N'NEVER_SEEN' THEN source.GatewayState
+            WHEN
+                ISNULL(target.ReceivedPacketCount, 0) > 0
+                OR ISNULL(source.ReceivedPacketCount, 0) > 0
+                OR ISNULL(target.TransmittedPacketCount, 0) > 0
+                OR ISNULL(source.TransmittedPacketCount, 0) > 0
+                OR ISNULL(target.TxOkCount, 0) > 0
+                OR ISNULL(source.TxOkCount, 0) > 0
+                OR ISNULL(target.TxErrorCount, 0) > 0
+                OR ISNULL(source.TxErrorCount, 0) > 0
+                THEN N'ONLINE'
+            ELSE N'UNKNOWN'
+        END,
         target.GatewayLastSeenAt = source.GatewayLastSeenAt,
         target.StatsIntervalSeconds = source.StatsIntervalSeconds,
-        target.MetricsAvailable = source.MetricsAvailable,
+        target.MetricsAvailable = CASE
+            WHEN target.MetricsAvailable = 1 OR source.MetricsAvailable = 1 THEN 1
+            ELSE 0
+        END,
         target.ExtractedAt = source.ExtractedAt,
         target.ModifiedAt = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -741,6 +837,7 @@ WHEN NOT MATCHED BY TARGET THEN
         TransmittedPacketCount,
         TxOkCount,
         TxErrorCount,
+        TxPacketStatusCountsJson,
         GatewayState,
         GatewayLastSeenAt,
         StatsIntervalSeconds,
@@ -756,6 +853,7 @@ WHEN NOT MATCHED BY TARGET THEN
         source.TransmittedPacketCount,
         source.TxOkCount,
         source.TxErrorCount,
+        source.TxPacketStatusCountsJson,
         source.GatewayState,
         source.GatewayLastSeenAt,
         source.StatsIntervalSeconds,
@@ -763,6 +861,345 @@ WHEN NOT MATCHED BY TARGET THEN
         source.ExtractedAt
     )
 OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+INSERT INTO #ChirpStackMqttAccepted
+SELECT source.*
+FROM stg.factChirpStackDeviceEventMetrics AS source
+LEFT JOIN observability.factChirpStackDeviceEventMetrics AS target WITH (UPDLOCK, HOLDLOCK)
+    ON target.DevEui = source.DevEui
+    AND target.TimeSpan = source.TimeSpan
+WHERE source.RunId = ?
+    AND (
+        target.DevEui IS NULL
+        OR (
+            source.CapturedUplinkCount >= target.CapturedUplinkCount
+            AND source.ObservedGatewayCount >= target.ObservedGatewayCount
+            AND source.MultiGatewayUplinkCount >= target.MultiGatewayUplinkCount
+            AND NOT EXISTS (
+                SELECT 1
+                FROM OPENJSON(target.RadioFieldQualityJson) AS previousQuality
+                LEFT JOIN OPENJSON(source.RadioFieldQualityJson) AS incomingQuality
+                    ON incomingQuality.[key] = previousQuality.[key]
+                WHERE
+                    incomingQuality.[key] IS NULL
+                    OR CONVERT(BIGINT, JSON_VALUE(incomingQuality.[value], '$.valid'))
+                        < CONVERT(BIGINT, JSON_VALUE(previousQuality.[value], '$.valid'))
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM OPENJSON(target.EventLogCountsJson) AS targetLog
+                LEFT JOIN OPENJSON(source.EventLogCountsJson) AS sourceLog
+                    ON sourceLog.[key] = targetLog.[key]
+                WHERE
+                    sourceLog.[key] IS NULL
+                    OR CONVERT(BIGINT, sourceLog.[value]) < CONVERT(BIGINT, targetLog.[value])
+            )
+        )
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM observability.factChirpStackDeviceGatewayMetrics AS existing WITH (UPDLOCK, HOLDLOCK)
+        LEFT JOIN stg.factChirpStackDeviceGatewayMetrics AS candidate
+            ON candidate.RunId = source.RunId
+            AND candidate.DevEui = existing.DevEui
+            AND candidate.GatewayId = existing.GatewayId
+            AND candidate.TimeSpan = existing.TimeSpan
+        WHERE
+            existing.DevEui = source.DevEui
+            AND existing.TimeSpan = source.TimeSpan
+            AND (
+                candidate.GatewayId IS NULL
+                OR candidate.GatewayReceptionCount < existing.GatewayReceptionCount
+                OR EXISTS (
+                    SELECT 1
+                    FROM OPENJSON(existing.ReceptionFieldQualityJson) AS previousQuality
+                    LEFT JOIN OPENJSON(candidate.ReceptionFieldQualityJson) AS incomingQuality
+                        ON incomingQuality.[key] = previousQuality.[key]
+                    WHERE
+                        incomingQuality.[key] IS NULL
+                        OR CONVERT(BIGINT, JSON_VALUE(incomingQuality.[value], '$.valid'))
+                            < CONVERT(BIGINT, JSON_VALUE(previousQuality.[value], '$.valid'))
+                )
+                OR (
+                    candidate.ReceptionFieldQualityJson IS NOT NULL
+                    AND (
+                        (existing.AverageRssi IS NOT NULL AND candidate.AverageRssi IS NULL)
+                        OR (existing.AverageSnr IS NOT NULL AND candidate.AverageSnr IS NULL)
+                    )
+                )
+            )
+    );
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackDeviceEventMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        DevEui,
+        TimeSpan,
+        TenantId,
+        CapturedUplinkCount,
+        ObservedGatewayCount,
+        MultiGatewayUplinkCount,
+        EventLogCountsJson,
+        RadioProfileCountsJson,
+        UplinkContextCountsJson,
+        RadioFieldQualityJson,
+        FrameCounterSummaryJson,
+        ExtractedAt
+    FROM #ChirpStackMqttAccepted
+) AS source
+    ON target.DevEui = source.DevEui
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED AND
+    source.CapturedUplinkCount >= target.CapturedUplinkCount
+    AND source.ObservedGatewayCount >= target.ObservedGatewayCount
+    AND source.MultiGatewayUplinkCount >= target.MultiGatewayUplinkCount
+    AND NOT EXISTS (
+        SELECT 1
+        FROM OPENJSON(target.EventLogCountsJson) AS targetLog
+        LEFT JOIN OPENJSON(source.EventLogCountsJson) AS sourceLog
+            ON sourceLog.[key] = targetLog.[key]
+        WHERE
+            sourceLog.[key] IS NULL
+            OR CONVERT(BIGINT, sourceLog.[value]) < CONVERT(BIGINT, targetLog.[value])
+    )
+    AND (
+        source.CapturedUplinkCount > target.CapturedUplinkCount
+        OR source.ObservedGatewayCount > target.ObservedGatewayCount
+        OR source.MultiGatewayUplinkCount > target.MultiGatewayUplinkCount
+        OR ISNULL(source.RadioProfileCountsJson, N'') <> ISNULL(target.RadioProfileCountsJson, N'')
+        OR ISNULL(source.UplinkContextCountsJson, N'') <> ISNULL(target.UplinkContextCountsJson, N'')
+        OR ISNULL(source.RadioFieldQualityJson, N'') <> ISNULL(target.RadioFieldQualityJson, N'')
+        OR ISNULL(source.FrameCounterSummaryJson, N'') <> ISNULL(target.FrameCounterSummaryJson, N'')
+        OR EXISTS (
+            SELECT 1
+            FROM OPENJSON(source.EventLogCountsJson) AS sourceLog
+            LEFT JOIN OPENJSON(target.EventLogCountsJson) AS targetLog
+                ON targetLog.[key] = sourceLog.[key]
+            WHERE
+                targetLog.[key] IS NULL
+                OR CONVERT(BIGINT, sourceLog.[value]) > CONVERT(BIGINT, targetLog.[value])
+        )
+    ) THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.CapturedUplinkCount = source.CapturedUplinkCount,
+        target.ObservedGatewayCount = source.ObservedGatewayCount,
+        target.MultiGatewayUplinkCount = source.MultiGatewayUplinkCount,
+        target.EventLogCountsJson = source.EventLogCountsJson,
+        target.RadioProfileCountsJson = source.RadioProfileCountsJson,
+        target.UplinkContextCountsJson = source.UplinkContextCountsJson,
+        target.RadioFieldQualityJson = source.RadioFieldQualityJson,
+        target.FrameCounterSummaryJson = source.FrameCounterSummaryJson,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        DevEui,
+        TimeSpan,
+        TenantId,
+        CapturedUplinkCount,
+        ObservedGatewayCount,
+        MultiGatewayUplinkCount,
+        EventLogCountsJson,
+        RadioProfileCountsJson,
+        UplinkContextCountsJson,
+        RadioFieldQualityJson,
+        FrameCounterSummaryJson,
+        ExtractedAt
+    )
+    VALUES (
+        source.DevEui,
+        source.TimeSpan,
+        source.TenantId,
+        source.CapturedUplinkCount,
+        source.ObservedGatewayCount,
+        source.MultiGatewayUplinkCount,
+        source.EventLogCountsJson,
+        source.RadioProfileCountsJson,
+        source.UplinkContextCountsJson,
+        source.RadioFieldQualityJson,
+        source.FrameCounterSummaryJson,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL = """
+SET NOCOUNT ON;
+
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE observability.factChirpStackDeviceGatewayMetrics WITH (HOLDLOCK) AS target
+USING (
+    SELECT
+        DevEui,
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayReceptionCount,
+        ReceptionShare,
+        AverageRssi,
+        MinRssi,
+        MaxRssi,
+        AverageSnr,
+        MinSnr,
+        MaxSnr,
+        RadioReceptionStatsJson,
+        ReceptionFieldQualityJson,
+        FirstReceivedAt,
+        LastReceivedAt,
+        ExtractedAt,
+        CASE
+            WHEN NOT EXISTS (
+                SELECT 1
+                FROM observability.factChirpStackDeviceGatewayMetrics AS existing
+                LEFT JOIN stg.factChirpStackDeviceGatewayMetrics AS candidate
+                    ON candidate.RunId = stage.RunId
+                    AND candidate.DevEui = existing.DevEui
+                    AND candidate.GatewayId = existing.GatewayId
+                    AND candidate.TimeSpan = existing.TimeSpan
+                WHERE
+                    existing.DevEui = stage.DevEui
+                    AND existing.TimeSpan = stage.TimeSpan
+                    AND (
+                        candidate.GatewayId IS NULL
+                        OR candidate.GatewayReceptionCount < existing.GatewayReceptionCount
+                    )
+            ) THEN 1
+            ELSE 0
+        END AS IsNonDecreasing
+    FROM stg.factChirpStackDeviceGatewayMetrics AS stage
+    WHERE RunId = ?
+        AND EXISTS (
+            SELECT 1
+            FROM #ChirpStackMqttAccepted AS accepted
+            WHERE accepted.RunId = stage.RunId
+                AND accepted.DevEui = stage.DevEui
+                AND accepted.TimeSpan = stage.TimeSpan
+        )
+) AS source
+    ON target.DevEui = source.DevEui
+    AND target.GatewayId = source.GatewayId
+    AND target.TimeSpan = source.TimeSpan
+WHEN MATCHED AND source.IsNonDecreasing = 1 THEN
+    UPDATE SET
+        target.TenantId = source.TenantId,
+        target.GatewayReceptionCount = source.GatewayReceptionCount,
+        target.ReceptionShare = source.ReceptionShare,
+        target.AverageRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.AverageRssi
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.AverageRssi
+            ELSE source.AverageRssi
+        END,
+        target.MinRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MinRssi
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.MinRssi
+            ELSE source.MinRssi
+        END,
+        target.MaxRssi = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MaxRssi
+            WHEN target.AverageRssi IS NOT NULL AND target.MinRssi IS NOT NULL AND target.MaxRssi IS NOT NULL
+                AND (
+                    source.AverageRssi IS NULL OR source.MinRssi IS NULL OR source.MaxRssi IS NULL
+                    OR (source.AverageRssi = 0 AND source.MinRssi = 0 AND source.MaxRssi = 0)
+                ) THEN target.MaxRssi
+            ELSE source.MaxRssi
+        END,
+        target.AverageSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.AverageSnr
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.AverageSnr
+            ELSE source.AverageSnr
+        END,
+        target.MinSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MinSnr
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.MinSnr
+            ELSE source.MinSnr
+        END,
+        target.MaxSnr = CASE
+            WHEN source.ReceptionFieldQualityJson IS NOT NULL THEN source.MaxSnr
+            WHEN target.AverageSnr IS NOT NULL AND target.MinSnr IS NOT NULL AND target.MaxSnr IS NOT NULL
+                AND (
+                    source.AverageSnr IS NULL OR source.MinSnr IS NULL OR source.MaxSnr IS NULL
+                    OR (source.AverageSnr = 0 AND source.MinSnr = 0 AND source.MaxSnr = 0)
+                ) THEN target.MaxSnr
+            ELSE source.MaxSnr
+        END,
+        target.RadioReceptionStatsJson = source.RadioReceptionStatsJson,
+        target.ReceptionFieldQualityJson = source.ReceptionFieldQualityJson,
+        target.FirstReceivedAt = source.FirstReceivedAt,
+        target.LastReceivedAt = source.LastReceivedAt,
+        target.ExtractedAt = source.ExtractedAt,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET AND source.IsNonDecreasing = 1 THEN
+    INSERT (
+        DevEui,
+        GatewayId,
+        TimeSpan,
+        TenantId,
+        GatewayReceptionCount,
+        ReceptionShare,
+        AverageRssi,
+        MinRssi,
+        MaxRssi,
+        AverageSnr,
+        MinSnr,
+        MaxSnr,
+        RadioReceptionStatsJson,
+        ReceptionFieldQualityJson,
+        FirstReceivedAt,
+        LastReceivedAt,
+        ExtractedAt
+    )
+    VALUES (
+        source.DevEui,
+        source.GatewayId,
+        source.TimeSpan,
+        source.TenantId,
+        source.GatewayReceptionCount,
+        source.ReceptionShare,
+        source.AverageRssi,
+        source.MinRssi,
+        source.MaxRssi,
+        source.AverageSnr,
+        source.MinSnr,
+        source.MaxSnr,
+        source.RadioReceptionStatsJson,
+        source.ReceptionFieldQualityJson,
+        source.FirstReceivedAt,
+        source.LastReceivedAt,
+        source.ExtractedAt
+    )
+OUTPUT $action INTO @MergeActions;
+
+DROP TABLE #ChirpStackMqttAccepted;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
@@ -1760,7 +2197,78 @@ class SqlServerResource:
                 conn.commit()
                 return deleted_devices + deleted_gateways
 
-    def merge_chirpstack_metrics(self, run_id: str) -> tuple[int, int]:
+    def clear_chirpstack_mqtt_metrics_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackDeviceEventMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_device_events = int(cursor.rowcount or 0)
+                cursor.execute(
+                    "DELETE FROM stg.factChirpStackDeviceGatewayMetrics WHERE RunId = ?",
+                    run_id,
+                )
+                deleted_device_gateways = int(cursor.rowcount or 0)
+                conn.commit()
+                return deleted_device_events + deleted_device_gateways
+
+    def write_mqtt_event_history_rejected_rows(
+        self,
+        rows: list[dict],
+        run_id: str,
+        retention_days: int,
+    ) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+DELETE FROM raw.MqttEventHistoryRejectedRow
+WHERE CreatedAt < DATEADD(DAY, -?, SYSUTCDATETIME());
+""",
+                        retention_days,
+                    )
+                    deleted_rows = max(int(cursor.rowcount or 0), 0)
+                    if rows:
+                        cursor.executemany(
+                            """
+INSERT INTO raw.MqttEventHistoryRejectedRow (
+    RunId,
+    Tenant,
+    FechaInicio,
+    FechaFin,
+    RequestedLimit,
+    FailureReason,
+    RowJson,
+    FetchedAt
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+""",
+                            [
+                                (
+                                    run_id,
+                                    row["Tenant"],
+                                    row["FechaInicio"],
+                                    row["FechaFin"],
+                                    row["RequestedLimit"],
+                                    row["FailureReason"],
+                                    row["RowJson"],
+                                    row["FetchedAt"],
+                                )
+                                for row in rows
+                            ],
+                        )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return len(rows), deleted_rows
+
+    def merge_chirpstack_metrics(
+        self,
+        run_id: str,
+    ) -> tuple[int, int]:
         with self._get_connection() as conn:
             try:
                 with conn.cursor() as cursor:
@@ -1789,6 +2297,43 @@ class SqlServerResource:
             else int(gateway_row.AffectedRows)
         )
         return device_rows, gateway_rows
+
+    def merge_chirpstack_mqtt_metrics(
+        self,
+        run_id: str,
+    ) -> tuple[int, int]:
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT TOP (0) * INTO #ChirpStackMqttAccepted "
+                        "FROM stg.factChirpStackDeviceEventMetrics"
+                    )
+                    cursor.execute(
+                        FACT_CHIRPSTACK_DEVICE_EVENT_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    device_event_row = cursor.fetchone()
+                    cursor.execute(
+                        FACT_CHIRPSTACK_DEVICE_GATEWAY_METRICS_MERGE_SQL,
+                        run_id,
+                    )
+                    device_gateway_row = cursor.fetchone()
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        device_event_rows = (
+            0
+            if device_event_row is None or device_event_row.AffectedRows is None
+            else int(device_event_row.AffectedRows)
+        )
+        device_gateway_rows = (
+            0
+            if device_gateway_row is None or device_gateway_row.AffectedRows is None
+            else int(device_gateway_row.AffectedRows)
+        )
+        return device_event_rows, device_gateway_rows
 
     def clear_fact_readings_measurement_stage(self, run_id: str) -> int:
         with self._get_connection() as conn:

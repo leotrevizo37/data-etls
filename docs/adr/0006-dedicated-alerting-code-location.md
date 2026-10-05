@@ -2,7 +2,7 @@
 
 ## Estado
 
-Aceptado.
+Sustituido por [ADR 0007](0007-tenant-alert-detection.md). El contenido siguiente conserva la decisión histórica; no describe la topología ni la persistencia actuales.
 
 ## Contexto
 

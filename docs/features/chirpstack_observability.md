@@ -41,6 +41,8 @@ La comparacion se realiza sobre la misma hora UTC cerrada y conserva por separad
 - estado oficial y actividad de gateways;
 - bateria para devices cuyo perfil declare esa medicion.
 
+La API de historial MQTT agrega evidencia de eventos individuales: conteos de logs, uplinks capturados y relaciones device-gateway observadas directamente en `rxInfo[]`.
+
 ## Experiencia de consumo
 
 La vista horaria permite enriquecer el mapa de calor de lecturas por sensor. Para cada celda se pueden mostrar las lecturas DATA junto con la recepcion en ChirpStack, calidad del enlace, evidencia de bateria y salud agregada de gateways.
@@ -69,13 +71,13 @@ RSSI, SNR y bateria se exponen como valores crudos. La feature no clasifica `POO
 - RSSI y SNR solo existen para paquetes recibidos.
 - Cero significa una medicion disponible sin eventos; `NULL` significa que no existe evidencia suficiente.
 - El estado y `lastSeenAt` del gateway son snapshots observados al extraer, no un historico previo proporcionado por ChirpStack.
-- No se atribuye un device a un gateway especifico sin evidencia explicita del evento.
+- Solo se atribuye un device a un gateway cuando `rxInfo[]` aporta evidencia explicita del evento.
 
 ## Historia e idempotencia
 
 La feature comienza a construir su propio historico desde la primera ejecucion. No implementa backfill porque las APIs consultadas no ofrecen el historico horario necesario para reconstruir periodos anteriores con la misma calidad.
 
-Cada corrida procesa la ultima hora UTC cerrada. Las claves naturales `(DevEui, TimeSpan)` y `(GatewayId, TimeSpan)` permiten reejecutar la hora sin duplicar filas, y una respuesta sin metricas no reemplaza evidencia valida ya almacenada.
+Cada corrida procesa la ultima hora UTC cerrada. Una ventana movil configurable vuelve a consultar eventos MQTT recientes para compensar entregas tardias. Las claves naturales `(DevEui, TimeSpan)`, `(GatewayId, TimeSpan)` y `(DevEui, GatewayId, TimeSpan)` evitan duplicados, y una falla de la API MQTT no reemplaza evidencia valida ya almacenada.
 
 ## Documentacion relacionada
 

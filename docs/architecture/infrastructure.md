@@ -2,12 +2,12 @@
 
 ## Runtime
 
-El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.yaml` registra las code locations por gRPC de cada `user_code`, incluida la de Bafar.
+El repositorio corre con Docker Compose, Dagster y Spark standalone. `workspace.yaml` registra por gRPC `bafar_poc_gabinete`, `valledelencino`, `carlsjr`, `emerson` y `bafar`. La location inerte `alerting` existe, pero no está registrada en ese workspace; su existencia no acredita un servicio desplegado.
 
 | Servicio logico | Referencia |
 |---|---|
 | Dagster webserver | `DAGSTER_WEB_PORT` |
-| User code gRPC | `GABINETE_USER_CODE_PORT`, `VALLEDELENCINO_USER_CODE_PORT`, `CARLSJR_USER_CODE_PORT`, `ALERTING_USER_CODE_PORT` |
+| User code gRPC | Puertos internos 4004, 4005, 4006 y 4007 para Gabinete, Valle, Carlsjr y Emerson |
 | Spark master | `SPARK_MASTER_URL`, `SPARK_MASTER_STATUS_URL` |
 | Spark workers | `SPARK_WORKER_MEM`, `SPARK_WORKER_CORES` |
 | SQL Server DWH | `MSSQL_HOST`, `MSSQL_PORT` |
@@ -30,10 +30,15 @@ El recurso Spark selecciona perfil desde tags Dagster o variables de entorno. Lo
 | `mantiz` | Pipelines Mantiz |
 | `ventas` | Pipelines de ventas Bafar |
 | `backfill` | Backfills |
+| `observability` | Auditoría de lecturas y métricas de observabilidad |
 
 ## Almacenamiento intermedio
 
-Los DataFrames entre ops se materializan con `spark_df_io_manager`. El path base se controla con `SPARK_DF_IO_BASE_PATH` y en Compose se define por `user_code`, por ejemplo un prefijo separado para `mcdonalds`, `smartfit`, `mcdonalds_cdp`, `bafar_poc_gabinete`, `bafar`, `valledelencino` y `carlsjr`.
+Los DataFrames entre ops se materializan con `spark_df_io_manager`. El path base se controla con `SPARK_DF_IO_BASE_PATH` y debe quedar separado por `user_code`. McDonalds, CDP y Smartfit son tenants retirados, no implementaciones actuales del flujo.
+
+## Concurrencia
+
+`dagster/dagster_home/dagster.yaml` configura como máximo tres runs concurrentes, uno por valor de `dagster/code_location`, uno por `user_code_run_lane` y dos por `job_type`. Los límites se aplican conjuntamente cuando los tags correspondientes están presentes; no son reservas de cores ni memoria Spark. Los jobs distinguen lanes `operational` y `observability` mediante sus tags, pero el límite por location sigue restringiendo cada tenant a un run concurrente. Un run en cola no demuestra una falla de Spark. Estos valores describen el archivo del repositorio, no el estado efectivo de una instancia desplegada.
 
 ## Regla de configuracion
 

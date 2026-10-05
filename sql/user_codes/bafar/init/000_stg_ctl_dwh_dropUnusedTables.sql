@@ -52,6 +52,18 @@ IF OBJECT_ID(N'stg.factChirpStackGatewayMetrics', N'U') IS NOT NULL
     END;
 GO
 
+IF OBJECT_ID(N'stg.factChirpStackDeviceEventMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factChirpStackDeviceEventMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'stg.factChirpStackDeviceGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE stg.factChirpStackDeviceGatewayMetrics;
+    END;
+GO
+
 IF OBJECT_ID(N'observability.factChirpStackDeviceMetrics', N'U') IS NOT NULL
     BEGIN
         DROP TABLE observability.factChirpStackDeviceMetrics;
@@ -61,6 +73,24 @@ GO
 IF OBJECT_ID(N'observability.factChirpStackGatewayMetrics', N'U') IS NOT NULL
     BEGIN
         DROP TABLE observability.factChirpStackGatewayMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factChirpStackDeviceEventMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factChirpStackDeviceEventMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'observability.factChirpStackDeviceGatewayMetrics', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE observability.factChirpStackDeviceGatewayMetrics;
+    END;
+GO
+
+IF OBJECT_ID(N'raw.MqttEventHistoryRejectedRow', N'U') IS NOT NULL
+    BEGIN
+        DROP TABLE raw.MqttEventHistoryRejectedRow;
     END;
 GO
 

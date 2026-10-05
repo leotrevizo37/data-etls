@@ -1,5 +1,7 @@
 # MantizTextInsightClassifierModels
 
+Estado: Mantiz desactivado. El contrato existente se conserva como referencia.
+
 ## Proposito
 
 `ctl.MantizTextInsightClassifierModels` registra modelos de clasificacion textual Mantiz por tipo de insight.

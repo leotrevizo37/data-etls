@@ -80,6 +80,19 @@ GO
 
 CREATE OR ALTER VIEW serving.vwSenseSensorCommunicationHealthDaily
 AS
+WITH Ranked AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY SensorId, DevEui, CONVERT(DATE, LocalTimeSpan)
+            ORDER BY
+                CASE WHEN BatteryLevel <> 0 THEN 0 WHEN BatteryLevel = 0 THEN 1 ELSE 2 END,
+                BatteryObservedAt DESC,
+                TimeSpan DESC
+        ) AS BatteryLevelOrder
+    FROM serving.vwSenseSensorCommunicationHealthHourly
+)
+
 SELECT
     SensorId,
     DevEui,
@@ -109,8 +122,9 @@ SELECT
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'DATA_INGESTION_PROBLEM' THEN 1 ELSE 0 END)) AS DataIngestionProblemHours,
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'DEVICE_NOT_COMMUNICATING' THEN 1 ELSE 0 END)) AS DeviceNotCommunicatingHours,
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'GATEWAY_PROBLEM' THEN 1 ELSE 0 END)) AS GatewayProblemHours,
-    SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'UNKNOWN' THEN 1 ELSE 0 END)) AS UnknownHours
-FROM serving.vwSenseSensorCommunicationHealthHourly
+    SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'UNKNOWN' THEN 1 ELSE 0 END)) AS UnknownHours,
+    MAX(CASE WHEN BatteryLevelOrder = 1 THEN BatteryLevel END) AS BatteryLevel
+FROM Ranked
 GROUP BY
     SensorId,
     DevEui,
@@ -119,6 +133,26 @@ GO
 
 CREATE OR ALTER VIEW serving.vwSenseSensorCommunicationHealthWeekly
 AS
+WITH Ranked AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+            SensorId,
+            DevEui,
+            DATEADD(
+                DAY,
+                -(DATEDIFF(DAY, CONVERT(DATE, '19000101', 112), LocalTimeSpan) % 7),
+                CONVERT(DATE, LocalTimeSpan)
+            )
+            ORDER BY
+                CASE WHEN BatteryLevel <> 0 THEN 0 WHEN BatteryLevel = 0 THEN 1 ELSE 2 END,
+                BatteryObservedAt DESC,
+                TimeSpan DESC
+        ) AS BatteryLevelOrder
+    FROM serving.vwSenseSensorCommunicationHealthHourly
+)
+
 SELECT
     SensorId,
     DevEui,
@@ -157,8 +191,9 @@ SELECT
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'DATA_INGESTION_PROBLEM' THEN 1 ELSE 0 END)) AS DataIngestionProblemHours,
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'DEVICE_NOT_COMMUNICATING' THEN 1 ELSE 0 END)) AS DeviceNotCommunicatingHours,
     SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'GATEWAY_PROBLEM' THEN 1 ELSE 0 END)) AS GatewayProblemHours,
-    SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'UNKNOWN' THEN 1 ELSE 0 END)) AS UnknownHours
-FROM serving.vwSenseSensorCommunicationHealthHourly
+    SUM(CONVERT(INT, CASE WHEN CommunicationStatus = N'UNKNOWN' THEN 1 ELSE 0 END)) AS UnknownHours,
+    MAX(CASE WHEN BatteryLevelOrder = 1 THEN BatteryLevel END) AS BatteryLevel
+FROM Ranked
 GROUP BY
     SensorId,
     DevEui,

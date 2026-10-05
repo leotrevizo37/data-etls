@@ -19,7 +19,9 @@ Un registro representa un evento detectado para un sensor.
 
 | Columna | Tipo SQL | Descripcion |
 |---|---|---|
-| `ReadId` | `UNIQUEIDENTIFIER` | Lectura que inicia el evento |
+| `ReadId` | `UNIQUEIDENTIFIER NULL` | Lectura que inicia el evento; nullable tras la migración de identidad |
+| `EventId` | `UNIQUEIDENTIFIER` | Identidad del evento en Carlsjr, Emerson y Valle; se calcula con sensor e inicio UTC |
+| `TimeSpan` | `DATETIME2(0) NULL` | Inicio UTC; el histórico anterior puede carecer de este dato |
 | `SensorId` | `UNIQUEIDENTIFIER` | Sensor asociado |
 | `DeviceId` | `UNIQUEIDENTIFIER` | Dispositivo asociado |
 | `LocationId` | `UNIQUEIDENTIFIER` | Ubicacion |
@@ -34,10 +36,11 @@ Un registro representa un evento detectado para un sensor.
 
 ## Reglas de negocio
 
-- Los eventos de presencia se basan en cambios de valor `0/1` para sensores `Camara de presencia`.
+- Los eventos de presencia aceptan valores `0/1` para tipos de sensor que coincidan con `presencia` sin distinguir mayúsculas. Una interrupción de comunicación de al menos 60 minutos segmenta el evento y permite cerrarlo; la ausencia de lecturas no prolonga indefinidamente su duración.
 - Los eventos de temperatura usan `Temperatura F`, valores esperados y agenda por dia/hora.
 - Los eventos de temperatura se conservan cuando duran al menos 120 minutos fuera de rango.
 - Los eventos abiertos se reevalúan desde el menor evento abierto para preservar continuidad.
+- Carlsjr, Emerson y Valle escriben a `stg.factSensorEvents` por `RunId` y consolidan mediante `MERGE` por `EventId`. Sus migraciones 016/017 agregan `TimeSpan`, renombran la identidad anterior a `EventId` y conservan `ReadId` nullable como referencia a la lectura. No reconstruyen tiempos UTC históricos; el merge elimina filas legacy sin `TimeSpan` que coinciden con sensor e inicio local de un evento recibido.
 
 ## Dependencias
 

@@ -22,10 +22,12 @@ Diagnosticar fallas por falta de recursos Spark, workers no disponibles o proble
 | `smartaudits` | `SPARK_SMARTAUDITS_MIN_CORES`, `SPARK_SMARTAUDITS_MIN_MEMORY_MB`, `SPARK_SMARTAUDITS_CORES_MAX` |
 | `mantiz` | `SPARK_MANTIZ_MIN_CORES`, `SPARK_MANTIZ_MIN_MEMORY_MB`, `SPARK_MANTIZ_CORES_MAX` |
 | `maintenance` | `SPARK_MAINTENANCE_MIN_CORES`, `SPARK_MAINTENANCE_MIN_MEMORY_MB`, `SPARK_MAINTENANCE_CORES_MAX` |
+| `observability` | Perfil del recurso Spark para auditorías y métricas; revisar tags y capacidad del tenant |
 
 ## Pasos
 
 1. Revisar Spark master UI o `SPARK_MASTER_STATUS_URL`.
+   Si el run sigue en cola sin iniciar, revisar primero los límites de [concurrencia Dagster](../architecture/infrastructure.md#concurrencia); ese estado no demuestra falta de recursos Spark.
 2. Confirmar que el job tenga el tag `job_type` esperado.
 3. Ejecutar `089_maintenance_spark_healthcheck` en el `user_code` afectado.
 4. Validar que `SPARK_DF_IO_BASE_PATH` sea accesible para driver y workers.

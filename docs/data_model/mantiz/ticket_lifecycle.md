@@ -1,5 +1,7 @@
 # factMantizTicketLifecycle
 
+Estado: Mantiz desactivado. El contrato existente se conserva como referencia.
+
 ## Proposito
 
 `dwh.factMantizTicketLifecycle` modela el ciclo de vida de tickets Mantiz para medir tiempos, estado operativo y calidad de captura.

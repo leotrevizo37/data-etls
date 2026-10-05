@@ -26,9 +26,7 @@ Los scripts globales se aplican en orden numérico a cada base tenant:
 10. `032_alerting_state_guards.sql` crea protecciones y activación.
 11. `033_alerting_catalog_guards.sql` protege los GUID de catálogo.
 
-La inicialización no crea una configuración de alertas por defecto. Cada
-tenant permanece sin configuración activa hasta que se prepare y active
-explícitamente una versión válida. Los scripts globales son repetibles.
+La inicialización global no crea una configuración de alertas por defecto. Después de esos scripts, Carlsjr, Emerson y Valle disponen de `sql/user_codes/<user_code>/init/020_alerting_default_config.sql`: crea y activa una versión con ocho reglas si no existe historial de configuración del tenant. No reemplaza configuraciones existentes. Bafar y Gabinete requieren preparar y activar explícitamente una versión válida. Los scripts son repetibles.
 
 Las políticas antiguas de correo, tickets, reintentos y horarios silenciosos
 permanecen preservadas en las tablas `*_legacy`; no se migran a la
@@ -57,7 +55,7 @@ Para preparar una versión:
 1. Insertar `alerting.alert_config` con un GUID nuevo, el siguiente
    `version_number` y el estado `DRAFT`.
 2. Insertar exactamente una regla default con `entity_key = NULL` para cada uno
-   de los seis tipos activos.
+   de los tipos activos del catálogo, actualmente ocho, incluidos `sidon_device_configuration` y `sidon_alert_configuration`.
 3. Insertar, cuando aplique, overrides completos con una `entity_key` exacta.
 4. Insertar los detalles 1:1 requeridos en
    `alerting.alert_rule_no_readings`,
@@ -119,9 +117,9 @@ incidencia usa `entity_id = run_id` y `entity_key = asset_key`.
 
 ## Operación
 
-Los dos sensores de cada tenant se registran inicialmente en estado `STOPPED` y
-usan únicamente su recurso SQL Server local. Deben activarse manualmente
-después de aplicar y validar el DDL y la configuración del tenant.
+Los dos sensores operativos usan únicamente su recurso SQL Server local. Su estado inicial declarado es `RUNNING` en Carlsjr, Emerson y Valle, y `STOPPED` en Bafar y Gabinete. El estado persistido puede diferir. Antes de operar, comprobar la configuración activa y los errores bloqueantes; el default de registro no demuestra que el DDL esté aplicado.
+
+La configuración inicial de esos tres tenants utiliza 59 minutos para `late_readings`, 1440 para `connection_lost` y `capture_interval_seconds = 3600`. El sensor de tendencias declara un intervalo mínimo de 21600 segundos, por lo que la configuración de captura no implica evaluación cada hora. Para los dos tipos SIDON no se requieren extensiones de parámetros: se utilizan las reglas base y el [pipeline SIDON](../pipelines/sidon_configuration_signals.md).
 
 La code location central conserva los mismos nombres de sensores en estado
 `STOPPED`, pero siempre devuelve `SkipReason`, no solicita recursos y no escribe

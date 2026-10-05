@@ -24,7 +24,7 @@ Construir la tabla operacional horaria `dwh.factReadingsMeasurement` desde lectu
 5. Limita filas a horas UTC cerradas y al ultimo `TimeSpan` con lecturas reales.
 6. Convierte `TimeSpan` a `LocalTimeSpan` con el `TimeZone` del sensor.
 7. Escribe a `stg.factReadingsMeasurement` con `RunId`.
-8. Ejecuta `MERGE` hacia `dwh.factReadingsMeasurement` por `OperationId`.
+8. Ejecuta `MERGE` hacia `dwh.factReadingsMeasurement` por `OperationId`, calculado con `SensorId` y `TimeSpan` UTC.
 9. Limpia staging y actualiza watermark.
 
 ## Reglas de avance
@@ -35,4 +35,4 @@ Construir la tabla operacional horaria `dwh.factReadingsMeasurement` desde lectu
 
 ## Compatibilidad entre `user_codes`
 
-El flujo es compartido, pero la lista de transformaciones puede variar por cliente. El procesamiento UTC y la conversion por `TimeZone` descritos aqui estan implementados en `bafar_poc_gabinete`, `carlsjr`, `emerson`, `mcdonalds`, `mcdonalds_cdp`, `smartfit` y `valledelencino`.
+El flujo existe en `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino`, con transformaciones específicas por cliente. McDonalds, CDP y Smartfit fueron retirados según [ADR 0005](../adr/0005-remove-code-locations.md). El DDL agrega `TimeSpan` nullable al histórico existente y lo exige en tablas nuevas; no reconstruye la identidad ni el tiempo del histórico. Véase [ADR 0009](../adr/0009-utc-fact-identities.md).
