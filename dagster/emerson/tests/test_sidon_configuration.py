@@ -579,6 +579,26 @@ def test_local_request_without_azure_credentials(monkeypatch, azure, endpoint, h
     connection.close.assert_called_once()
 
 
+@pytest.mark.parametrize("allowed_host,accepted", [
+    ("", False), ("other.example", False), ("MODEL.EXAMPLE ", True),
+])
+def test_local_configured_host(monkeypatch, azure, allowed_host, accepted):
+    _, connection, _, _, _ = azure
+    factory = Mock(return_value=connection)
+    monkeypatch.setattr(ai_module.http.client, "HTTPConnection", factory)
+    client = ai_module.SidonConfigurationAI(
+        "http://model.example:1234", "local-model", provider="local",
+        local_allowed_host=allowed_host,
+    )
+    if accepted:
+        assert client.evaluate({})["status"] == "consistent"
+        factory.assert_called_once_with("model.example", port=1234, timeout=20)
+    else:
+        with pytest.raises(ValueError):
+            client.evaluate({})
+        factory.assert_not_called()
+
+
 def test_local_optional_authentication(monkeypatch, azure):
     _, connection, _, _, _ = azure
     monkeypatch.setattr(ai_module.http.client, "HTTPConnection", Mock(return_value=connection))
@@ -627,6 +647,7 @@ def test_resource_selects_only_configured_provider(monkeypatch, provider):
         values["EMERSON_SIDON_AI_PROVIDER"] = provider
     if provider == "local":
         values["EMERSON_SIDON_LOCAL_MODEL"] = "local-model"
+        values["EMERSON_SIDON_LOCAL_ALLOWED_HOST"] = "model.example"
     getenv = Mock(side_effect=values.get)
     monkeypatch.setattr(ai_module.os, "getenv", getenv)
     client = ai_module.sidon_configuration_ai_resource.resource_fn(None)
@@ -636,6 +657,7 @@ def test_resource_selects_only_configured_provider(monkeypatch, provider):
     if provider == "local":
         assert client.endpoint == "http://localhost:1234" and client.api_key == ""
         assert client.deployment == "local-model"
+        assert client.local_allowed_host == "model.example"
         assert all("AZURE" not in call.args[0] for call in getenv.call_args_list)
 
 

@@ -47,7 +47,7 @@ _SCHEMA = {
 
 
 class SidonConfigurationAI:
-    def __init__(self, endpoint: str, deployment: str, api_key: str = "", provider: str = "azure", timeout_seconds: int = 20):
+    def __init__(self, endpoint: str, deployment: str, api_key: str = "", provider: str = "azure", timeout_seconds: int = 20, local_allowed_host: str = ""):
         if provider not in ("azure", "local"):
             raise ValueError("Proveedor SIDON AI no reconocido.")
         if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 300:
@@ -56,6 +56,7 @@ class SidonConfigurationAI:
         self.deployment = deployment
         self.api_key = api_key
         self.provider = provider
+        self.local_allowed_host = local_allowed_host.strip().lower()
         self.timeout_seconds = timeout_seconds
         self.policy = hashlib.sha256(
             json.dumps([self.endpoint, deployment, _PROMPT, _SCHEMA]).encode()
@@ -77,7 +78,7 @@ class SidonConfigurationAI:
             ))
             or (self.provider == "local" and (
                 endpoint.scheme not in ("http", "https")
-                or endpoint.hostname not in ("localhost", "127.0.0.1", "::1", "host.docker.internal")
+                or endpoint.hostname not in ("localhost", "127.0.0.1", "::1", "host.docker.internal", self.local_allowed_host)
                 or endpoint.port == 0
             ))
         ):
@@ -168,6 +169,7 @@ def sidon_configuration_ai_resource(_context):
             os.getenv("CARLSJR_SIDON_LOCAL_MODEL", ""),
             os.getenv("CARLSJR_SIDON_LOCAL_API_KEY", ""),
             provider=provider, timeout_seconds=timeout_seconds,
+            local_allowed_host=os.getenv("CARLSJR_SIDON_LOCAL_ALLOWED_HOST", ""),
         )
     return SidonConfigurationAI(
         os.getenv("CARLSJR_SIDON_AZURE_OPENAI_ENDPOINT", ""),
