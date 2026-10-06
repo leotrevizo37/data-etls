@@ -1,0 +1,145 @@
+name: Data Engineering Task
+description: Trabajo técnico, mantenimiento, refactor o deuda técnica
+title: "[TASK] "
+labels:
+  - task
+  - data-platform
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utiliza este template para trabajo interno de ingeniería de datos.
+
+        Ejemplos:
+        - Refactor de assets
+        - Optimización de Spark
+        - Migraciones
+        - Actualización de dependencias
+        - Cambios de infraestructura
+        - Deuda técnica
+        - Mejoras de observabilidad
+        - Cambios en particionamiento
+        - Mejoras de CI/CD
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objetivo
+      description: ¿Qué queremos conseguir con esta tarea?
+      placeholder: |
+        El objetivo es...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto
+      description: ¿Por qué necesitamos realizar esta tarea?
+      placeholder: |
+        Actualmente...
+
+        Esto representa un problema porque...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Dagster
+        - Spark
+        - Ingesta
+        - Transformación
+        - Data Lake
+        - Data Warehouse
+        - Data Quality
+        - Observabilidad
+        - Metadata
+        - Infraestructura
+        - CI/CD
+        - Seguridad
+        - Testing
+        - Documentación
+        - Arquitectura
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Alcance
+      description: Define explícitamente qué está dentro y fuera de la tarea.
+      placeholder: |
+        Incluye:
+        - ...
+        - ...
+
+        No incluye:
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementación propuesta
+      description: Si existe una estrategia técnica definida, descríbela aquí.
+      placeholder: |
+        1. Modificar...
+        2. Migrar...
+        3. Agregar...
+        4. Validar...
+
+  - type: textarea
+    id: affected_assets
+    attributes:
+      label: Assets / pipelines afectados
+      placeholder: |
+        - raw_orders
+        - orders_clean
+        - daily_order_metrics
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterios de aceptación
+      placeholder: |
+        - [ ] El cambio fue implementado.
+        - [ ] Los pipelines existentes siguen funcionando.
+        - [ ] Las pruebas pasan correctamente.
+        - [ ] No se introdujeron regresiones de datos.
+        - [ ] Se validó el comportamiento en Dagster.
+        - [ ] Se actualizó la documentación.
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Riesgos
+      description: Describe riesgos de datos, performance, compatibilidad o disponibilidad.
+      placeholder: |
+        - Posible recomputación de particiones.
+        - Cambio de schema.
+        - Incremento temporal de uso de recursos.
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencias / bloqueos
+      placeholder: |
+        - Depende de #123
+        - Requiere cambio en infraestructura
+        - Requiere acceso a...
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Notas técnicas
+      description: ADRs, documentación, benchmarks, PRs o cualquier información relevante.
