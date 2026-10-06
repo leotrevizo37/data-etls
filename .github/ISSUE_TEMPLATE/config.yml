@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Preguntas de Data Platform
+    url: https://github.com/leotrevizo37/data-etls/discussions
+    about: Usa Discussions para preguntas, propuestas tempranas o temas que aún no requieren trabajo concreto.
+
+  - name: Documentación
+    url: https://github.com/leotrevizo37/data-etls/wiki
+    about: Consulta la documentación de arquitectura, pipelines y estándares de la plataforma.
+
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/leotrevizo37/data-etls/security/advisories/new
+    about: Reporta vulnerabilidades de seguridad de forma privada.
