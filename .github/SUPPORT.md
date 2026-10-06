@@ -13,8 +13,7 @@ Antes de crear uno nuevo:
 3. recopilar la información necesaria para reproducir o analizar el caso;
 4. evitar incluir credenciales, secretos o información sensible.
 
-Para información sobre desarrollo, configuración del entorno y ejecución local, consultar la Wiki **[[Development]]**.
-
+ Para información sobre desarrollo, configuración del entorno y ejecución local, consultar la Wiki **[Development](https://github.com/leotrevizo37/data-etls/wiki/Development)**
 ## Bugs
 
 Crear un Issue de tipo bug cuando exista un comportamiento incorrecto o inesperado en alguno de los componentes de la plataforma.

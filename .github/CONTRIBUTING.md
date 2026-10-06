@@ -2,7 +2,7 @@
 
 Este repositorio contiene los componentes de la plataforma de datos. Las contribuciones deben realizarse mediante Issues, ramas independientes y Pull Requests.
 
-Para información detallada sobre configuración del entorno, desarrollo local, pruebas, arquitectura y herramientas, consultar la Wiki **[[Development]]**.
+Para información detallada sobre configuración del entorno, desarrollo local, pruebas, arquitectura y herramientas, consultar la Wiki **[Development](https://github.com/leotrevizo37/data-etls/wiki/Development)**
 
 ## Contribución y Git
 
