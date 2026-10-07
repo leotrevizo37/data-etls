@@ -1,0 +1,151 @@
+name: Data Quality Issue
+description: Reporta datos incorrectos, incompletos, duplicados, inconsistentes o inesperados
+title: "[DATA QUALITY] "
+labels:
+  - data-quality
+  - data-platform
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utiliza este template cuando el pipeline puede estar ejecutando correctamente,
+        pero los datos producidos no cumplen con lo esperado.
+
+        Ejemplos:
+        - Valores NULL inesperados
+        - Duplicados
+        - Registros faltantes
+        - Métricas incorrectas
+        - Schema drift
+        - Datos fuera de rango
+        - Inconsistencias entre fuentes
+        - Datos desactualizados
+
+  - type: input
+    id: dataset
+    attributes:
+      label: Dataset / tabla / asset afectado
+      placeholder: "Ej. analytics.fact_orders"
+    validations:
+      required: true
+
+  - type: input
+    id: field
+    attributes:
+      label: Campo(s) afectado(s)
+      description: Si aplica, indica las columnas involucradas.
+      placeholder: "Ej. total_amount, customer_id"
+
+  - type: dropdown
+    id: problem_type
+    attributes:
+      label: Tipo de problema
+      options:
+        - Datos faltantes
+        - Duplicados
+        - Valores NULL inesperados
+        - Valores incorrectos
+        - Schema incorrecto
+        - Schema drift
+        - Datos desactualizados
+        - Volumen inesperado
+        - Inconsistencia entre fuentes
+        - Error de agregación
+        - Otro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - Development
+        - Testing / QA
+        - Staging
+        - Production
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: Explica qué problema observaste en los datos.
+      placeholder: |
+        La tabla `analytics.fact_orders` contiene aproximadamente
+        15% menos registros que la fuente para la partición 2026-10-05.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+      description: Describe cómo deberían verse los datos.
+      placeholder: |
+        El número de órdenes debería coincidir con la fuente,
+        considerando únicamente órdenes con status != 'cancelled'.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidencia
+      description: Incluye queries, conteos, ejemplos de registros o métricas que demuestren el problema.
+      placeholder: |
+        Fuente:
+        SELECT COUNT(*) FROM raw.orders
+        -- 1,245,302
+
+        Destino:
+        SELECT COUNT(*) FROM analytics.fact_orders
+        -- 1,058,110
+      render: sql
+
+  - type: input
+    id: partition
+    attributes:
+      label: Partición / rango afectado
+      placeholder: "Ej. 2026-10-05 / desde 2026-09-01"
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto
+      description: Indica qué consumidores o procesos dependen de estos datos.
+      placeholder: |
+        - Revenue Dashboard
+        - Modelo de forecasting
+        - Reporte financiero diario
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Fuente de referencia
+      description: Si existe una fuente considerada correcta, indícala aquí.
+      placeholder: |
+        Sistema fuente: PostgreSQL / orders
+        Dataset de referencia: raw.orders
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Información adicional
+      description: Agrega enlaces, screenshots, runs de Dagster o cualquier contexto adicional.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: Verifiqué que el problema ocurre en los datos y no solamente en la visualización.
+          required: true
+        - label: Incluí el dataset o asset afectado.
+          required: true
