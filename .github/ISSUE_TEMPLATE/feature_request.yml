@@ -1,0 +1,138 @@
+name: Data Platform Feature
+description: Propón una nueva capacidad, pipeline, integración o mejora para la plataforma de datos
+title: "[FEATURE] "
+labels:
+  - enhancement
+  - data-platform
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utiliza este template para proponer nuevas capacidades en la plataforma.
+
+        Ejemplos:
+        - Nuevas fuentes de datos
+        - Nuevos datasets
+        - Nuevos assets
+        - Integraciones
+        - Mejoras de observabilidad
+        - Nuevos componentes reutilizables
+        - Mejoras de performance
+        - Capacidades de self-service
+        - Mejoras en Dagster o Spark
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema o necesidad
+      description: Describe primero el problema que queremos resolver.
+      placeholder: |
+        Actualmente necesitamos...
+
+        El problema es que...
+
+        Esto genera...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solución propuesta
+      description: Describe la capacidad o cambio que propones.
+      placeholder: |
+        Se propone agregar...
+
+        La solución permitiría...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área principal
+      options:
+        - Ingesta
+        - Transformación
+        - Orquestación / Dagster
+        - Procesamiento / Spark
+        - Data Lake
+        - Data Warehouse
+        - Data Quality
+        - Observabilidad
+        - Metadata / Catálogo
+        - Developer Experience
+        - Infraestructura
+        - CI/CD
+        - Seguridad
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: consumers
+    attributes:
+      label: Consumidores
+      description: ¿Quién o qué utilizará esta funcionalidad?
+      placeholder: |
+        - Data Engineering
+        - Analytics
+        - Data Science
+        - BI
+        - Aplicaciones
+        - Clientes internos
+    validations:
+      required: true
+
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs / fuentes de datos
+      description: Si aplica, describe qué fuentes o datasets utilizaría.
+      placeholder: |
+        - PostgreSQL: orders
+        - Kafka: order_events
+        - S3: raw/orders/
+
+  - type: textarea
+    id: outputs
+    attributes:
+      label: Outputs esperados
+      description: Describe los datasets, assets, tablas o eventos resultantes.
+      placeholder: |
+        - analytics.fact_orders
+        - Asset: daily_order_metrics
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterios de aceptación
+      placeholder: |
+        - [ ] Los datos son ingeridos correctamente.
+        - [ ] El proceso es idempotente.
+        - [ ] Existe observabilidad de las ejecuciones.
+        - [ ] Los errores son visibles en Dagster.
+        - [ ] Existen validaciones de calidad.
+        - [ ] La documentación fue actualizada.
+    validations:
+      required: true
+
+  - type: textarea
+    id: considerations
+    attributes:
+      label: Consideraciones técnicas
+      description: Agrega restricciones, volumen, SLA, performance o decisiones conocidas.
+      placeholder: |
+        Volumen aproximado:
+        Frecuencia:
+        SLA:
+        Retención:
+        Consideraciones de performance:
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Información adicional
+      description: Agrega diagramas, documentación, ADRs, mockups o referencias.

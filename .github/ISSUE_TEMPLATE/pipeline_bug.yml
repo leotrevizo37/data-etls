@@ -1,0 +1,151 @@
+name: Pipeline / Data Bug
+description: Reporta fallas en pipelines, assets, jobs, schedules, sensors o procesamiento de datos
+title: "[BUG] "
+labels:
+  - bug
+  - data-platform
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utiliza este template para reportar fallas relacionadas con ejecución,
+        procesamiento u orquestación de datos.
+
+        Ejemplos:
+        - Fallas en assets de Dagster
+        - Jobs o schedules que no ejecutan correctamente
+        - Sensors que no detectan eventos
+        - Errores en jobs de Spark
+        - Pipelines incompletos
+        - Particiones faltantes
+        - Errores de lectura/escritura
+        - Problemas con dependencias entre assets
+
+  - type: input
+    id: pipeline
+    attributes:
+      label: Pipeline / Asset / Job afectado
+      description: Indica el nombre del asset, job, pipeline o proceso afectado.
+      placeholder: "Ej. orders_daily / raw_orders / customer_etl"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Componente
+      description: ¿Dónde ocurre principalmente el problema?
+      options:
+        - Dagster Asset
+        - Dagster Job
+        - Dagster Schedule
+        - Dagster Sensor
+        - Spark Job
+        - Ingesta
+        - Transformación
+        - Data Lake / Storage
+        - Data Warehouse
+        - Catálogo / Metadata
+        - Infraestructura
+        - Otro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - Development
+        - Testing / QA
+        - Staging
+        - Production
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción del problema
+      description: Explica claramente qué está ocurriendo.
+      placeholder: |
+        El asset `orders_daily` falla durante la transformación de datos
+        cuando procesa la partición del día actual.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado
+      description: Describe qué debería ocurrir normalmente.
+      placeholder: |
+        El pipeline debería procesar todas las particiones y materializar
+        correctamente el asset final.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto
+      description: Describe qué datos, pipelines, consumidores o productos están afectados.
+      placeholder: |
+        - Dataset afectado: analytics.orders
+        - Particiones afectadas: 2026-10-04, 2026-10-05
+        - Dashboards afectados: Revenue Dashboard
+        - Pipelines downstream: customer_metrics
+    validations:
+      required: true
+
+  - type: input
+    id: run_id
+    attributes:
+      label: Run ID
+      description: Si aplica, agrega el Run ID de Dagster, Spark o la ejecución relacionada.
+      placeholder: "Ej. 7b4b23f2-..."
+
+  - type: input
+    id: partition
+    attributes:
+      label: Partición / rango afectado
+      description: Indica las fechas o particiones afectadas.
+      placeholder: "Ej. 2026-10-05 / 2026-10-01 a 2026-10-05"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Stack Trace
+      description: Agrega los logs relevantes de Dagster, Spark o infraestructura.
+      render: shell
+      placeholder: |
+        Pega aquí los logs relevantes.
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Pasos para reproducir
+      description: Si es posible, indica cómo reproducir el problema.
+      placeholder: |
+        1. Ejecutar el asset...
+        2. Utilizar la partición...
+        3. Observar el error...
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Información adicional
+      description: Agrega screenshots, enlaces a runs, dashboards, PRs o cualquier contexto útil.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: Verifiqué que no existe otro issue abierto para el mismo problema.
+          required: true
+        - label: Incluí suficiente información para identificar el pipeline o asset afectado.
+          required: true

@@ -1,0 +1,110 @@
+name: Backfill / Reprocessing Request
+description: Solicita reprocesar datos, particiones o rangos históricos
+title: "[BACKFILL] "
+labels:
+  - backfill
+  - data-platform
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utiliza este template para solicitar un backfill o reprocesamiento.
+
+        Un backfill puede tener impacto significativo en infraestructura,
+        costos y pipelines downstream, por lo que debe especificarse claramente
+        qué datos necesitan ser recalculados.
+
+  - type: input
+    id: asset
+    attributes:
+      label: Asset / pipeline
+      description: Indica qué asset, job o pipeline necesita reprocesamiento.
+      placeholder: "Ej. analytics_orders"
+    validations:
+      required: true
+
+  - type: input
+    id: partitions
+    attributes:
+      label: Particiones / rango
+      description: Indica exactamente qué período debe reprocesarse.
+      placeholder: "Ej. 2026-09-01 a 2026-09-30"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Motivo del backfill
+      description: Explica por qué necesitamos volver a procesar estos datos.
+      placeholder: |
+        Se detectó que...
+
+        Los datos fueron procesados con...
+
+        Necesitamos recalcular debido a...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno
+      options:
+        - Development
+        - Testing / QA
+        - Staging
+        - Production
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencias downstream
+      description: Indica qué assets o datasets podrían necesitar reprocesamiento posterior.
+      placeholder: |
+        Asset principal:
+        - orders_clean
+
+        Downstream:
+        - daily_order_metrics
+        - customer_ltv
+        - revenue_summary
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validación esperada
+      description: ¿Cómo verificaremos que el backfill fue exitoso?
+      placeholder: |
+        - [ ] Todas las particiones fueron materializadas.
+        - [ ] No existen runs fallidos.
+        - [ ] Los conteos coinciden con la fuente.
+        - [ ] Los checks de calidad pasan correctamente.
+        - [ ] Los assets downstream fueron actualizados.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto / consideraciones
+      description: Indica posibles impactos de performance, costo o disponibilidad.
+      placeholder: |
+        Volumen estimado:
+        Duración esperada:
+        Consumo estimado de recursos:
+        Impacto downstream:
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmaciones
+      options:
+        - label: El rango de datos a reprocesar está claramente definido.
+          required: true
+        - label: Se identificaron las dependencias downstream conocidas.
+          required: true
