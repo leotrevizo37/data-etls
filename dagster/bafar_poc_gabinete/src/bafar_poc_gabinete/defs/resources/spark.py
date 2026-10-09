@@ -1049,7 +1049,7 @@ def spark_resource(init_context):
     driver_port = os.getenv("SPARK_DRIVER_PORT", "")
     driver_block_manager_port = os.getenv("SPARK_DRIVER_BLOCK_MANAGER_PORT", "")
     block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
-    if resource_profile["name"] == "observability":
+    if resource_profile["name"] == "observability" or app_context["job_name"] == "120_observability_dim_aspnetusers":
         driver_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_PORT", driver_port)
         driver_block_manager_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT", driver_block_manager_port)
         block_manager_port = os.getenv("SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT", block_manager_port)
