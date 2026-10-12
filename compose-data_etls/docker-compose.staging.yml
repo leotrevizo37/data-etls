@@ -38,6 +38,9 @@ services:
   spark-master:
     restart: "no"
 
+  spark-history:
+    restart: "no"
+
   spark-worker:
     command: ["sh", "-c", "sleep infinity"]
     restart: "no"

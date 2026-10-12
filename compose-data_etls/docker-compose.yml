@@ -14,6 +14,7 @@ x-dagster-common: &dagster_common
     - ../dagster/bafar:/opt/dagster/app/bafar
     - ../workspace.yaml:/opt/dagster/app/workspace.yaml:ro
     - spark-data:/data
+    - spark-events:/opt/spark-events
   networks:
     - data-dagster
   restart: unless-stopped
@@ -204,6 +205,7 @@ services:
       SPARK_BLOCK_MANAGER_PORT: ${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}
       SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
+      - "127.0.0.1:4100-4116:4040-4056"
       - "${GABINETE_USER_CODE_PORT:-4004}:4004"
       - "${GAB_OBSERVABILITY_SPARK_DRIVER_PORT:-37104}:${GAB_OBSERVABILITY_SPARK_DRIVER_PORT:-37104}"
       - "${GAB_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37105}:${GAB_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37105}"
@@ -273,6 +275,7 @@ services:
       SPARK_BLOCK_MANAGER_PORT: ${VALLEDELENCINO_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37119}
       SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
+      - "127.0.0.1:4080-4096:4040-4056"
       - "${VALLEDELENCINO_USER_CODE_PORT:-4005}:4005"
       - "${VALLEDELENCINO_OBSERVABILITY_SPARK_DRIVER_PORT:-37114}:${VALLEDELENCINO_OBSERVABILITY_SPARK_DRIVER_PORT:-37114}"
       - "${VALLEDELENCINO_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37115}:${VALLEDELENCINO_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37115}"
@@ -371,6 +374,7 @@ services:
       SPARK_BLOCK_MANAGER_PORT: ${CARLSJR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37129}
       SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
+      - "127.0.0.1:4040-4056:4040-4056"
       - "${CARLSJR_USER_CODE_PORT:-4006}:4006"
       - "${CARLSJR_OBSERVABILITY_SPARK_DRIVER_PORT:-37124}:${CARLSJR_OBSERVABILITY_SPARK_DRIVER_PORT:-37124}"
       - "${CARLSJR_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37125}:${CARLSJR_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37125}"
@@ -440,6 +444,7 @@ services:
       SPARK_BLOCK_MANAGER_PORT: ${EMERSON_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37139}
       SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
+      - "127.0.0.1:4060-4076:4040-4056"
       - "${EMERSON_USER_CODE_PORT:-4007}:4007"
       - "${EMERSON_OBSERVABILITY_SPARK_DRIVER_PORT:-37134}:${EMERSON_OBSERVABILITY_SPARK_DRIVER_PORT:-37134}"
       - "${EMERSON_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37135}:${EMERSON_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37135}"
@@ -512,6 +517,7 @@ services:
       SPARK_BLOCK_MANAGER_PORT: ${BAFAR_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37149}
       SPARK_WORKER_NETWORK_TIMEOUT_SECONDS: ${SPARK_WORKER_NETWORK_TIMEOUT_SECONDS:-3}
     ports:
+      - "127.0.0.1:4120-4136:4040-4056"
       - "${BAFAR_USER_CODE_PORT:-4008}:4008"
       - "${BAFAR_OBSERVABILITY_SPARK_DRIVER_PORT:-37144}:${BAFAR_OBSERVABILITY_SPARK_DRIVER_PORT:-37144}"
       - "${BAFAR_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37145}:${BAFAR_OBSERVABILITY_SPARK_BLOCK_MANAGER_PORT:-37145}"
@@ -702,6 +708,24 @@ services:
       retries: 10
       start_period: 20s
 
+  spark-history:
+    user: "0:0"
+    init: true
+    build:
+      context: ..
+      dockerfile: spark/Dockerfile
+    container_name: data-spark-history
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
+    environment:
+      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:///opt/spark-events -Dspark.history.fs.cleaner.enabled=true -Dspark.history.fs.cleaner.maxAge=10d -Dspark.history.fs.cleaner.interval=24h"
+    ports:
+      - "${SPARK_HISTORY_UI_PORT:-18080}:18080"
+    volumes:
+      - spark-events:/opt/spark-events
+    restart: unless-stopped
+    networks:
+      - data-dagster
+
   spark-worker:
     user: "0:0"
     build:
@@ -715,7 +739,7 @@ services:
     environment:
       - SPARK_WORKER_CORES=${SPARK_WORKER_CORES}
       - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEM}
-      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-1800} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-10800}"
+      - "SPARK_WORKER_OPTS=-Dspark.worker.cleanup.enabled=${SPARK_WORKER_CLEANUP_ENABLED:-true} -Dspark.worker.cleanup.interval=${SPARK_WORKER_CLEANUP_INTERVAL_SECONDS:-7200} -Dspark.worker.cleanup.appDataTtl=${SPARK_WORKER_CLEANUP_APP_DATA_TTL_SECONDS:-43200}"
     ports:
       - "${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}:${GAB_OBSERVABILITY_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37106}"
       - "${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}:${GAB_SPARK_EXECUTOR_BLOCK_MANAGER_PORT:-37109}"
@@ -751,6 +775,7 @@ services:
       - data-dagster
 
 volumes:
+  spark-events:
   spark-data:
   dagster_postgres_data:
   prometheus_data:
