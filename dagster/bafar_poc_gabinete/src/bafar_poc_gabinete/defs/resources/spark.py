@@ -416,6 +416,9 @@ class SparkResource:
         conf = (
             SparkConf()
             .setAppName(self.app_name)
+            .set("spark.ui.enabled", "true")
+            .set("spark.eventLog.enabled", "true")
+            .set("spark.eventLog.dir", "file:///opt/spark-events")
             .setMaster(self.master_url)
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
