@@ -4,7 +4,7 @@ dagster-graphql==1.12.6
 dagster-pyspark==0.28.6
 dagster-postgres==0.28.6
 dagster-docker==0.28.6
-pyspark==4.0.1
+pyspark==4.2.0
 polars==1.44.2
 pymssql==2.4.2
 adlfs==2026.8.0
