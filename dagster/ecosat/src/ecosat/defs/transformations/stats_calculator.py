@@ -13,6 +13,7 @@ from pyspark.sql.functions import (
     struct,
     sum as spark_sum,
     count,
+    trim,
     to_json,
     when as spark_when,
     stddev)
@@ -27,7 +28,7 @@ def stats_calculator(
 
     base = (
         base
-        .filter((col("sensor_type") == sensor_type))
+        .filter((trim(col("sensor_type")) == sensor_type))
         .withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
     )
 

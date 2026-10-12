@@ -8,6 +8,12 @@ __all__ = [
     "factlecturas_extended",
     "raw_dimensions",
     "gabinete",
+    "cisternas",
+    "sensor_fase",
+    "temperatura_humedad",
+    "acometida",
+    "control_luces",
+    "weather_station",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -16,6 +22,12 @@ _MODULE_BY_EXPORT = {
     "raw_dimensions": ".raw_dimensions",
     "sensor_expected_values": ".sensor_expected_values",
     "gabinete": ".gabinete",
+    "cisternas": ".cisternas",
+    "sensor_fase": ".sensor_fase",
+    "temperatura_humedad": ".temperatura_humedad",
+    "acometida": ".acometida",
+    "control_luces": ".control_luces",
+    "weather_station": ".weather_station",
 }
 
 
