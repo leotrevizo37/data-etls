@@ -5,7 +5,7 @@ services:
   dagster-postgres:
     restart: "no"
 
-  dagster-user-code-bafar-poc-gabinete:
+  dagster-user-code-ecosat:
     restart: "no"
 
   dagster-user-code-valledelencino:

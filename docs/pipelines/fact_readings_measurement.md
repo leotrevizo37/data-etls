@@ -35,4 +35,4 @@ Construir la tabla operacional horaria `dwh.factReadingsMeasurement` desde lectu
 
 ## Compatibilidad entre `user_codes`
 
-El flujo existe en `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino`, con transformaciones específicas por cliente. McDonalds, CDP y Smartfit fueron retirados según [ADR 0005](../adr/0005-remove-code-locations.md). El DDL agrega `TimeSpan` nullable al histórico existente y lo exige en tablas nuevas; no reconstruye la identidad ni el tiempo del histórico. Véase [ADR 0009](../adr/0009-utc-fact-identities.md).
+El flujo existe en `ecosat`, `carlsjr`, `emerson` y `valledelencino`, con transformaciones específicas por cliente. McDonalds, CDP y Smartfit fueron retirados según [ADR 0005](../adr/0005-remove-code-locations.md). El DDL agrega `TimeSpan` nullable al histórico existente y lo exige en tablas nuevas; no reconstruye la identidad ni el tiempo del histórico. Véase [ADR 0009](../adr/0009-utc-fact-identities.md).

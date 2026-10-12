@@ -197,7 +197,7 @@ def test_configuration_validation_contract():
 def test_tenant_alert_sensor_copies_match_carlsjr():
     tenants = (
         "bafar",
-        "bafar_poc_gabinete",
+        "ecosat",
         "emerson",
         "valledelencino",
     )
