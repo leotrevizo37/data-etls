@@ -1,8 +1,11 @@
 import sys
+import json
 import unittest
 import warnings
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import (
@@ -333,7 +336,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "TimeSpan": datetime(2026, 3, 29, 10, 5),
                     "Value": 0.5,
                     "device_name": "Gabinete 1",
@@ -344,7 +347,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "TimeSpan": datetime(2026, 3, 29, 10, 25),
                     "Value": 0.6,
                     "device_name": "Gabinete 1",
@@ -355,7 +358,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 201,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "TimeSpan": datetime(2026, 3, 29, 10, 10),
                     "Value": 21.0,
                     "device_name": "Gabinete 1",
@@ -366,7 +369,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 201,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "TimeSpan": datetime(2026, 3, 29, 10, 40),
                     "Value": 22.0,
                     "device_name": "Gabinete 1",
@@ -381,7 +384,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 200,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "device_name": "Gabinete 1",
                     "sensor_name": "Humedad 1",
                     "TimeZone": "America/Chihuahua",
@@ -392,7 +395,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     "LocationId": 100,
                     "SensorTyId": 201,
                     "sensor_type": "Humedad",
-                    "device_type": "Máquina de nieve",
+                    "device_type": "Gabinete",
                     "device_name": "Gabinete 1",
                     "sensor_name": "Humedad 2",
                     "TimeZone": "America/Chihuahua",
@@ -420,12 +423,145 @@ class SparkTransformationsTests(unittest.TestCase):
             {datetime(2026, 3, 29, 4, 0)},
         )
         self.assertEqual(len({row["OperationId"] for row in rows}), 2)
+        self.assertEqual([row["ReadingsCount"] for row in rows], [2, 2])
+        self.assertAlmostEqual(rows[0]["MeasurementValue"], 0.55)
+        self.assertEqual(rows[0]["Anomalies"], 2)
+        self.assertEqual(rows[1]["MeasurementValue"], 21.5)
+        self.assertEqual(rows[1]["Anomalies"], 0)
         self.assertEqual({row["LocationId"] for row in rows}, {100})
         self.assertEqual(
             {row["sensor_type"] for row in rows},
             {"Humedad"},
         )
 
+
+    def test_ecosat_device_types_materialize_all_sensor_channels(self) -> None:
+        from ecosat.defs.assets.operations_assets import build_devices_df_op
+        from ecosat.defs.resources.transformation_ops import TransformationOps
+
+        sensor_groups = (
+            ("Gabinete", ("Temperatura", "Humedad")),
+            ("CISTERNAS", ("EM500-SWL-Submersible Water Level Sensor",) * 2),
+            ("Sensor fase ", ("CORRIENTE ELECTRICA",) * 3),
+            ("TEMPERATURA Y HUMEDAD", ("Temperatura",)),
+            ("ACOMETIDA", ("CORRIENTE ELECTRICA",) * 3),
+            ("CONTROL DE LUCES", ("CONTROL DE LUCES WS558",) * 7),
+            (" Weather Station", (
+                "Velocidad del viento ",
+                "Lluvia acumulada",
+                "Dirección del viento",
+                "Temperatura",
+                "WTS506 - IoT Weather Station",
+                "Humedad",
+                "Porcentaje de Bateria",
+            )),
+        )
+        dimensions = []
+        readings = []
+        for device_index, (device_type, sensor_types) in enumerate(sensor_groups, 1):
+            for sensor_type in sensor_types:
+                sensor_index = len(dimensions) + 1
+                dimension = {
+                    "DeviceId": f"10000000-0000-0000-0000-{device_index:012d}",
+                    "SensorId": f"00000000-0000-0000-0000-{sensor_index:012d}",
+                    "SensorTyId": f"20000000-0000-0000-0000-{sensor_index:012d}",
+                    "LocationId": "30000000-0000-0000-0000-000000000001",
+                    "sensor_type": sensor_type,
+                    "device_type": device_type,
+                    "device_name": f"Equipo {device_index}",
+                    "sensor_name": f"Sensor {sensor_index}",
+                    "TimeZone": "America/Chihuahua",
+                }
+                dimensions.append(dimension)
+                for minute, value in ((5, 10.0), (25, 30.0)):
+                    readings.append({
+                        **dimension,
+                        "TimeSpan": datetime(2026, 3, 29, 10, minute),
+                        "Value": value,
+                    })
+
+        context = SimpleNamespace(
+            resources=SimpleNamespace(transformation_ops=TransformationOps()),
+            log=Mock(),
+        )
+        result = build_devices_df_op.compute_fn.decorated_fn(
+            context,
+            {"fetch_from": datetime(2026, 3, 29, 10), "max_utc_hour": datetime(2026, 3, 29, 11)},
+            self.spark.createDataFrame(dimensions),
+            self.spark.createDataFrame(readings),
+        )
+        rows = result.collect()
+        self.assertEqual(len(rows), 25)
+        self.assertEqual({row["SensorId"] for row in rows}, {row["SensorId"] for row in dimensions})
+        self.assertEqual(len({row["OperationId"] for row in rows}), 25)
+        for row in rows:
+            self.assertEqual(row["ReadingsCount"], 2)
+            self.assertEqual(row["MeasurementValue"], 20.0)
+            self.assertEqual(row["Min"], 10.0)
+            self.assertEqual(row["Max"], 30.0)
+            self.assertEqual(row["Anomalies"], 0)
+            self.assertFalse(row["HasAnomalies"])
+            self.assertEqual(row["AnomalousReadingsJson"], "[]")
+            self.assertEqual(len(json.loads(row["CorrectReadingsJson"])), 2)
+            self.assertEqual(row["TimeSpan"], datetime(2026, 3, 29, 10))
+            self.assertEqual(row["LocalTimeSpan"], datetime(2026, 3, 29, 4))
+
+    def test_ecosat_new_types_accept_all_values_and_scope_empty_hours(self) -> None:
+        from ecosat.defs.resources.transformation_ops import TransformationOps
+
+        transformations = TransformationOps()
+        for method, device_type, sensor_type in (
+            ("cisternas", "CISTERNAS", "EM500-SWL-Submersible Water Level Sensor"),
+            ("sensor_fase", "Sensor fase ", "CORRIENTE ELECTRICA"),
+            ("temperatura_humedad", "TEMPERATURA Y HUMEDAD", "Temperatura"),
+            ("acometida", "ACOMETIDA", "CORRIENTE ELECTRICA"),
+            ("control_luces", "CONTROL DE LUCES", "CONTROL DE LUCES WS558"),
+            ("weather_station", " Weather Station", "Velocidad del viento "),
+        ):
+            with self.subTest(method=method):
+                dimension = {
+                    "DeviceId": 1,
+                    "SensorId": 10,
+                    "SensorTyId": 100,
+                    "LocationId": 1000,
+                    "sensor_type": sensor_type,
+                    "device_type": device_type,
+                    "device_name": "Equipo de prueba",
+                    "sensor_name": "Sensor de prueba",
+                    "TimeZone": "America/Chihuahua",
+                }
+                dimensions = self.spark.createDataFrame([
+                    dimension,
+                    {**dimension, "SensorId": 11},
+                    {**dimension, "SensorId": 12, "device_type": "Otro tipo"},
+                    {**dimension, "SensorId": 13, "sensor_type": "Otro sensor"},
+                ])
+                readings = self.spark.createDataFrame([
+                    {**dimension, "TimeSpan": datetime(2026, 3, 29, 10, 5), "Value": -1000.0},
+                    {**dimension, "TimeSpan": datetime(2026, 3, 29, 10, 25), "Value": 1000.0},
+                ])
+                transform = getattr(transformations, method)
+                rows = transform(readings, dimensions, "2026-03-29 10:00:00", "2026-03-29 11:00:00").collect()
+                self.assertEqual(len(rows), 4)
+                self.assertEqual({row["SensorId"] for row in rows}, {10, 11})
+                self.assertEqual(len({row["OperationId"] for row in rows}), 4)
+                for row in rows:
+                    self.assertEqual(row["Anomalies"], 0)
+                    self.assertFalse(row["HasAnomalies"])
+                    self.assertEqual(row["AnomalousReadingsJson"], "[]")
+                    if row["ReadingsCount"]:
+                        self.assertEqual(row["MeasurementValue"], 0.0)
+                        self.assertEqual(row["Min"], -1000.0)
+                        self.assertEqual(row["Max"], 1000.0)
+                        self.assertEqual(len(json.loads(row["CorrectReadingsJson"])), 2)
+                    else:
+                        self.assertIsNone(row["MeasurementValue"])
+                        self.assertEqual(row["CorrectReadingsJson"], "[]")
+
+                empty = transform(readings.limit(0), dimensions, "2026-03-29 10:00:00", "2026-03-29 10:00:00").collect()
+                self.assertEqual(len(empty), 2)
+                self.assertTrue(all(row["ReadingsCount"] == 0 and row["MeasurementValue"] is None for row in empty))
+                self.assertIsNone(transform(readings, dimensions.filter("device_type = 'Otro tipo'"), "2026-03-29 10:00:00", "2026-03-29 10:00:00"))
 
     def test_limit_operations_rows_to_closed_hours_removes_future_rows(self) -> None:
         schema = StructType(
