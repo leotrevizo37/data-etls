@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 
 OPERATIONS_TIMEZONE_NAME = "America/Ciudad_Juarez"
-HADOOP_AWS_PACKAGE = "org.apache.hadoop:hadoop-aws:3.4.1"
+HADOOP_AWS_PACKAGE = "org.apache.hadoop:hadoop-aws:3.5.0"
 MSSQL_JDBC_PACKAGE = "com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11"
 DEFAULT_SPARK_MASTER_STATUS_URL = "http://spark-master:8080/json/"
 DEFAULT_SPARK_RESOURCE_WAIT_SECONDS = 300
@@ -379,8 +379,8 @@ class SparkResource:
         packages = []
         if self.adls_account_name and self.adls_account_key:
             packages.extend([
-                "org.apache.hadoop:hadoop-azure:3.3.4",
-                "com.microsoft.azure:azure-storage:8.6.6",
+                "org.apache.hadoop:hadoop-azure:3.5.0",
+                "com.microsoft.azure:azure-storage:7.0.1",
                 MSSQL_JDBC_PACKAGE,
             ])
         return packages
@@ -416,6 +416,9 @@ class SparkResource:
         conf = (
             SparkConf()
             .setAppName(self.app_name)
+            .set("spark.ui.enabled", "true")
+            .set("spark.eventLog.enabled", "true")
+            .set("spark.eventLog.dir", "file:///opt/spark-events")
             .setMaster(self.master_url)
             .set("spark.executor.memory", self.executor_mem)
             .set("spark.executor.cores", str(self.executor_cores))
@@ -1270,7 +1273,7 @@ def spark_resource(init_context):
     driver_port = os.getenv("SPARK_DRIVER_PORT", "")
     driver_block_manager_port = os.getenv("SPARK_DRIVER_BLOCK_MANAGER_PORT", "")
     block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "")
-    if resource_profile["name"] == "observability":
+    if resource_profile["name"] == "observability" or app_context["job_name"] == "120_observability_dim_aspnetusers":
         driver_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_PORT", driver_port)
         driver_block_manager_port = os.getenv("SPARK_OBSERVABILITY_DRIVER_BLOCK_MANAGER_PORT", driver_block_manager_port)
         block_manager_port = os.getenv("SPARK_OBSERVABILITY_BLOCK_MANAGER_PORT", block_manager_port)
