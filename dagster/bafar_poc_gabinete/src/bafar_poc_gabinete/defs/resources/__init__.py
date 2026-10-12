@@ -1,3 +1,4 @@
+from .sidon_configuration_ai import sidon_configuration_ai_resource
 from .sql_server import sqlserver_resource, SqlServerResource
 from .spark import spark_resource, SparkResource
 from .sql_server_dimensions import dim_sqlserver_resource, SqlDimServerResource
@@ -6,6 +7,7 @@ from .spark_df_io_manager import spark_df_io_manager, SparkDataFrameParquetIOMan
 
 
 __all__ = [
+    "sidon_configuration_ai_resource",
     "sqlserver_resource",
     "SqlServerResource",
     "spark_resource",
