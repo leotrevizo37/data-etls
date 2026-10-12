@@ -5,7 +5,7 @@ from pathlib import Path
 
 for user_code in (
     "bafar",
-    "bafar_poc_gabinete",
+    "ecosat",
     "carlsjr",
     "emerson",
     "valledelencino",
