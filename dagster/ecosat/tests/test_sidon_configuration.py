@@ -25,6 +25,7 @@ try:
     transformation_module = importlib.import_module("ecosat.defs.transformations.sidon_configuration")
     dagster_module = importlib.import_module("dagster")
     ai_module = importlib.import_module("ecosat.defs.resources.sidon_configuration_ai")
+    operational_module = importlib.import_module("ecosat.defs.sensors.operational_alerts_sensor")
 finally:
     if original_dagster_module is not None:
         sys.modules["dagster"] = original_dagster_module
@@ -155,6 +156,41 @@ def test_detects_using_existing_signal_writer(evaluation):
     assert evaluator.evaluate.call_count == 1
 
 
+@pytest.mark.parametrize("kind,entity_key,code", [
+    ("sidon_device_configuration", "device:device-id", "configuracion-dispositivo-device-device-id"),
+    ("sidon_alert_configuration", "alert:alert-id", "configuracion-alerta-alert-alert-id"),
+])
+def test_incident_lookup_and_signal_writer_are_tenant_scoped(monkeypatch, evaluation, kind, entity_key, code):
+    context, _, _, _, config, connection = evaluation
+    rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
+    rule.update(alert_type=kind, severity_id="severity-id", alert_config_id="config-id")
+    config["rules"][(kind, None)] = rule
+    context.op_config.update(alert_type=kind, entity_key=entity_key)
+    connection.cursor.return_value.__enter__.return_value.fetchone.return_value = (1,)
+    monkeypatch.setattr(asset_module, "_record_detected", operational_module._record_detected)
+
+    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+
+    lookup, write = connection.cursor.return_value.__enter__.return_value.execute.call_args_list
+    assert "WHERE user_code = N'ecosat'" in lookup.args[0]
+    assert lookup.args[1:] == ("type-id", entity_key)
+    assert write.args[0].count("?") == len(write.args) - 1
+    assert "ecosat" in write.args[1:] and code in write.args[1:]
+    assert "carlsjr" not in write.args[1:] and "emerson" not in write.args[1:]
+    assert operational_module._SIGNAL_TYPE_IDS["DETECTED"] in write.args[1:]
+    connection.__exit__.assert_called_once_with(None, None, None)
+
+
+def test_active_configuration_is_tenant_scoped():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.description = []
+    cursor.fetchall.return_value = []
+    config, reason = operational_module._load_active_config(connection)
+    assert config is None and reason
+    assert cursor.execute.call_args.args[1:] == ("ecosat",)
+
+
 @pytest.mark.parametrize("status,confidence,error,detects", [
     ("insufficient_evidence", 0.8, None, False), ("insufficient_evidence", 0.95, None, True),
     ("suspicious", 0.89, None, True), ("consistent", 0.89, None, False),
@@ -241,8 +277,9 @@ def test_sensor_asset_and_job_are_registered():
     loaded = importlib.import_module("ecosat.definitions").defs()
     job = loaded.resolve_job_def("sidon_configuration_job")
     assert job.has_node_named("ecosat__sidon_configuration")
-    assert detector.default_status == sensor_module.DefaultSensorStatus.RUNNING
+    assert detector.default_status == sensor_module.DefaultSensorStatus.STOPPED
     assert detector.required_resource_keys <= definitions.resources.keys()
+    assert definitions.resources["sidon_configuration_ai"] is ai_module.sidon_configuration_ai_resource
 
 
 @pytest.mark.parametrize("change", ["source", "config"])
@@ -616,6 +653,7 @@ def test_resource_selects_only_configured_provider(monkeypatch, provider):
     client = ai_module.sidon_configuration_ai_resource.resource_fn(None)
     assert client.provider == (provider or "azure")
     assert client.timeout_seconds == 40
+    assert all(call.args[0].startswith("ECOSAT_SIDON_") for call in getenv.call_args_list)
     if provider == "local":
         assert client.endpoint == "http://localhost:1234" and client.api_key == ""
         assert client.deployment == "local-model"
