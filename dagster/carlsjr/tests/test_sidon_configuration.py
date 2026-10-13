@@ -217,11 +217,37 @@ def test_structural_detection_does_not_need_azure(evaluation, snapshot):
     assert detected.called and not evaluator.evaluate.called
 
 
-@pytest.mark.parametrize("status,detects", [("consistent", False), ("suspicious", True)])
-def test_alert_without_expected_ranges_is_evaluated_without_unsafe_clear(evaluation, snapshot, status, detects):
+@pytest.mark.parametrize("status,confidence,detects,expected_clear", [
+    ("consistent", 0.89, False, False), ("consistent", 0.9, False, True),
+    ("consistent", 0.95, False, True), ("suspicious", 0.95, True, False),
+    ("insufficient_evidence", 0.89, False, False), ("insufficient_evidence", 0.95, True, False),
+])
+def test_alert_without_expected_ranges_uses_recovery_confidence(evaluation, snapshot, status, confidence, detects, expected_clear):
     context, evaluator, detected, cleared, config, _ = evaluation
     snapshot["expected"] = []
+    evaluator.evaluate.return_value.update(status=status, confidence=confidence)
+    rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
+    rule["alert_type"] = sensor_module._ALERT_TYPE
+    config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
+    context.op_config.update(alert_type=sensor_module._ALERT_TYPE, entity_key="alert:alert-id")
+    asset_module._rows.return_value = [{"metadata_json": json.dumps({
+        "source_fingerprint": "previous-source", "policy": evaluator.policy,
+        "assessment": {"model": "test-model"},
+    })}]
+    result = asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
+    assert evaluator.evaluate.call_args.args[0]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
+    assert detected.called == detects and cleared.called == expected_clear
+    assert (result.metadata["signal"] == "CLEARED") == expected_clear
+    if expected_clear:
+        assert result.metadata["evaluation"].value["recovery_conditions"]["expected_ranges_available"] is False
+
+
+@pytest.mark.parametrize("status,detects,expected_clear", [("suspicious", True, False), ("consistent", False, True)])
+def test_alert_with_mixed_expected_ranges_evaluates_all_devices(evaluation, snapshot, status, detects, expected_clear):
+    context, evaluator, detected, cleared, config, _ = evaluation
     evaluator.evaluate.return_value["status"] = status
+    snapshot["devices"].append(dict(snapshot["devices"][0], DeviceId="device-two", Name="Otro congelador"))
+    snapshot["sensors"].append(dict(snapshot["sensors"][0], SensorId="sensor-two", DeviceId="device-two"))
     rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
     rule["alert_type"] = sensor_module._ALERT_TYPE
     config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
@@ -231,24 +257,11 @@ def test_alert_without_expected_ranges_is_evaluated_without_unsafe_clear(evaluat
         "assessment": {"model": "test-model"},
     })}]
     asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
-    assert evaluator.evaluate.call_args.args[0]["devices"][0]["conditions"][0]["sensors"][0]["expected_ranges"] == []
-    assert detected.called == detects and not cleared.called
-
-
-def test_alert_with_mixed_expected_ranges_evaluates_all_devices(evaluation, snapshot):
-    context, evaluator, detected, cleared, config, _ = evaluation
-    snapshot["devices"].append(dict(snapshot["devices"][0], DeviceId="device-two", Name="Otro congelador"))
-    snapshot["sensors"].append(dict(snapshot["sensors"][0], SensorId="sensor-two", DeviceId="device-two"))
-    rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
-    rule["alert_type"] = sensor_module._ALERT_TYPE
-    config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
-    context.op_config.update(alert_type=sensor_module._ALERT_TYPE, entity_key="alert:alert-id")
-    asset_module.sidon_configuration.op.compute_fn.decorated_fn(context)
     devices = evaluator.evaluate.call_args.args[0]["devices"]
     assert len(devices) == 2
     assert devices[0]["conditions"][0]["sensors"][0]["expected_ranges"]
     assert devices[1]["conditions"][0]["sensors"][0]["expected_ranges"] == []
-    assert detected.called and not cleared.called
+    assert detected.called == detects and cleared.called == expected_clear
 
 
 def test_disabled_entity_override_is_respected(evaluation):
@@ -294,10 +307,17 @@ def test_changes_during_evaluation_emit_nothing(monkeypatch, evaluation, snapsho
     (False, "old-policy", "test-model", False),
     (False, "policy-1", "old-model", False),
 ])
-def test_recovery_requires_changed_evidence_and_same_policy(monkeypatch, evaluation, snapshot, same_source, policy, model, expected_clear):
-    context, evaluator, detected, cleared, _, _ = evaluation
+@pytest.mark.parametrize("without_expected_ranges", [False, True])
+def test_recovery_requires_changed_evidence_and_same_policy(monkeypatch, evaluation, snapshot, same_source, policy, model, expected_clear, without_expected_ranges):
+    context, evaluator, detected, cleared, config, _ = evaluation
+    if without_expected_ranges:
+        snapshot["expected"] = []
+        rule = config["rules"].pop((sensor_module._DEVICE_TYPE, None))
+        rule["alert_type"] = sensor_module._ALERT_TYPE
+        config["rules"][(sensor_module._ALERT_TYPE, None)] = rule
+        context.op_config.update(alert_type=sensor_module._ALERT_TYPE, entity_key="alert:alert-id")
     evaluator.evaluate.return_value["status"] = "consistent"
-    candidate = transformation_module._candidates(snapshot)[(sensor_module._DEVICE_TYPE, "device:device-id")]
+    candidate = transformation_module._candidates(snapshot)[(context.op_config["alert_type"], context.op_config["entity_key"])]
     previous = {
         "source_fingerprint": transformation_module._fingerprint(candidate) if same_source else "previous-source",
         "policy": policy, "assessment": {"model": model},
@@ -307,7 +327,8 @@ def test_recovery_requires_changed_evidence_and_same_policy(monkeypatch, evaluat
     assert cleared.called == expected_clear and not detected.called
     assert result.metadata["outcome"] == ("cleared" if expected_clear else "recovery_not_confirmed")
     assert result.metadata["signal"] == ("CLEARED" if expected_clear else "NONE")
-    assert all(result.metadata["evaluation"].value["recovery_conditions"].values()) == expected_clear
+    conditions = result.metadata["evaluation"].value["recovery_conditions"]
+    assert all(value for key, value in conditions.items() if key != "expected_ranges_available") == expected_clear
 
 
 @pytest.fixture
