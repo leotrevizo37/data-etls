@@ -29,4 +29,4 @@ La elección de proveedor no autoriza transmitir contenido académico confidenci
 - Dagster conserva detección y evidencia; workflow y entrega siguen siendo responsabilidad del sistema externo.
 - La validación semántica requiere casos etiquetados del dominio, además de las pruebas sintéticas de contrato.
 
-Fuentes: [sensor](../../dagster/carlsjr/src/carlsjr/defs/sensors/sidon_configuration_sensor.py), [job](../../dagster/carlsjr/src/carlsjr/defs/jobs/sidon_configuration_job.py) y [recurso IA](../../dagster/carlsjr/src/carlsjr/defs/resources/sidon_configuration_ai.py), con copias tenant en Emerson y Valle.
+Fuentes: [sensor](../../dagster/carlsjr/src/carlsjr/defs/sensors/sidon_configuration_sensor.py), [job](../../dagster/carlsjr/src/carlsjr/defs/jobs/sidon_configuration_job.py) y [recurso IA](../../dagster/carlsjr/src/carlsjr/defs/resources/sidon_configuration_ai.py), con copias tenant en Emerson, Valle y Ecosat.

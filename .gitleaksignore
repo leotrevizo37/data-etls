@@ -41,6 +41,6 @@ dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:hardcode
 dagster/emerson/src/emerson/defs/transformations/sidon_configuration.py:connection-string-password:56
 dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
 dagster/valledelencino/src/valledelencino/defs/transformations/sidon_configuration.py:connection-string-password:56
-dagster/bafar_poc_gabinete/src/bafar_poc_gabinete/defs/resources/sidon_configuration_ai.py:hardcoded-secret-assignment:110
-dagster/bafar_poc_gabinete/src/bafar_poc_gabinete/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
-dagster/bafar_poc_gabinete/src/bafar_poc_gabinete/defs/transformations/sidon_configuration.py:connection-string-password:56
+dagster/ecosat/src/ecosat/defs/resources/sidon_configuration_ai.py:hardcoded-secret-assignment:110
+dagster/ecosat/src/ecosat/defs/transformations/sidon_configuration.py:hardcoded-secret-assignment:56
+dagster/ecosat/src/ecosat/defs/transformations/sidon_configuration.py:connection-string-password:56

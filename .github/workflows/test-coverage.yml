@@ -20,7 +20,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             dagster/requirements.txt
-            dagster/bafar_poc_gabinete/pyproject.toml
+            dagster/ecosat/pyproject.toml
             dagster/carlsjr/pyproject.toml
             dagster/valledelencino/pyproject.toml
             dagster/alerting/pyproject.toml
@@ -35,7 +35,7 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
           pip install coverage pytest
-          pip install -e bafar_poc_gabinete
+          pip install -e ecosat
           pip install -e carlsjr
           pip install -e valledelencino
           pip install -e alerting
@@ -45,11 +45,11 @@ jobs:
           PYTHONWARNINGS: ignore::ResourceWarning
         run: |
           python -m coverage erase
-          (cd bafar_poc_gabinete && python -m coverage run --parallel-mode --source=src/bafar_poc_gabinete -m unittest discover tests -p "test_*.py")
+          (cd ecosat && python -m coverage run --parallel-mode --source=src/ecosat -m unittest discover tests -p "test_*.py")
           (cd carlsjr && python -m coverage run --parallel-mode --source=src/carlsjr -m unittest discover tests -p "test_*.py")
           (cd valledelencino && python -m coverage run --parallel-mode --source=src/valledelencino -m unittest discover tests -p "test_*.py")
           (cd alerting && python -m coverage run --parallel-mode --source=src/alerting -m unittest discover tests -p "test_*.py")
-          python -m coverage combine bafar_poc_gabinete carlsjr valledelencino alerting
+          python -m coverage combine ecosat carlsjr valledelencino alerting
           python -m coverage report --show-missing
           python -m coverage xml -o coverage.xml
 

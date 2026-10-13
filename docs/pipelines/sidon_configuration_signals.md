@@ -22,7 +22,7 @@ cursores y consultas de runs separados por tenant:
 | `carlsjr` | `carlsjr/sidon_configuration` | `RUNNING` |
 | `emerson` | `emerson/sidon_configuration` | `RUNNING` |
 | `valledelencino` | `valledelencino/sidon_configuration` | `STOPPED` |
-| `bafar_poc_gabinete` | `bafar_poc_gabinete/sidon_configuration` | `RUNNING` |
+| `ecosat` | `ecosat/sidon_configuration` | `RUNNING` |
 
 Las variables y los ejemplos usan `<PREFIJO>` como marcador. Sustituirlo por
 el prefijo del tenant antes de configurar su proceso:
@@ -32,7 +32,7 @@ el prefijo del tenant antes de configurar su proceso:
 | `carlsjr` | `CARLSJR` |
 | `emerson` | `EMERSON` |
 | `valledelencino` | `VALLEDELENCINO` |
-| `bafar_poc_gabinete` | `GABINETE` |
+| `ecosat` | `ECOSAT` |
 
 ### Entidades evaluadas
 
@@ -284,8 +284,8 @@ comprobar materializaciones, checks, aislamiento de runs por
 tenant y confirmación del cursor; simulan errores de lectura, IA, escritura y
 commit. No invocan un modelo real ni ejecutan migraciones sobre el warehouse.
 
-Las pruebas de [Bafar POC Gabinete](../../dagster/bafar_poc_gabinete/tests/test_sidon_configuration.py)
-replican la cobertura de Carlsjr con la identidad y el prefijo `GABINETE_` del tenant.
+Las pruebas de [Ecosat](../../dagster/ecosat/tests/test_sidon_configuration.py)
+replican la cobertura de Carlsjr con la identidad y el prefijo `ECOSAT_` del tenant.
 
 ## Documentación relacionada
 

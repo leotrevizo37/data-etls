@@ -328,7 +328,7 @@ class UrlAvailabilityDailyTests(unittest.TestCase):
             "mcdonalds",
             "smartfit",
             "mcdonalds_cdp",
-            "bafar_poc_gabinete",
+            "ecosat",
             "valledelencino",
             "carlsjr",
             "emerson",

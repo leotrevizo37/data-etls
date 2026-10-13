@@ -17,7 +17,7 @@ Los endpoints, parametros y el recorrido desde la llamada HTTP hasta los hechos 
 
 ## Alcance
 
-El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs son globales para conservar un contrato SQL comun, por lo que `bafar_poc_gabinete` recibe los objetos pero no los materializa. El init especifico de `bafar` elimina las tablas, vistas y control de ingestion porque ese code location no ejecuta el pipeline.
+El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs son globales para conservar un contrato SQL comun, por lo que `ecosat` recibe los objetos pero no los materializa. El init especifico de `bafar` elimina las tablas, vistas y control de ingestion porque ese code location no ejecuta el pipeline.
 
 ## Tablas
 

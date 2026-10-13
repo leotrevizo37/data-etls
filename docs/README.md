@@ -4,11 +4,11 @@ Este directorio concentra la documentacion operativa y funcional del proyecto: a
 
 ## Alcance
 
-El repositorio contiene cinco implementaciones tenant y una location de compatibilidad `alerting`. Sense aplica a `bafar_poc_gabinete`, `valledelencino`, `carlsjr` y `emerson`; `bafar` implementa los flujos comerciales. Los puertos y alcances se definen así:
+El repositorio contiene cinco implementaciones tenant y una location de compatibilidad `alerting`. Sense aplica a `ecosat`, `valledelencino`, `carlsjr` y `emerson`; `bafar` implementa los flujos comerciales. Los puertos y alcances se definen así:
 
 | User code | Puerto gRPC | Alcance principal |
 |---|---:|---|
-| `bafar_poc_gabinete` | 4004 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
+| `ecosat` | 4004 | Sense, dimensiones, lecturas, operaciones y mantenimiento |
 | `valledelencino` | 4005 | Sense, observabilidad ChirpStack, dimensiones, lecturas, operaciones, eventos de sensores y mantenimiento |
 | `carlsjr` | 4006 | Sense, observabilidad ChirpStack, eventos de sensores, SmartAudits y mantenimiento; Mantiz desactivado |
 | `emerson` | 4007 | Sense, observabilidad ChirpStack, dimensiones, lecturas, operaciones, eventos de sensores y mantenimiento |

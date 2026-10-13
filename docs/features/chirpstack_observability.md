@@ -13,7 +13,7 @@ La feature complementa `observability.factRedingsAudits`; no sustituye el frente
 | `carlsjr` | habilitado | globales |
 | `emerson` | habilitado | globales |
 | `valledelencino` | habilitado | globales |
-| `bafar_poc_gabinete` | no habilitado | globales, sin materializacion |
+| `ecosat` | no habilitado | globales, sin materializacion |
 | `bafar` | no aplica | eliminados por su inicializacion especifica |
 
 ## Diagnostico que habilita
