@@ -12,7 +12,7 @@ from .operational_alerts_sensor import _is_due, _load_active_config, _mark_check
 @sensor(
     job=sidon_configuration_job,
     minimum_interval_seconds=30,
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
     required_resource_keys={"sqlserver", "dim_sqlserver", "sidon_configuration_ai"},
 )
 def sidon_configuration_sensor(context):

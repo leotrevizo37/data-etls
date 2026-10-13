@@ -8,5 +8,5 @@ redings_audits_sched_every_10m = ScheduleDefinition(
     job=fact_redings_audits_job,
     cron_schedule="*/10 * * * *",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )

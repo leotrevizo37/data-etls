@@ -15,6 +15,6 @@ observability_url_availability_schedule = ScheduleDefinition(
         "0 */2 * * *",
     ),
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 

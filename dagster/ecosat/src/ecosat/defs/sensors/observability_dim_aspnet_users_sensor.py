@@ -16,7 +16,7 @@ from ..jobs.observability_dim_aspnet_users_job import (
     minimum_interval_seconds=3600,
     required_resource_keys={"dim_sqlserver"},
     name="observability_dimaspnetusers_sensor",
-    default_status=DefaultSensorStatus.STOPPED,
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def observability_dimaspnetusers_sensor(
     context: SensorEvaluationContext,

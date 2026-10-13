@@ -6,17 +6,17 @@ from ..jobs import fact_operations_tables_job
 operations_sched_every_6h = ScheduleDefinition(
     name="020_sense_operations_every_6h",
     job=fact_operations_tables_job,
-    cron_schedule="30 */6 * * *",
+    cron_schedule="30 */6 * * 0,6",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 operations_sched_every_w = ScheduleDefinition(
     name="020_sense_operations_every_w",
     job=fact_operations_tables_job,
-    cron_schedule="30 5-16/3 * * 1-5",
+    cron_schedule="10 1,4,20 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 operations_sched_every_1h_w = ScheduleDefinition(
@@ -24,5 +24,5 @@ operations_sched_every_1h_w = ScheduleDefinition(
     job=fact_operations_tables_job,
     cron_schedule="20 5-16 * * 1-5",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
