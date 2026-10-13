@@ -317,7 +317,7 @@ def test_sensor_asset_and_job_are_registered():
     loaded = importlib.import_module("ecosat.definitions").defs()
     job = loaded.resolve_job_def("sidon_configuration_job")
     assert job.has_node_named("ecosat__sidon_configuration")
-    assert detector.default_status == sensor_module.DefaultSensorStatus.STOPPED
+    assert detector.default_status == sensor_module.DefaultSensorStatus.RUNNING
     assert detector.required_resource_keys <= definitions.resources.keys()
     assert definitions.resources["sidon_configuration_ai"] is ai_module.sidon_configuration_ai_resource
 

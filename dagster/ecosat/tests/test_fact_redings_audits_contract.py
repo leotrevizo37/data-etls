@@ -137,7 +137,7 @@ class FactRedingsAuditsContractTests(unittest.TestCase):
             example,
         )
         self.assertIn('cron_schedule="*/10 * * * *"', schedule)
-        self.assertIn("DefaultScheduleStatus.STOPPED", schedule)
+        self.assertIn("DefaultScheduleStatus.RUNNING", schedule)
         self.assertIn('name="022_sense_redings_audits"', job)
         self.assertIn(
             'name="022_sense_redings_audits_every_10m"',
