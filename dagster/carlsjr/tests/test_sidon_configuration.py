@@ -45,6 +45,33 @@ def snapshot():
     }
 
 
+@pytest.mark.parametrize("spacing", ["   ", "\t", "\n", "\u00a0"])
+def test_payload_normalizes_text_before_sending_to_llm(snapshot, azure, spacing):
+    expected = transformation_module._candidates(snapshot)
+    for rows in snapshot.values():
+        for row in rows:
+            for key in ("Name", "UnitName", "UnitAbbreviation", "Operator", "scheduledDays"):
+                if isinstance(row.get(key), str):
+                    row[key] = spacing + row[key].replace(" ", spacing) + spacing
+    original = copy.deepcopy(snapshot)
+    actual = transformation_module._candidates(snapshot)
+    assert actual == expected and snapshot == original
+    client, connection, _, _, _ = azure
+    for key, candidate in actual.items():
+        assert transformation_module._fingerprint(candidate) == transformation_module._fingerprint(expected[key])
+        client.evaluate(candidate["payload"])
+        body = json.loads(connection.request.call_args.args[2])
+        assert json.loads(body["messages"][1]["content"]) == expected[key]["payload"]
+
+
+@pytest.mark.parametrize("name", [None, "", "   \t\n"])
+def test_missing_or_blank_device_name_remains_incomplete(snapshot, name):
+    snapshot["devices"][0]["Name"] = name
+    candidate = transformation_module._candidates(snapshot)[(transformation_module._DEVICE_TYPE, "device:device-id")]
+    assert candidate["payload"]["device"] == (None if name is None else "")
+    assert not candidate["complete"] and not candidate["problems"]
+
+
 def test_payload_preserves_ranges_and_includes_entity_ids(snapshot):
     second = dict(snapshot["expected"][0], StartTime=time(12), min_expected_value=None, max_expected_value=Decimal("12"), scheduledDays="6,7")
     snapshot["expected"].append(second)
