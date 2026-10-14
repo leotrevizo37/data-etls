@@ -23,6 +23,8 @@ def _build_defs() -> Any:
         dwh_dimsidonproddimensions,
         dwh_factlecturas,
         observability_factredingsaudits,
+        observability_chirpstackmetrics,
+        observability_chirpstackmqttmetrics,
         operations_assets,
     )
     from .jobs import (
@@ -33,6 +35,7 @@ def _build_defs() -> Any:
         fact_lecturas_sensor_backfill_job,
         fact_operations_tables_job,
         fact_redings_audits_job,
+        chirpstack_metrics_job,
         index_maintenance_job,
         refresh_dimensions_job,
         spark_df_io_manager_healthcheck_job,
@@ -40,6 +43,8 @@ def _build_defs() -> Any:
     from .resources import (
         sidon_configuration_ai_resource,
         dim_sqlserver_resource,
+        chirpstack_api_resource,
+        mqtt_event_history_api_resource,
         spark_df_io_manager,
         spark_resource,
         sqlserver_resource,
@@ -56,6 +61,7 @@ def _build_defs() -> Any:
         operations_sched_every_w,
         operations_sched_every_1h_w,
         redings_audits_sched_every_10m,
+        chirpstack_metrics_sched_hourly_at_30,
     )
     from .sensors import (
         sidon_configuration_sensor,
@@ -72,6 +78,7 @@ def _build_defs() -> Any:
             fact_lecturas_sensor_backfill_job,
             fact_operations_tables_job,
             fact_redings_audits_job,
+            chirpstack_metrics_job,
             refresh_dimensions_job,
             spark_df_io_manager_healthcheck_job,
             index_maintenance_job,
@@ -80,6 +87,8 @@ def _build_defs() -> Any:
         resources={
             "sidon_configuration_ai": sidon_configuration_ai_resource,
             "sqlserver": sqlserver_resource,
+            "chirpstack_api": chirpstack_api_resource,
+            "mqtt_event_history_api": mqtt_event_history_api_resource,
             "spark": spark_resource,
             "dim_sqlserver": dim_sqlserver_resource,
             "transformation_ops": transformation_ops,
@@ -94,6 +103,7 @@ def _build_defs() -> Any:
             operations_sched_every_w,
             operations_sched_every_6h,
             redings_audits_sched_every_10m,
+            chirpstack_metrics_sched_hourly_at_30,
             cleanup_schedule,
             index_maintenance_schedule,
         ],
@@ -113,6 +123,8 @@ def _build_defs() -> Any:
             dbo_sublocation_tys,
             dwh_factlecturas,
             observability_factredingsaudits,
+            observability_chirpstackmetrics,
+            observability_chirpstackmqttmetrics,
             operations_assets,
             dwh_dimsidonproddimensions,
             cleanup_old_runs,
