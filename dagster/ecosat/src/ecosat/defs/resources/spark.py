@@ -87,7 +87,7 @@ def _daterange_days(start: datetime, end: datetime) -> List[datetime]:
 
 
 def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> int:
-    raw = (env or os.environ).get(name)
+    raw = (os.environ if env is None else env).get(name)
     if raw is None or raw == "":
         return default
     try:
@@ -97,7 +97,7 @@ def _env_int(name: str, default: int, env: Optional[Dict[str, str]] = None) -> i
 
 
 def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    current_env = env or os.environ
+    current_env = os.environ if env is None else env
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_RETRY_POLICY_ENV.items()
@@ -105,7 +105,7 @@ def _build_spark_retry_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, s
 
 
 def _build_s3a_tuning_conf(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    current_env = env or os.environ
+    current_env = os.environ if env is None else env
     return {
         spark_key: current_env.get(env_key) or default
         for spark_key, (env_key, default) in SPARK_S3A_TUNING_ENV.items()
@@ -117,7 +117,7 @@ def _build_spark_master_status_url(
     master_url: str,
     env: Optional[Dict[str, str]] = None,
 ) -> str:
-    current_env = env or os.environ
+    current_env = os.environ if env is None else env
     explicit_url = (current_env.get("SPARK_MASTER_STATUS_URL") or "").strip()
     parsed_master_url = urlparse(master_url)
     master_host = parsed_master_url.hostname
@@ -195,7 +195,7 @@ def _build_executor_cores(
     resource_profile: Dict[str, Any],
     env: Optional[Dict[str, str]] = None,
 ) -> int:
-    current_env = env or os.environ
+    current_env = os.environ if env is None else env
     if current_env.get("SPARK_EXECUTOR_CORES"):
         return max(1, min(_env_int("SPARK_EXECUTOR_CORES", 1, current_env), int(resource_profile["cores_max"])))
 
@@ -650,15 +650,17 @@ class SparkResource:
             if row_count == 0:
                 return 0
 
-            for chunk_id in range(self.jdbc_write_num_chunks):
+            chunk_ids = [
+                row["__chunk_id"]
+                for row in df_chunked.select("__chunk_id").distinct().collect()
+            ]
+            for chunk_id in chunk_ids:
                 df_chunk = (
                     df_chunked
                     .filter(f"__chunk_id = {chunk_id}")
                     .drop("__chunk_id")
                     .coalesce(self.jdbc_write_target_partitions)
                 )
-                if len(df_chunk.head(1)) == 0:
-                    continue
 
                 (
                     df_chunk.write
@@ -985,6 +987,80 @@ class SparkResource:
             url=self._build_wh_path()["url"],
             table=table,
             properties=self._build_wh_path()["properties"],
+        )
+
+    def read_dim_sensor_expected_values(self) -> DataFrame:
+        spark = self.get_spark()
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table="dwh.dimSensorExpectedVal",
+            properties=self._build_wh_path()["properties"]
+        )
+
+    def read_completed_sensor_events_range(
+        self,
+        sensor_type: str,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> DataFrame:
+        spark = self.get_spark()
+        from_text = from_utc.strftime("%Y-%m-%d %H:%M:%S")
+        to_text = to_utc.strftime("%Y-%m-%d %H:%M:%S")
+        table = (
+            "(SELECT SensorId, TimeSpan AS PreviousTimeSpan, "
+            "Value AS PreviousValue, "
+            "DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
+            "TimeSpan) AS PreviousEndTime "
+            "FROM dwh.factSensorEvents "
+            "WHERE LOWER(SensorType) LIKE LOWER('"
+            + sensor_type
+            + "') AND IsEventCompleted = 1 "
+            "AND TimeSpan < '"
+            + to_text
+            + "' AND DATEADD(SECOND, CONVERT(INT, ROUND(EventMinutes * 60, 0)), "
+            "TimeSpan) > '"
+            + from_text
+            + "') AS completed_sensor_events_range"
+        )
+
+        return spark.read.jdbc(
+            url=self._build_wh_path()["url"],
+            table=table,
+            properties=self._build_wh_path()["properties"],
+        )
+
+    def write_fact_sensor_events(self, df: DataFrame, run_id: str) -> int:
+        df_dedup = (
+            df
+            .select(
+                "EventId",
+                "ReadId",
+                "SensorId",
+                "DeviceId",
+                "LocationId",
+                "LocationName",
+                "DeviceType",
+                "SensorType",
+                "SensorName",
+                "TimeSpan",
+                "LocalTimeSpan",
+                "Value",
+                "EventMinutes",
+                "IsEventCompleted",
+            )
+            .dropDuplicates(["EventId"])
+        )
+        df_stage = (
+            df_dedup
+            .withColumn("RunId", lit(run_id))
+            .select("RunId", *df_dedup.columns)
+        )
+
+        return self._write_jdbc_in_chunks(
+            df_stage,
+            table="stg.factSensorEvents",
+            chunk_column="EventId",
         )
 
     def write_fact_redings_audits_stage(

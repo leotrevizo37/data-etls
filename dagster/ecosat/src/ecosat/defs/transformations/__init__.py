@@ -14,6 +14,9 @@ __all__ = [
     "acometida",
     "control_luces",
     "weather_station",
+    "sensor_events",
+    "light_events",
+    "temperature_events",
 ]
 
 _MODULE_BY_EXPORT = {
@@ -28,6 +31,9 @@ _MODULE_BY_EXPORT = {
     "acometida": ".acometida",
     "control_luces": ".control_luces",
     "weather_station": ".weather_station",
+    "sensor_events": ".sensor_events",
+    "light_events": ".light_events",
+    "temperature_events": ".temperature_events",
 }
 
 

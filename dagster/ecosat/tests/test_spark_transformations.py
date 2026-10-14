@@ -59,6 +59,47 @@ class SparkTransformationsTests(unittest.TestCase):
     def _readings_df(self, rows: list[dict]) -> DataFrame:
         return self.spark.createDataFrame(rows)
 
+    def test_raw_dimensions_preserves_sensor_model_hub_and_chirpstack_identity(self) -> None:
+        from ecosat.defs.transformations.raw_dimensions import raw_dimensions
+
+        tables = [
+            self.spark.createDataFrame(
+                [(10, 100, 1, 2, 3, "0000000000000001", False, True, "Sensor 10"),
+                 (11, 100, 1, 2, 3, None, True, True, "Sensor 11")],
+                ["SensorId", "SensorTyId", "DeviceId", "ModelId", "SensorHubId", "PhysicalIdentifier", "PerEvent", "Active", "Name"],
+            ),
+            self.spark.createDataFrame([(2, "Sensor model"), (4, "Hub model")], ["ModelId", "Description"]),
+            self.spark.createDataFrame([(3, 4, "Hub")], ["SensorHubId", "ModelId", "Name"]),
+            self.spark.createDataFrame([(100, "Temperatura")], ["SensorTyId", "Name"]),
+            self.spark.createDataFrame([(1, 5, 6, "Device")], ["DeviceId", "DeviceTyId", "SubLocationId", "Name"]),
+            self.spark.createDataFrame([(5, "Gabinete")], ["DeviceTyId", "Name"]),
+            self.spark.createDataFrame([(6, 7, 8, "Sublocation")], ["SubLocationId", "SubLocationTyId", "LocationId", "Name"]),
+            self.spark.createDataFrame([(7, "Room")], ["SubLocationTyId", "Name"]),
+            self.spark.createDataFrame([(8, 9, "Location", "America/Ciudad_Juarez")], ["LocationId", "CityId", "Name", "TimeZone"]),
+            self.spark.createDataFrame([(9, "City")], ["CityId", "Name"]),
+        ]
+        reader = Mock()
+        reader.format.return_value = reader
+        reader.option.return_value = reader
+        reader.options.return_value = reader
+        reader.load.side_effect = tables
+        spark_res = SimpleNamespace(get_spark=lambda: SimpleNamespace(read=reader))
+        dim_sqlserver = SimpleNamespace(get_basic_options=lambda: {})
+
+        rows = raw_dimensions(spark_res, dim_sqlserver).orderBy("SensorId").collect()
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["PhysicalIdentifier"], "0000000000000001")
+        self.assertIsNone(rows[1]["PhysicalIdentifier"])
+        self.assertFalse(rows[0]["PerEvent"])
+        self.assertTrue(rows[1]["PerEvent"])
+        self.assertEqual(rows[0]["model_name"], "Sensor model")
+        self.assertEqual(rows[0]["hub_model_name"], "Hub model")
+        self.assertEqual(rows[0]["hub_name"], "Hub")
+        self.assertEqual(rows[0]["device_type"], "Gabinete")
+        self.assertEqual(rows[0]["TimeZone"], "America/Ciudad_Juarez")
+        self.assertEqual(reader.load.call_count, 10)
+
     def test_lecturas_time_hours_builds_an_inclusive_hourly_scaffold(self) -> None:
         base = self.spark.createDataFrame(
             [
