@@ -10,6 +10,7 @@ from .factlecturas_backfill_jobs import (
     fact_lecturas_sensor_backfill_job,
 )
 from .factredingsaudits_job import fact_redings_audits_job
+from .factsensorevents_job import fact_sensor_events_job
 from .chirpstack_metrics_job import chirpstack_metrics_job
 from .spark_df_io_manager_healthcheck_job import spark_df_io_manager_healthcheck_job
 
@@ -25,6 +26,7 @@ __all__ = [
     "fact_lecturas_backfill_daily_job",
     "fact_lecturas_sensor_backfill_job",
     "fact_redings_audits_job",
+    "fact_sensor_events_job",
     "chirpstack_metrics_job",
     "spark_df_io_manager_healthcheck_job",
 ]

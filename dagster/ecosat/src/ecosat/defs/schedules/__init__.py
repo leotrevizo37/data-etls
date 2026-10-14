@@ -5,6 +5,10 @@ from .factoperations_scheduler import (operations_sched_every_6h,
                                        operations_sched_every_w,
                                        operations_sched_every_1h_w)
 from .factredingsaudits_scheduler import redings_audits_sched_every_10m
+from .factsensorevents_scheduler import (
+    sensor_events_sched_every_6h,
+    sensor_events_sched_every_1h_w,
+)
 from .cleanup_schedule import cleanup_schedule
 from .chirpstack_metrics_scheduler import chirpstack_metrics_sched_hourly_at_30
 from .factlecturas_cleanup_schedule import factlecturas_cleanup_schedule
@@ -18,6 +22,8 @@ __all__ = [
     "operations_sched_every_6h",
     "operations_sched_every_w",
     "redings_audits_sched_every_10m",
+    "sensor_events_sched_every_6h",
+    "sensor_events_sched_every_1h_w",
     "chirpstack_metrics_sched_hourly_at_30",
     "cleanup_schedule",
     "operations_sched_every_1h_w",

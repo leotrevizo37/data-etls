@@ -19,8 +19,14 @@ USING (
         SensorTyId,
         DeviceId,
         PhysicalIdentifier,
+        PerEvent,
+        ModelId,
+        SensorHubId,
         sensor_name,
         sensor_type,
+        model_name,
+        hub_model_name,
+        hub_name,
         DeviceTyId,
         SubLocationId,
         Active,
@@ -43,8 +49,14 @@ WHEN MATCHED AND EXISTS (
         source.SensorTyId,
         source.DeviceId,
         source.PhysicalIdentifier,
+        source.PerEvent,
+        source.ModelId,
+        source.SensorHubId,
         source.sensor_name,
         source.sensor_type,
+        source.model_name,
+        source.hub_model_name,
+        source.hub_name,
         source.DeviceTyId,
         source.SubLocationId,
         source.Active,
@@ -63,8 +75,14 @@ WHEN MATCHED AND EXISTS (
         target.SensorTyId,
         target.DeviceId,
         target.PhysicalIdentifier,
+        target.PerEvent,
+        target.ModelId,
+        target.SensorHubId,
         target.sensor_name,
         target.sensor_type,
+        target.model_name,
+        target.hub_model_name,
+        target.hub_name,
         target.DeviceTyId,
         target.SubLocationId,
         target.Active,
@@ -83,8 +101,14 @@ WHEN MATCHED AND EXISTS (
         target.SensorTyId = source.SensorTyId,
         target.DeviceId = source.DeviceId,
         target.PhysicalIdentifier = source.PhysicalIdentifier,
+        target.PerEvent = source.PerEvent,
+        target.ModelId = source.ModelId,
+        target.SensorHubId = source.SensorHubId,
         target.sensor_name = source.sensor_name,
         target.sensor_type = source.sensor_type,
+        target.model_name = source.model_name,
+        target.hub_model_name = source.hub_model_name,
+        target.hub_name = source.hub_name,
         target.DeviceTyId = source.DeviceTyId,
         target.SubLocationId = source.SubLocationId,
         target.Active = source.Active,
@@ -105,8 +129,14 @@ WHEN NOT MATCHED BY TARGET THEN
         SensorTyId,
         DeviceId,
         PhysicalIdentifier,
+        PerEvent,
+        ModelId,
+        SensorHubId,
         sensor_name,
         sensor_type,
+        model_name,
+        hub_model_name,
+        hub_name,
         DeviceTyId,
         SubLocationId,
         Active,
@@ -126,8 +156,14 @@ WHEN NOT MATCHED BY TARGET THEN
         source.SensorTyId,
         source.DeviceId,
         source.PhysicalIdentifier,
+        source.PerEvent,
+        source.ModelId,
+        source.SensorHubId,
         source.sensor_name,
         source.sensor_type,
+        source.model_name,
+        source.hub_model_name,
+        source.hub_name,
         source.DeviceTyId,
         source.SubLocationId,
         source.Active,
@@ -375,6 +411,98 @@ WHEN NOT MATCHED BY TARGET THEN
         source.ReadingsCount
     )
 OUTPUT $action INTO @MergeActions;
+
+SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
+"""
+
+
+def build_fact_sensor_events_merge_sql() -> str:
+    return """
+SET NOCOUNT ON;
+
+DECLARE @RunId NVARCHAR(100) = ?;
+DECLARE @MergeActions TABLE (MergeAction NVARCHAR(10) NOT NULL);
+
+MERGE dwh.factSensorEvents AS target
+USING (
+    SELECT
+        EventId,
+        ReadId,
+        SensorId,
+        DeviceId,
+        LocationId,
+        LocationName,
+        DeviceType,
+        SensorType,
+        SensorName,
+        TimeSpan,
+        LocalTimeSpan,
+        Value,
+        EventMinutes,
+        IsEventCompleted
+    FROM stg.factSensorEvents
+    WHERE RunId = @RunId
+) AS source
+    ON target.EventId = source.EventId
+WHEN MATCHED THEN
+    UPDATE SET
+        target.ReadId = source.ReadId,
+        target.SensorId = source.SensorId,
+        target.DeviceId = source.DeviceId,
+        target.LocationId = source.LocationId,
+        target.LocationName = source.LocationName,
+        target.DeviceType = source.DeviceType,
+        target.SensorType = source.SensorType,
+        target.SensorName = source.SensorName,
+        target.TimeSpan = source.TimeSpan,
+        target.LocalTimeSpan = source.LocalTimeSpan,
+        target.Value = source.Value,
+        target.EventMinutes = source.EventMinutes,
+        target.IsEventCompleted = source.IsEventCompleted,
+        target.ModifiedAt = SYSUTCDATETIME()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (
+        EventId,
+        ReadId,
+        SensorId,
+        DeviceId,
+        LocationId,
+        LocationName,
+        DeviceType,
+        SensorType,
+        SensorName,
+        TimeSpan,
+        LocalTimeSpan,
+        Value,
+        EventMinutes,
+        IsEventCompleted
+    )
+    VALUES (
+        source.EventId,
+        source.ReadId,
+        source.SensorId,
+        source.DeviceId,
+        source.LocationId,
+        source.LocationName,
+        source.DeviceType,
+        source.SensorType,
+        source.SensorName,
+        source.TimeSpan,
+        source.LocalTimeSpan,
+        source.Value,
+        source.EventMinutes,
+        source.IsEventCompleted
+    )
+OUTPUT $action INTO @MergeActions;
+
+DELETE target
+FROM dwh.factSensorEvents AS target
+INNER JOIN stg.factSensorEvents AS source
+    ON target.SensorId = source.SensorId
+    AND target.LocalTimeSpan = source.LocalTimeSpan
+WHERE
+    source.RunId = @RunId
+    AND target.TimeSpan IS NULL;
 
 SELECT COUNT(1) AS AffectedRows FROM @MergeActions;
 """
@@ -1141,6 +1269,34 @@ class SqlServerResource:
                     return None
                 return row.LastLoadedAt
 
+    def get_min_open_sensor_event_time(
+        self,
+        sensor_type: Optional[str] = None,
+    ) -> Optional[datetime]:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    if sensor_type is None:
+                        cursor.execute(
+                            "SELECT MIN(COALESCE(TimeSpan, LocalTimeSpan)) AS OpenEventFrom "
+                            "FROM dwh.factSensorEvents "
+                            "WHERE IsEventCompleted = 0"
+                        )
+                    else:
+                        cursor.execute(
+                            "SELECT MIN(COALESCE(TimeSpan, LocalTimeSpan)) AS OpenEventFrom "
+                            "FROM dwh.factSensorEvents "
+                            "WHERE IsEventCompleted = 0 "
+                            "AND LOWER(SensorType) LIKE LOWER(?)",
+                            sensor_type,
+                        )
+                    row = cursor.fetchone()
+                except pyodbc.Error:
+                    return None
+                if row is None:
+                    return None
+                return row.OpenEventFrom
+
     def mark_run_started(self, ingestion_name: str) -> None:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
@@ -1275,6 +1431,27 @@ class SqlServerResource:
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_fact_sidon_user_usage_merge_sql(), run_id)
+                row = cursor.fetchone()
+                conn.commit()
+                if row is None or row.AffectedRows is None:
+                    return 0
+                return int(row.AffectedRows)
+
+    def clear_fact_sensor_events_stage(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM stg.factSensorEvents WHERE RunId = ?",
+                    run_id,
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                return int(deleted or 0)
+
+    def merge_fact_sensor_events(self, run_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(build_fact_sensor_events_merge_sql(), run_id)
                 row = cursor.fetchone()
                 conn.commit()
                 if row is None or row.AffectedRows is None:

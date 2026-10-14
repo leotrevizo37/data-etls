@@ -8,7 +8,10 @@ from ..transformations import (raw_dimensions,
                                temperatura_humedad,
                                acometida,
                                control_luces,
-                               weather_station)
+                               weather_station,
+                               sensor_events,
+                               light_events,
+                               temperature_events)
 from ..resources import (SqlServerResource,
                          SparkResource,
                          SqlDimServerResource)
@@ -48,6 +51,24 @@ class TransformationOps:
         return control_luces(df, dims, min_hour, max_hour)
     def weather_station(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return weather_station(df, dims, min_hour, max_hour)
+    def sensor_events(
+            self,
+            df: DataFrame,
+            to_utc_str: str,
+            previous_completed_events_df: DataFrame) -> Optional[DataFrame]:
+        return sensor_events(df, to_utc_str, previous_completed_events_df)
+    def light_events(
+            self,
+            df: DataFrame,
+            to_utc_str: str,
+            previous_completed_events_df: DataFrame) -> Optional[DataFrame]:
+        return light_events(df, to_utc_str, previous_completed_events_df)
+    def temperature_events(
+            self,
+            df: DataFrame,
+            expected_values: DataFrame,
+            to_utc_str: str) -> Optional[DataFrame]:
+        return temperature_events(df, expected_values, to_utc_str)
 
 @resource
 def transformation_ops():
