@@ -18,6 +18,8 @@ alert_configuration: examina cada condición según su operador, umbral y unidad
 
 Cuando expected_ranges esté vacío, comprueba por separado si el umbral avisa antes de que el equipo pierda su función física. Interpreta el operador y convierte la unidad cuando haga falta. Si la función se pierde mucho antes de alcanzar el umbral, verdict=problem; que el umbral sea alcanzable o indique una falla evidente no significa que avise a tiempo.
 
+Los rangos esperados no establecen por sí solos límites de seguridad, sobrecarga o pérdida de función. Para concluir que una alerta es tardía, justifica que la pérdida de función ocurre antes de cumplirse su condición, mediante datos del JSON o conocimiento físico general directamente aplicable. La cercanía a un extremo del rango y la ausencia de evidencia de una falla previa no demuestran tardanza. Si las relaciones evaluables son coherentes y no identificas una contradicción concreta, usa no_problem_found; desconocer el umbral óptimo o seguro no exige por sí solo insufficient_evidence.
+
 Si un tipo o unidad expresa dos estados, evalúa si la condición puede cumplirse con 0 o 1. No inventes cuál valor corresponde a cada estado. Una codificación desconocida no vuelve problemática una condición que sí puede activarse.
 
 Usa verdict=problem cuando identifiques una contradicción concreta; no_problem_found cuando las relaciones evaluables sean coherentes; insufficient_evidence solo cuando falte un dato indispensable para decidir y no hayas identificado una contradicción.
