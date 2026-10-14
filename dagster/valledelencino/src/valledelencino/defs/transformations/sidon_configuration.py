@@ -77,6 +77,14 @@ def _snapshot(source, warehouse, watermark_only=False, entities_only=False):
 
 
 def _candidates(snapshot):
+    snapshot = {
+        name: [{
+            key: " ".join(value.split()) if isinstance(value, str)
+            and key in ("Name", "UnitName", "UnitAbbreviation", "Operator", "scheduledDays") else value
+            for key, value in row.items()
+        } for row in rows]
+        for name, rows in snapshot.items()
+    }
     devices = {str(row["DeviceId"]): row for row in snapshot["devices"]}
     device_types = {str(row["DeviceTyId"]): row for row in snapshot["device_types"]}
     sensor_types = {str(row["SensorTyId"]): row for row in snapshot["sensor_types"]}

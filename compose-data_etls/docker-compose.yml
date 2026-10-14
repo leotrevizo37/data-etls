@@ -7,7 +7,7 @@ x-dagster-common: &dagster_common
   volumes:
     - ../dagster/dagster_home:/opt/dagster/dagster_home
     - ../dagster/smartfit:/opt/dagster/app/smartfit
-    - ../dagster/bafar_poc_gabinete:/opt/dagster/app/bafar_poc_gabinete
+    - ../dagster/ecosat:/opt/dagster/app/ecosat
     - ../dagster/valledelencino:/opt/dagster/app/valledelencino
     - ../dagster/carlsjr:/opt/dagster/app/carlsjr
     - ../dagster/emerson:/opt/dagster/app/emerson
@@ -170,25 +170,37 @@ services:
       retries: 10
       start_period: 15s
 
-  dagster-user-code-bafar-poc-gabinete:
+  dagster-user-code-ecosat:
     build:
       context: ..
       dockerfile: dagster/Dockerfile
-    container_name: bafar_poc_gabinete-dagster-user-code
+    container_name: ecosat-dagster-user-code
     <<: *dagster_common
     depends_on:
       sql-init:
         condition: service_completed_successfully
-    working_dir: /opt/dagster/app/bafar_poc_gabinete
+    working_dir: /opt/dagster/app/ecosat
     environment:
       DAGSTER_HOME: /opt/dagster/dagster_home
-      PYTHONPATH: /opt/dagster/app/bafar_poc_gabinete/src
+      PYTHONPATH: /opt/dagster/app/ecosat/src
       APP_DB: ${GABINETE_DB:-cdp}
       DIM_DB: ${GABINETE_DIM_DB:-cdp}
       ADLS_CONTAINER_NAME: ${GABINETE_ADLS_CONTAINER_NAME:-cdp}
       FACTREADINGS_OVERLAP_HOURS: ${GABINETE_DEFAULT_FACTREADINGS_OVERLAP_HOURS:-12}
       FACTREDINGSAUDITS_OVERLAP_HOURS: ${GABINETE_DEFAULT_FACTREDINGSAUDITS_OVERLAP_HOURS:-1}
-      SPARK_DF_IO_BASE_PATH: ${GABINETE_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/bafar_poc_gabinete}
+      CHIRPSTACK_API_URL: ${ECOSAT_CHIRPSTACK_API_URL:-}
+      CHIRPSTACK_API_TOKEN: ${ECOSAT_CHIRPSTACK_API_TOKEN:-}
+      CHIRPSTACK_API_TIMEOUT_SECONDS: ${ECOSAT_CHIRPSTACK_API_TIMEOUT_SECONDS:-}
+      CHIRPSTACK_API_PAGE_SIZE: ${ECOSAT_CHIRPSTACK_API_PAGE_SIZE:-}
+      MQTT_EVENT_HISTORY_API_URL: ${ECOSAT_MQTT_EVENT_HISTORY_API_URL:-}
+      MQTT_EVENT_HISTORY_API_USER: ${ECOSAT_MQTT_EVENT_HISTORY_API_USER:-}
+      MQTT_EVENT_HISTORY_API_PASSWORD: ${ECOSAT_MQTT_EVENT_HISTORY_API_PASSWORD:-}
+      MQTT_EVENT_HISTORY_API_TIMEOUT_SECONDS: ${ECOSAT_MQTT_EVENT_HISTORY_API_TIMEOUT_SECONDS:-60}
+      MQTT_EVENT_HISTORY_API_LIMIT: ${ECOSAT_MQTT_EVENT_HISTORY_API_LIMIT:-5000}
+      MQTT_EVENT_HISTORY_API_REQUESTS_PER_MINUTE: ${ECOSAT_MQTT_EVENT_HISTORY_API_REQUESTS_PER_MINUTE:-95}
+      MQTT_EVENT_HISTORY_LOOKBACK_HOURS: ${ECOSAT_MQTT_EVENT_HISTORY_LOOKBACK_HOURS:-6}
+      MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS: ${ECOSAT_MQTT_EVENT_HISTORY_REJECTED_ROW_RETENTION_DAYS:-30}
+      SPARK_DF_IO_BASE_PATH: ${GABINETE_SPARK_DF_IO_BASE_PATH:-/data/dagster_io/spark_dfs/ecosat}
       SPARK_MASTER_URL: "${SPARK_MASTER_URL:-spark://spark-master:${SPARK_MASTER_PORT:-7077}}"
       SPARK_MASTER_STATUS_URL: http://data-spark-master:8080/json/
       MSSQL_HOST: ${MSSQL_HOST}
@@ -215,7 +227,7 @@ services:
       "dagster", "api", "grpc",
       "-h", "0.0.0.0",
       "-p", "4004",
-      "-m", "bafar_poc_gabinete.definitions"
+      "-m", "ecosat.definitions"
     ]
     healthcheck:
       test:
@@ -588,7 +600,7 @@ services:
     container_name: data-dagster-daemon
     <<: *dagster_common
     depends_on:
-      dagster-user-code-bafar-poc-gabinete:
+      dagster-user-code-ecosat:
         condition: service_healthy
       dagster-user-code-valledelencino:
         condition: service_healthy

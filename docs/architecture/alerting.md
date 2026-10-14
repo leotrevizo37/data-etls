@@ -14,7 +14,7 @@ estados de workflow.
 
 ## Topología
 
-Cada code location de bafar, bafar_poc_gabinete, carlsjr, emerson y
+Cada code location de bafar, ecosat, carlsjr, emerson y
 valledelencino registra copias independientes de:
 
 - operational_alerts_sensor.

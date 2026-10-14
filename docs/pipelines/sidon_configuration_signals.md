@@ -22,6 +22,7 @@ cursores y consultas de runs separados por tenant:
 | `carlsjr` | `carlsjr/sidon_configuration` | `RUNNING` |
 | `emerson` | `emerson/sidon_configuration` | `RUNNING` |
 | `valledelencino` | `valledelencino/sidon_configuration` | `STOPPED` |
+| `ecosat` | `ecosat/sidon_configuration` | `RUNNING` |
 
 Las variables y los ejemplos usan `<PREFIJO>` como marcador. Sustituirlo por
 el prefijo del tenant antes de configurar su proceso:
@@ -31,6 +32,7 @@ el prefijo del tenant antes de configurar su proceso:
 | `carlsjr` | `CARLSJR` |
 | `emerson` | `EMERSON` |
 | `valledelencino` | `VALLEDELENCINO` |
+| `ecosat` | `ECOSAT` |
 
 ### Entidades evaluadas
 
@@ -107,8 +109,8 @@ la lógica existente. Los demás resultados con confianza inferior a 0.9 o
 una precisión estadística medida. Los límites no necesitan ser iguales a los rangos
 esperados. No se aplica una tolerancia numérica universal ni se inventan unidades
 o relaciones booleanas entre condiciones. Se conservan límites nulos y ceros.
-La ausencia de rangos esperados permite la evaluación semántica, pero impide
-cerrar un incidente de configuración de alerta.
+La ausencia de rangos esperados permite la evaluación semántica y el cierre de
+un incidente de configuración de alerta cuando se cumplen las condiciones de recuperación.
 
 ## Programación y flujo
 
@@ -183,9 +185,10 @@ en `evaluation.recovery_conditions`; los fallos técnicos quedan en el run y su
 entidad permanece pendiente.
 
 Los metadatos locales conservan evidencia, identificadores, resultado, modelo y
-huellas de evidencia y política. `CLEARED` requiere evaluación consistente,
+huellas de evidencia y política. `CLEARED` requiere evaluación consistente con confianza de al menos 0.9,
 evidencia completa y diferente de la detección, misma política y mismo modelo
-(o una detección originalmente estructural). Una eliminación, desactivación,
+(o una detección originalmente estructural). `expected_ranges_available` se conserva
+en los metadatos como dato informativo y no condiciona el cierre. Una eliminación, desactivación,
 cambio de modelo o de prompt no cierra por sí solo un incidente. Los escritores
 existentes deduplican las señales. La configuración permanece bajo revisión
 humana; la calidad semántica requiere validación con casos etiquetados del dominio.
@@ -281,6 +284,9 @@ Azure/local. También ejecutan el job en una instancia Dagster efímera para
 comprobar materializaciones, checks, aislamiento de runs por
 tenant y confirmación del cursor; simulan errores de lectura, IA, escritura y
 commit. No invocan un modelo real ni ejecutan migraciones sobre el warehouse.
+
+Las pruebas de [Ecosat](../../dagster/ecosat/tests/test_sidon_configuration.py)
+replican la cobertura de Carlsjr con la identidad y el prefijo `ECOSAT_` del tenant.
 
 ## Documentación relacionada
 

@@ -8,7 +8,7 @@ Detectar de forma aislada por tenant el inicio y fin comprobable de condiciones 
 
 ## Entregable
 
-Las code locations `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores operativos locales. En `carlsjr`, `emerson` y `valledelencino` su default es `RUNNING`; en los demás tenants es `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
+Las code locations `bafar`, `ecosat`, `carlsjr`, `emerson` y `valledelencino` registran dos sensores operativos locales. En `carlsjr`, `emerson` y `valledelencino` su default es `RUNNING`; en los demás tenants es `STOPPED`. Cada copia consulta únicamente la base SQL Server de su tenant y persiste incidencias y señales `DETECTED` o `CLEARED`. El sistema externo de alertamiento es responsable del workflow, correo, tickets y otros canales.
 
 La code location `alerting` conserva ambos nombres de sensor solo por compatibilidad operativa. Sus sensores permanecen `STOPPED`, no solicitan recursos y siempre devuelven `SkipReason`; no realizan detección, persistencia ni entrega.
 
@@ -20,7 +20,7 @@ La deteccion queda junto a los datos y la configuración que pertenecen a cada t
 
 | Area | Evidencia |
 |---|---|
-| Alcance | `bafar`, `bafar_poc_gabinete`, `carlsjr`, `emerson` y `valledelencino` |
+| Alcance | `bafar`, `ecosat`, `carlsjr`, `emerson` y `valledelencino` |
 | Deteccion | Copias locales de `operational_alerts_sensor` y `asset_row_count_trend_sensor` |
 | Estado inicial declarado | Ambos sensores están `RUNNING` en `carlsjr`, `emerson` y `valledelencino`; `STOPPED` en los demás tenants; no acredita estado efectivo |
 | Recurso | `sqlserver` de la code location correspondiente |

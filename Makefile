@@ -37,7 +37,7 @@ ps:
 lint-python: lint-gabinete lint-valledelencino lint-carlsjr lint-emerson
 
 lint-gabinete:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/bafar_poc_gabinete && ruff check src tests"
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-ecosat -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/ecosat && ruff check src tests"
 
 lint-valledelencino:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-valledelencino -lc "python -m pip install --quiet ruff && cd /opt/dagster/app/valledelencino && ruff check src tests"
@@ -51,7 +51,7 @@ lint-emerson:
 test-python: test-gabinete test-valledelencino test-carlsjr test-emerson
 
 test-gabinete:
-	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-bafar-poc-gabinete -lc "cd /opt/dagster/app/bafar_poc_gabinete && python -m unittest discover tests -p 'test_*.py'"
+	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-ecosat -lc "cd /opt/dagster/app/ecosat && python -m unittest discover tests -p 'test_*.py'"
 
 test-valledelencino:
 	$(COMPOSE) run --rm --no-deps --entrypoint sh dagster-user-code-valledelencino -lc "cd /opt/dagster/app/valledelencino && python -m unittest discover tests -p 'test_*.py'"

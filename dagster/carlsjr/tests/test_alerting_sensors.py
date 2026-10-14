@@ -411,7 +411,7 @@ def test_dagster_failures_require_origin_and_provable_assets():
 
 @pytest.mark.parametrize(
     "user_code",
-    ("bafar", "bafar_poc_gabinete", "carlsjr", "emerson", "valledelencino"),
+    ("bafar", "ecosat", "carlsjr", "emerson", "valledelencino"),
 )
 @pytest.mark.parametrize("failure_point", ("direct", "intermediate"))
 def test_dagster_failures_follow_real_asset_dependencies(
@@ -674,7 +674,7 @@ def test_recovery_requires_later_evidence_and_enabled_rule(
 
 @pytest.mark.parametrize(
     "user_code",
-    ("bafar", "bafar_poc_gabinete", "carlsjr", "emerson", "valledelencino"),
+    ("bafar", "ecosat", "carlsjr", "emerson", "valledelencino"),
 )
 @pytest.mark.parametrize("enabled", (True, False))
 def test_dagster_recovery_clears_each_older_incident(

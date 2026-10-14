@@ -7,7 +7,7 @@ ENV ACCEPT_EULA=Y \
     DAGSTER_HOME=/opt/dagster/dagster_home \
     PYTHONPATH=/opt/dagster/app/src
 
-RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/bafar_poc_gabinete /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr /opt/dagster/app/emerson /opt/dagster/app/bafar
+RUN mkdir -p "${DAGSTER_HOME}" /opt/dagster/app/ecosat /opt/dagster/app/valledelencino /opt/dagster/app/carlsjr /opt/dagster/app/emerson /opt/dagster/app/bafar
 
 WORKDIR /opt/dagster/app
 
@@ -48,7 +48,7 @@ RUN spark_jars_dir="$(python -c 'import pathlib, pyspark; print(pathlib.Path(pys
   && curl -fL --retry 3 --retry-delay 5 -o "${spark_jars_dir}/wildfly-openssl-2.2.5.Final.jar" \
        https://repo1.maven.org/maven2/org/wildfly/openssl/wildfly-openssl/2.2.5.Final/wildfly-openssl-2.2.5.Final.jar
 
-COPY dagster/bafar_poc_gabinete /opt/dagster/app/bafar_poc_gabinete
+COPY dagster/ecosat /opt/dagster/app/ecosat
 COPY dagster/valledelencino /opt/dagster/app/valledelencino
 COPY dagster/carlsjr /opt/dagster/app/carlsjr
 COPY dagster/emerson /opt/dagster/app/emerson

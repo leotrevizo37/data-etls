@@ -9,7 +9,7 @@ El modelo conserva evidencia horaria de comunicacion LoRaWAN y la integra con la
 - `dwh.dimSidonProdDimensions.PhysicalIdentifier`.
 - APIs de devices, aplicaciones, perfiles y metricas de ChirpStack.
 - APIs de inventario, detalle y metricas de gateways de ChirpStack.
-- API de historial de eventos MQTT para `carlsjr`, `emerson` y `valledelencino`.
+- API de historial de eventos MQTT para `carlsjr`, `emerson`, `valledelencino` y `ecosat`.
 - `observability.factRedingsAudits`.
 - Pipeline `023_sense_chirpstack_metrics`.
 
@@ -17,7 +17,7 @@ Los endpoints, parametros y el recorrido desde la llamada HTTP hasta los hechos 
 
 ## Alcance
 
-El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs son globales para conservar un contrato SQL comun, por lo que `bafar_poc_gabinete` recibe los objetos pero no los materializa. El init especifico de `bafar` elimina las tablas, vistas y control de ingestion porque ese code location no ejecuta el pipeline.
+El modelo esta habilitado en `carlsjr`, `emerson`, `valledelencino` y `ecosat`. Los DDLs son globales para conservar un contrato SQL comun. El init especifico de `bafar` elimina las tablas, vistas y control de ingestion porque ese code location no ejecuta el pipeline.
 
 ## Tablas
 
@@ -66,7 +66,7 @@ El modelo esta habilitado en `carlsjr`, `emerson` y `valledelencino`. Los DDLs s
 
 ## Distribuciones MQTT por hora
 
-`observability_chirpstackmqttmetrics` materializa los siguientes contratos en `carlsjr`, `emerson` y `valledelencino`, con staging equivalente por `RunId`:
+`observability_chirpstackmqttmetrics` materializa los siguientes contratos en `carlsjr`, `emerson`, `valledelencino` y `ecosat`, con staging equivalente por `RunId`:
 
 | Tabla | Clave | Columnas JSON |
 |---|---|---|
