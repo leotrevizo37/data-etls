@@ -1,8 +1,8 @@
 load_from:
   - grpc_server:
-      host: bafar_poc_gabinete-dagster-user-code
+      host: ecosat-dagster-user-code
       port: 4004
-      location_name: bafar_poc_gabinete
+      location_name: ecosat
   - grpc_server:
       host: valledelencino-dagster-user-code
       port: 4005

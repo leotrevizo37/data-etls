@@ -112,7 +112,7 @@ def sidon_configuration(context):
                         for condition in device["conditions"] for sensor in condition["sensors"]
                     ),
                 }
-                if all(metadata["recovery_conditions"].values()):
+                if candidate["complete"] and incidents:
                     incident = incidents[0]
                     previous = json.loads(incident["metadata_json"])
                     metadata["recovery_conditions"].update(
@@ -120,7 +120,9 @@ def sidon_configuration(context):
                         same_policy=previous.get("policy") == evaluator.policy,
                         compatible_model=previous.get("assessment", {}).get("model") in ("structural", assessment["model"]),
                     )
-                    if all(metadata["recovery_conditions"].values()):
+                    if all(metadata["recovery_conditions"][key] for key in (
+                        "changed_evidence", "same_policy", "compatible_model",
+                    )):
                         cleared = _record_cleared(
                             connection, incident, now, "; ".join(assessment["reasons"]), metadata,
                         )

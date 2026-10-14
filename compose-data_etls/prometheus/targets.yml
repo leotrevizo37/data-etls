@@ -1,7 +1,7 @@
 - targets:
-    - dagster-user-code-bafar-poc-gabinete:4004
+    - dagster-user-code-ecosat:4004
   labels:
-    user_code: bafar_poc_gabinete
+    user_code: ecosat
 
 - targets:
     - https://valledelencino.sidon.mx/

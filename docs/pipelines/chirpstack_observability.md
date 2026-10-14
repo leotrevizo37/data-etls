@@ -9,6 +9,7 @@ Materializar evidencia horaria de devices y gateways de ChirpStack para distingu
 - `carlsjr`
 - `emerson`
 - `valledelencino`
+- `ecosat`
 
 El code location `bafar` no ejecuta este pipeline y elimina estos contratos durante su inicializacion SQL especifica.
 
@@ -17,7 +18,7 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 - `dwh.dimSidonProdDimensions.PhysicalIdentifier` como `DevEui`.
 - API de devices, aplicaciones, perfiles, link metrics y device metrics de ChirpStack.
 - API de inventario, detalle y metricas de gateways de ChirpStack.
-- API de historial de eventos MQTT para `carlsjr`, `emerson` y `valledelencino`.
+- API de historial de eventos MQTT para `carlsjr`, `emerson`, `valledelencino` y `ecosat`.
 - `observability.factRedingsAudits` para la integracion posterior en vistas de serving.
 
 ## Salidas
@@ -37,7 +38,7 @@ El code location `bafar` no ejecuta este pipeline y elimina estos contratos dura
 - Schedule: `023_sense_chirpstack_metrics_hourly_at_30`, una vez por hora al minuto 30.
 - Frecuencia: una vez por hora al minuto 30.
 - Zona horaria: `America/Ciudad_Juarez`.
-- Estado inicial: activo.
+- Estado inicial: activo en `carlsjr` y `emerson`; detenido en `valledelencino` y `ecosat`.
 
 ## Flujo
 
@@ -80,7 +81,7 @@ No se consulta `GET /api/devices` para formar el inventario: el alcance de devic
 
 ## API de historial MQTT
 
-Los tres code locations consultan `MQTT_EVENT_HISTORY_API_URL` mediante autenticacion Basic. La solicitud usa el tenant correspondiente (`carls`, `emerson` o `valle`), `fechaInicio`, `fechaFin` y `limit`. La respuesta aporta `mensaje_raw`; el pipeline consume el timestamp UTC, `deduplicationId`, `deviceInfo`, logs y `rxInfo[]`.
+Los cuatro code locations consultan `MQTT_EVENT_HISTORY_API_URL` mediante autenticacion Basic. La solicitud usa el tenant correspondiente (`carls`, `emerson`, `valle` o `ecosat`), `fechaInicio`, `fechaFin` y `limit`. La respuesta aporta `mensaje_raw`; el pipeline consume el timestamp UTC, `deduplicationId`, `deviceInfo`, logs y `rxInfo[]`.
 
 La ventana movil se controla con `MQTT_EVENT_HISTORY_LOOKBACK_HOURS`. Si la respuesta alcanza el limite o devuelve HTTP 504, la ventana se divide hasta recuperar el rango. Las solicitudes respetan el limite configurado, reintentan HTTP 429, errores 5xx y fallas de transporte, y deduplican uplinks por `deduplicationId`.
 
@@ -219,6 +220,7 @@ Cada code location usa su propio prefijo:
 - `CARLSJR_CHIRPSTACK_*`
 - `EMERSON_CHIRPSTACK_*`
 - `VALLEDELENCINO_CHIRPSTACK_*`
+- `ECOSAT_CHIRPSTACK_*`
 
 Los contenedores exponen internamente `CHIRPSTACK_API_URL`, `CHIRPSTACK_API_TOKEN`, `CHIRPSTACK_API_TIMEOUT_SECONDS` y `CHIRPSTACK_API_PAGE_SIZE`. Los valores reales permanecen fuera del repositorio.
 
