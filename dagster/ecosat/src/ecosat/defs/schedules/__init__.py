@@ -4,7 +4,8 @@ from .factlecturas_scheduler import (fact_lecturas_sched_every_6h,
 from .factoperations_scheduler import (operations_sched_every_6h,
                                        operations_sched_every_w,
                                        operations_sched_every_1h_w)
-from .factredingsaudits_scheduler import redings_audits_sched_every_10m
+from .factredingsaudits_scheduler import (redings_audits_sched_every_10m,
+                                        redings_audits_sched_every_40m)
 from .factsensorevents_scheduler import (
     sensor_events_sched_every_6h,
     sensor_events_sched_every_1h_w,
@@ -22,6 +23,7 @@ __all__ = [
     "operations_sched_every_6h",
     "operations_sched_every_w",
     "redings_audits_sched_every_10m",
+    "redings_audits_sched_every_40m",
     "sensor_events_sched_every_6h",
     "sensor_events_sched_every_1h_w",
     "chirpstack_metrics_sched_hourly_at_30",
