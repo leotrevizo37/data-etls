@@ -904,7 +904,7 @@ class ChirpStackContractTests(unittest.TestCase):
         self.assertIn('cron_schedule="30 * * * *"', schedule)
         self.assertIn('execution_timezone="America/Ciudad_Juarez"', schedule)
         self.assertIn(
-            "default_status=DefaultScheduleStatus.STOPPED",
+            "default_status=DefaultScheduleStatus.RUNNING",
             schedule,
         )
         self.assertNotIn("BAFAR_CHIRPSTACK_API_URL", compose)

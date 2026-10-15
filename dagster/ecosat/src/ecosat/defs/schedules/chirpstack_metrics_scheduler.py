@@ -7,5 +7,5 @@ chirpstack_metrics_sched_hourly_at_30 = ScheduleDefinition(
     job=chirpstack_metrics_job,
     cron_schedule="30 * * * *",
     execution_timezone="America/Ciudad_Juarez",
-    default_status=DefaultScheduleStatus.STOPPED,
+    default_status=DefaultScheduleStatus.RUNNING,
 )
