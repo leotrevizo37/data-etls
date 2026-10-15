@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -352,8 +353,8 @@ class ChirpStackMetricTransformationTests(unittest.TestCase):
         dev_eui = "24e124136e090452"
         query_metadata = {
             "Tenant": "valle",
-            "FechaInicio": "2026-09-17T04:00:00.000000Z",
-            "FechaFin": "2026-09-17T05:00:00.000000Z",
+            "FechaInicio": "2026-09-17T10:00:00.000000Z",
+            "FechaFin": "2026-09-17T11:00:00.000000Z",
             "RequestedLimit": 5000,
             "FetchedAt": datetime(2026, 9, 17, 11, 0),
         }
@@ -554,8 +555,8 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         payload = {
             "ok": True,
             "tenant": "valle",
-            "fecha_inicio": "2026-09-17T04:00:00Z",
-            "fecha_fin": "2026-09-17T05:00:00Z",
+            "fecha_inicio": "2026-09-17T04:00:00",
+            "fecha_fin": "2026-09-17T05:00:00",
             "total": 1,
             "data": [
                 {
@@ -609,6 +610,8 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         }
         self.assertEqual(query["tenant"], ["valle"])
         self.assertEqual(query["limit"], ["5000"])
+        self.assertEqual(query["fechaInicio"], ["2026-09-17T10:00:00.000000Z"])
+        self.assertEqual(query["fechaFin"], ["2026-09-17T11:00:00.000000Z"])
         self.assertEqual(requests[0][1], 15)
         self.assertTrue(headers["authorization"].startswith("Basic "))
         self.assertNotIn("private-password", requests[0][0].full_url)
@@ -649,8 +652,8 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         payload = {
             "ok": True,
             "tenant": "valle",
-            "fecha_inicio": "2026-09-17T04:00:00Z",
-            "fecha_fin": "2026-09-17T05:00:00Z",
+            "fecha_inicio": "2026-09-17T04:00:00",
+            "fecha_fin": "2026-09-17T05:00:00",
             "total": 0,
             "data": [],
         }
@@ -691,8 +694,8 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         payload = {
             "ok": True,
             "tenant": "valle",
-            "fecha_inicio": "2026-09-17T04:00:00Z",
-            "fecha_fin": "2026-09-17T05:00:00Z",
+            "fecha_inicio": "2026-09-17T04:00:00",
+            "fecha_fin": "2026-09-17T05:00:00",
             "total": 2,
             "data": [
                 {
@@ -740,8 +743,8 @@ class MqttEventHistoryApiResourceTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(len(resource.rejected_rows), 1)
         rejected = resource.rejected_rows[0]
-        self.assertEqual(rejected["FechaInicio"], "2026-09-17T04:00:00.000000Z")
-        self.assertEqual(rejected["FechaFin"], "2026-09-17T05:00:00.000000Z")
+        self.assertEqual(rejected["FechaInicio"], "2026-09-17T10:00:00.000000Z")
+        self.assertEqual(rejected["FechaFin"], "2026-09-17T11:00:00.000000Z")
         self.assertEqual(rejected["RequestedLimit"], 5000)
         self.assertEqual(len(rejected["RowJson"]), 4000)
         self.assertIn("'time'", rejected["FailureReason"])
@@ -1129,7 +1132,7 @@ def test_mqtt_dst_defers_then_recovers_both_utc_hours(lookback, mode):
             "id": f"00000000-0000-0000-0000-{index:012d}",
             "deveui": dev_eui,
             "tenant": mqtt_module.EVENT_API_TENANT,
-            "fecha": event_time.astimezone(module.OPERATIONS_TIMEZONE).replace(tzinfo=None).isoformat(),
+            "fecha": event_time.astimezone(ZoneInfo("America/Mexico_City")).replace(tzinfo=None).isoformat(),
             "mensaje_raw": json.dumps({
                 "time": event_time.isoformat(),
                 "deduplicationId": f"00000000-0000-0000-0000-{index:012d}",
@@ -1160,13 +1163,17 @@ def test_mqtt_dst_defers_then_recovers_both_utc_hours(lookback, mode):
         def respond(request, timeout):
             nonlocal injected
             query = parse_qs(urlparse(request.full_url).query)
-            start = datetime.fromisoformat(query["fechaInicio"][0].removesuffix("Z"))
-            end = datetime.fromisoformat(query["fechaFin"][0].removesuffix("Z"))
+            start = datetime.fromisoformat(query["fechaInicio"][0].replace("Z", "+00:00")).astimezone(
+                ZoneInfo("America/Mexico_City")
+            ).replace(tzinfo=None)
+            end = datetime.fromisoformat(query["fechaFin"][0].replace("Z", "+00:00")).astimezone(
+                ZoneInfo("America/Mexico_City")
+            ).replace(tzinfo=None)
             assert start < end
             requests.append((start, end))
             if (
                 not injected and start == datetime(2026, 11, 1, 1)
-                and end == datetime(2026, 11, 1, 2)
+                and end == datetime(2026, 11, 1, 3)
                 and (mode == "504" or mode == "failure" and hour == 9)
             ):
                 injected = True
@@ -1177,7 +1184,7 @@ def test_mqtt_dst_defers_then_recovers_both_utc_hours(lookback, mode):
             ] if mode != "empty" else []
             response = io.BytesIO(json.dumps({
                 "ok": True, "tenant": mqtt_module.EVENT_API_TENANT,
-                "fecha_inicio": query["fechaInicio"][0], "fecha_fin": query["fechaFin"][0],
+                "fecha_inicio": start.isoformat(), "fecha_fin": end.isoformat(),
                 "total": len(rows), "data": rows[:mqtt.limit],
             }).encode())
             response.status = 200
@@ -1219,7 +1226,7 @@ def test_mqtt_dst_defers_then_recovers_both_utc_hours(lookback, mode):
             assert [method[0] for method in sql.mock_calls] == ["get_watermark"]
             assert spark.mock_calls == []
             continue
-        assert (datetime(2026, 11, 1, 1), datetime(2026, 11, 1, 2)) in requests or (
+        assert (datetime(2026, 11, 1, 1), datetime(2026, 11, 1, 3)) in requests or (
             hour == 10 and lookback == 1 and mode != "failure"
         )
         if mode == "failure" and hour == 9:

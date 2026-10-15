@@ -9,11 +9,15 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from dagster import resource
 
+from valledelencino.operations_window import OPERATIONS_TIMEZONE
+
 
 EVENT_API_TENANT = "valle"
+EVENT_API_TIMEZONE = ZoneInfo("America/Mexico_City")
 EVENT_API_MAX_LIMIT = 5000
 EVENT_API_MAX_RETRIES = 3
 EVENT_API_MAX_REQUESTS_PER_MINUTE = 95
@@ -107,7 +111,9 @@ class MqttEventHistoryApiResource:
             raise RuntimeError("MQTT event history API configuration is incomplete")
         if from_local.tzinfo is not None or to_local.tzinfo is not None:
             raise ValueError("MQTT event history API range must use local naive datetimes")
-        if from_local >= to_local:
+        from_utc = from_local.replace(tzinfo=OPERATIONS_TIMEZONE).astimezone(timezone.utc)
+        to_utc = to_local.replace(tzinfo=OPERATIONS_TIMEZONE).astimezone(timezone.utc)
+        if from_utc >= to_utc:
             raise ValueError("MQTT event history API range must use from_local < to_local")
         try:
             rows = self._request_window(from_local, to_local)
@@ -117,11 +123,12 @@ class MqttEventHistoryApiResource:
         if rows is not None:
             self.windows_completed += 1
             return rows
-        if to_local - from_local <= timedelta(microseconds=1):
+        if to_utc - from_utc <= timedelta(microseconds=1):
             raise RuntimeError(
                 "MQTT event history API window remains saturated at minimum precision"
             )
-        midpoint = from_local + (to_local - from_local) / 2
+        midpoint = from_utc + (to_utc - from_utc) / 2
+        midpoint = midpoint.astimezone(OPERATIONS_TIMEZONE).replace(tzinfo=None)
         combined_rows = self.fetch_range(from_local, midpoint) + self.fetch_range(
             midpoint,
             to_local,
@@ -156,8 +163,12 @@ class MqttEventHistoryApiResource:
     ) -> list[dict[str, Any]]:
         request_params = {
             "tenant": EVENT_API_TENANT,
-            "fechaInicio": from_local.isoformat(timespec="microseconds") + "Z",
-            "fechaFin": to_local.isoformat(timespec="microseconds") + "Z",
+            "fechaInicio": from_local.replace(tzinfo=OPERATIONS_TIMEZONE)
+            .astimezone(timezone.utc).replace(tzinfo=None)
+            .isoformat(timespec="microseconds") + "Z",
+            "fechaFin": to_local.replace(tzinfo=OPERATIONS_TIMEZONE)
+            .astimezone(timezone.utc).replace(tzinfo=None)
+            .isoformat(timespec="microseconds") + "Z",
             "limit": self.limit,
         }
         query = urlencode(request_params)
@@ -257,16 +268,21 @@ class MqttEventHistoryApiResource:
         self.rows_received += len(data)
         response_from = _parse_datetime(payload["fecha_inicio"])
         response_to = _parse_datetime(payload["fecha_fin"])
+        response_from = response_from.replace(
+            tzinfo=response_from.tzinfo or EVENT_API_TIMEZONE,
+        ).astimezone(EVENT_API_TIMEZONE).replace(tzinfo=None)
+        response_to = response_to.replace(
+            tzinfo=response_to.tzinfo or EVENT_API_TIMEZONE,
+        ).astimezone(EVENT_API_TIMEZONE).replace(tzinfo=None)
+        from_local = from_local.replace(tzinfo=OPERATIONS_TIMEZONE).astimezone(
+            EVENT_API_TIMEZONE,
+        ).replace(tzinfo=None)
+        to_local = to_local.replace(tzinfo=OPERATIONS_TIMEZONE).astimezone(
+            EVENT_API_TIMEZONE,
+        ).replace(tzinfo=None)
         if (
-            response_from.tzinfo is None
-            or response_from.utcoffset() != timedelta(0)
-            or response_to.tzinfo is None
-            or response_to.utcoffset() != timedelta(0)
-        ):
-            raise ValueError("MQTT event history API response range must use UTC offsets")
-        if (
-            response_from.replace(tzinfo=None) != from_local
-            or response_to.replace(tzinfo=None) != to_local
+            response_from != from_local
+            or response_to != to_local
         ):
             raise ValueError("MQTT event history API response range does not match the request")
         if len(data) == self.limit or total > len(data):
