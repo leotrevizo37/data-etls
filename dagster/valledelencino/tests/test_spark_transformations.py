@@ -51,9 +51,8 @@ class SparkTransformationsTests(unittest.TestCase):
             {
                 "Temperatura": [16.0, 18.0],
                 "Humedad": [55.0, 57.0],
-                "Estado": [1.0, 0.0],
             },
-            "Nivel",
+            "Estado",
         ),
         (
             "chiller",
@@ -93,9 +92,8 @@ class SparkTransformationsTests(unittest.TestCase):
             {
                 "Temperatura": [21.0, 23.0],
                 "Humedad": [45.0, 47.0],
-                "Estado": [1.0, 0.0],
             },
-            "Nivel",
+            "Estado",
         ),
         (
             "tanque",
@@ -198,7 +196,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 "device_type": device_type,
                 "device_name": device_name,
                 "TimeSpan": datetime(2026, 3, 29, 10, 15),
-                "Value": 999.0,
+                "Value": 1.0 if unsupported_sensor_type == "Estado" else 999.0,
             }
         )
 
@@ -704,12 +702,6 @@ class SparkTransformationsTests(unittest.TestCase):
                         1
                         if method_name == "destilados"
                         and sensor_id.endswith("-1")
-                        else sum(
-                            value < 0 or value > 1
-                            for value in expected_values
-                        )
-                        if method_name == "puerta"
-                        and sensor_id.endswith("-3")
                         else 0
                     )
                     self.assertEqual(row["Anomalies"], expected_anomalies)

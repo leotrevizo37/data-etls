@@ -157,7 +157,7 @@ class SparkTransformationsTests(unittest.TestCase):
         return (
             self._readings_df(reading_rows),
             self._readings_df(dimension_rows),
-            {method_name + "-" + sensor[0] for sensor in sensors},
+            {method_name + "-" + sensor[0] for sensor in sensors if sensor[1] != "Estado de Puerta"},
         )
 
     def test_emerson_room_transformations_materialize_configured_sensors(self) -> None:
@@ -179,7 +179,7 @@ class SparkTransformationsTests(unittest.TestCase):
                 self.assertIsNotNone(result)
                 rows = result.orderBy("SensorId").collect()
 
-                self.assertEqual(len(rows), 6)
+                self.assertEqual(len(rows), 5)
                 self.assertEqual({row["SensorId"] for row in rows}, expected_sensor_ids)
                 self.assertEqual({row["device_type"] for row in rows}, {device_type})
                 self.assertEqual(
@@ -190,11 +190,10 @@ class SparkTransformationsTests(unittest.TestCase):
                     {row["LocalTimeSpan"] for row in rows},
                     {datetime(2026, 3, 29, 4, 0)},
                 )
-                self.assertEqual(len({row["OperationId"] for row in rows}), 6)
+                self.assertEqual(len({row["OperationId"] for row in rows}), 5)
                 self.assertEqual(
                     sorted(row["sensor_type"] for row in rows),
                     [
-                        "Estado de Puerta",
                         "Humedad",
                         "Medicion de corriente",
                         "Medicion de corriente",
@@ -237,7 +236,7 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertIsNotNone(result)
         rows = result.orderBy("SensorId").collect()
 
-        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(rows), 5)
         self.assertEqual({row["SensorId"] for row in rows}, expected_sensor_ids)
         self.assertEqual({row["ReadingsCount"] for row in rows}, {0})
         self.assertEqual({row["Anomalies"] for row in rows}, {0})

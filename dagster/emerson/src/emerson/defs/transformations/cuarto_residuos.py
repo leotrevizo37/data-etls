@@ -10,8 +10,8 @@ from .stats_calculator import stats_calculator
 
 DEVICE_TYPE_PATTERN = "(?iu)^cuarto\\s+residuos$"
 DEVICE_NAME_PATTERN = "(?iu)^cuarto\\s+de\\s+residuos$"
-SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|humedad|medici(?:o|\\u00f3)n\\s+de\\s+corriente|estado\\s+de\\s+puerta)$"
-SENSOR_NAME_PATTERN = "(?iu)^(temperatura|humedad|fase\\s+[123]|estado\\s+de\\s+puerta)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|humedad|medici(?:o|\\u00f3)n\\s+de\\s+corriente)$"
+SENSOR_NAME_PATTERN = "(?iu)^(temperatura|humedad|fase\\s+[123])$"
 
 
 def cuarto_residuos(
@@ -148,38 +148,9 @@ def cuarto_residuos(
             )
         )
 
-    door_stats_df = stats_calculator(
-        base,
-        "Estado de Puerta",
-        None,
-        None
-    )
-    if door_stats_df is not None:
-        door_stats_df = (
-            door_stats_df
-            .select(
-                "DeviceId",
-                "LocationId",
-                "SensorTyId",
-                "SensorId",
-                "TimeSpan",
-                "MeasurementValue",
-                "MeasurementStdDev",
-                "Min",
-                "Max",
-                "Anomalies",
-                "HasAnomalies",
-                "CorrectReadingsJson",
-                "AnomalousReadingsJson",
-                "sensor_type",
-                "ReadingsCount",
-                "device_type",
-            )
-        )
-
     stats_dfs = [
         stats_df
-        for stats_df in (temperature_stats_df, humidity_stats_df, current_stats_df, door_stats_df)
+        for stats_df in (temperature_stats_df, humidity_stats_df, current_stats_df)
         if stats_df is not None
     ]
 

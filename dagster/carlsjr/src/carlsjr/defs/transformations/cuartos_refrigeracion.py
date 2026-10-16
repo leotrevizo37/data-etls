@@ -22,6 +22,22 @@ def cuartos_refrigeracion(
             col("device_type").rlike(PATRON_DEVICE)
         )
     )
+    empty_base_df = (
+        lecturas_time_hours(
+            dimensions_df.filter(
+                (
+                    col("device_type").rlike(PATRON_DEVICE)
+                ) & (
+                    col("sensor_type").rlike(PATRON_SENSOR)
+                )
+            ),
+            min_hour,
+            max_hour
+        )
+    )
+
+    if empty_base_df is None:
+        return None
 
     if len(base.head(1)) == 0:
         empty_base_df = (

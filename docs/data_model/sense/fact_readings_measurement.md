@@ -45,7 +45,8 @@ Un registro representa una combinacion `OperationId` calculada con `SensorId` y 
 - Solo se materializan horas cerradas y no se avanza el watermark si no hay lecturas reales.
 - La ventana, el scaffold, las agregaciones, los cruces y el watermark usan `TimeSpan` UTC.
 - `LocalTimeSpan` se calcula al final desde `TimeSpan` y el `TimeZone` del sensor.
-- Las transformaciones disponibles dependen del `user_code`; CARLS, por ejemplo, usa `cisterna`, `cuartos_refrigeracion` y `presencia`.
+- Las transformaciones disponibles dependen del `user_code`; CARLS, por ejemplo, usa `cisterna` y `cuartos_refrigeracion`.
+- Se excluyen sensores binarios de presencia, estado de puerta y control de luces. Los valores 0 y 1 siguen siendo validos para los sensores continuos que los admiten. El retiro no elimina registros historicos existentes.
 
 ## Dependencias
 

@@ -232,7 +232,6 @@ def build_devices_df_op(
             "sensor_fase",
             "temperatura_humedad",
             "acometida",
-            "control_luces",
             "weather_station",
         ]
 
