@@ -23,11 +23,10 @@ if str(PROJECT_SRC) not in sys.path:
 from carlsjr.defs.transformations.lecturas_time_hours import (  # noqa: E402
     lecturas_time_hours,
 )
-from carlsjr.defs.transformations.cisterna import cisterna  # noqa: E402
-from carlsjr.defs.transformations.cuartos_refrigeracion import (  # noqa: E402
+from carlsjr.defs.transformations import cisterna  # noqa: E402
+from carlsjr.defs.transformations import (  # noqa: E402
     cuartos_refrigeracion,
 )
-from carlsjr.defs.transformations.presencia import presencia  # noqa: E402
 from carlsjr.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
@@ -643,62 +642,47 @@ class SparkTransformationsTests(unittest.TestCase):
         self.assertEqual(len({row["OperationId"] for row in rows}), 2)
         self.assertEqual(result.dropDuplicates(["OperationId"]).count(), 2)
 
-    def test_presencia_uses_carlsjr_sensor_name_from_dimensions(self) -> None:
-        factlecturas_extended_df = self._readings_df(
-            [
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Sensor PRESENCIA 1",
-                    "device_type": "Otro dispositivo",
-                    "TimeSpan": datetime(2026, 3, 29, 10, 5),
-                    "Value": 1.0,
-                    "device_name": "Monitoreo 1",
-                },
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Sensor PRESENCIA 1",
-                    "device_type": "Otro dispositivo",
-                    "TimeSpan": datetime(2026, 3, 29, 10, 25),
-                    "Value": 0.0,
-                    "device_name": "Monitoreo 1",
-                },
-            ]
-        )
-        dimensions_df = self._readings_df(
-            [
-                {
-                    "DeviceId": 1,
-                    "SensorId": 10,
-                    "LocationId": 100,
-                    "SensorTyId": 200,
-                    "sensor_type": "Sensor PRESENCIA 1",
-                    "device_type": "Otro dispositivo",
-                    "device_name": "Monitoreo 1",
-                    "sensor_name": "Presencia",
-                    "TimeZone": "America/Denver",
-                },
-            ]
-        )
+    def test_operations_excludes_presence_and_preserves_continuous_zero_one_readings(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from carlsjr.defs.assets.operations_assets import build_devices_df_op
+        from carlsjr.defs.resources.transformation_ops import TransformationOps
 
-        result = presencia(
-            factlecturas_extended_df,
-            dimensions_df,
-            "2026-03-29 10:00:00",
-            "2026-03-29 10:00:00",
+        dimensions = [
+            {
+                "DeviceId": 1,
+                "SensorId": sensor_id,
+                "LocationId": 100,
+                "SensorTyId": sensor_id + 100,
+                "sensor_type": sensor_type,
+                "sensor_name": sensor_type,
+                "device_type": "Cuarto refrigeracion",
+                "device_name": "Refrigeracion 1",
+                "TimeZone": "America/Denver",
+            }
+            for sensor_id, sensor_type in ((10, "Sensor PRESENCIA 1"), (11, "Temperatura F"))
+        ]
+        readings = [
+            {**dimension, "TimeSpan": datetime(2026, 3, 29, 10, minute), "Value": value}
+            for dimension in dimensions
+            for minute, value in ((5, 0.0), (25, 1.0))
+        ]
+        context = SimpleNamespace(
+            resources=SimpleNamespace(transformation_ops=TransformationOps()),
+            log=Mock(),
         )
-
-        rows = result.collect()
+        rows = build_devices_df_op.compute_fn.decorated_fn(
+            context,
+            {"fetch_from": datetime(2026, 3, 29, 10), "max_utc_hour": datetime(2026, 3, 29, 11)},
+            self.spark.createDataFrame(dimensions),
+            self.spark.createDataFrame(readings),
+        ).collect()
 
         self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["SensorId"], 11)
         self.assertEqual(rows[0]["ReadingsCount"], 2)
-        self.assertEqual(rows[0]["sensor_name"], "Presencia")
-        self.assertAlmostEqual(rows[0]["MeasurementValue"], 0.5)
+        self.assertEqual(rows[0]["MeasurementValue"], 0.5)
+        self.assertFalse(hasattr(TransformationOps(), "presencia"))
 
     def test_limit_operations_rows_to_closed_hours_removes_future_rows(self) -> None:
         schema = StructType(
