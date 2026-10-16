@@ -145,7 +145,7 @@ services:
     restart: "no"
 
   dagster-postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: data-dagster-postgres
     env_file:
       - ${COMPOSE_ENV_FILE:-.env}
