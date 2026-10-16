@@ -54,7 +54,7 @@ jobs:
           python -m coverage xml -o coverage.xml
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-coverage
           path: dagster/coverage.xml
