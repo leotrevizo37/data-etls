@@ -7,6 +7,10 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(cisternas|cisterns)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(em500\\-swl\\-submersible\\s+water\\s+level\\s+sensor)$"
+
+
 def cisternas(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
@@ -14,11 +18,11 @@ def cisternas(
     max_hour: str,
 ) -> Optional[DataFrame]:
     sensor_types = ("EM500-SWL-Submersible Water Level Sensor",)
-    base = factlecturas_extended_df.filter(trim(col("device_type")) == "CISTERNAS")
+    base = factlecturas_extended_df.filter(trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (trim(col("device_type")) == "CISTERNAS")
-            & trim(col("sensor_type")).isin(*sensor_types)
+            (trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
+            & trim(col("sensor_type")).rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,

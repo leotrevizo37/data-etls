@@ -8,8 +8,8 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-PATRON_DEVICE = r"(?iu)(refr|cong|conserv|fr[ií][ao])"
-PATRON_SENSOR = r"(?iu)(temp|hum|cor)"
+PATRON_DEVICE = r"(?iu)(refr|cong|conserv|fr[ií][ao]|cold\s+room|freezer\s+room)"
+PATRON_SENSOR = r"(?iu)(temp|hum|cor|current|umidade)"
 
 def cuartos_refrigeracion(
         factlecturas_extended_df: DataFrame,

@@ -7,6 +7,10 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(sensor\\s+(?:de\\s+)?fase|phase\\s+sensor)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(corriente\\s+electrica|electric\\s+current|electrical\\s+current|corrente\\s+elétrica|corrente\\s+eletrica)$"
+
+
 def sensor_fase(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
@@ -14,11 +18,11 @@ def sensor_fase(
     max_hour: str,
 ) -> Optional[DataFrame]:
     sensor_types = ("CORRIENTE ELECTRICA",)
-    base = factlecturas_extended_df.filter(trim(col("device_type")) == "Sensor fase")
+    base = factlecturas_extended_df.filter(trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (trim(col("device_type")) == "Sensor fase")
-            & trim(col("sensor_type")).isin(*sensor_types)
+            (trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
+            & trim(col("sensor_type")).rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,
