@@ -37,6 +37,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: dg-check-defs
+        name: Validate Dagster definitions
+        entry: >-
+          python -c "import os, pathlib, subprocess, sys;
+          projects = ('alerting', 'bafar', 'carlsjr', 'ecosat', 'emerson', 'valledelencino');
+          os.environ['PYTHONPATH'] = os.pathsep.join([str(pathlib.Path('dagster', project, 'src').resolve())
+          for project in projects] + [os.environ.get('PYTHONPATH', '')]);
+          sys.exit(subprocess.call([sys.executable, '-m', 'dagster', 'definitions', 'validate'] +
+          [arg for project in projects for arg in ('-m', project + '.definitions')]))"
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: forbid-private-env-files
         name: Reject private environment files
         entry: Private environment files must not be committed
