@@ -8,10 +8,10 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-DEVICE_TYPE_PATTERN = "(?iu)^cuarto\\s+congelaci(?:o|\\u00f3)n$"
-DEVICE_NAME_PATTERN = "(?iu)^cuarto\\s+de\\s+congelaci(?:o|\\u00f3)n$"
-SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|humedad|medici(?:o|\\u00f3)n\\s+de\\s+corriente)$"
-SENSOR_NAME_PATTERN = "(?iu)^(temperatura|humedad|fase\\s+[123])$"
+DEVICE_TYPE_PATTERN = "(?iu)^(?:cuarto\\s+congelaci(?:o|\\u00f3)n|freezer\\s+room|(?:c[aâ]mara|sala)\\s+de\\s+congelamento)$"
+DEVICE_NAME_PATTERN = "(?iu)^(?:cuarto\\s+de\\s+congelaci(?:o|\\u00f3)n|freezer\\s+room|(?:c[aâ]mara|sala)\\s+de\\s+congelamento)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|temperature|humedad|humidity|umidade|medici(?:o|\\u00f3)n\\s+de\\s+corriente|current\\s+measurement|medi[cç][aã]o\\s+de\\s+corrente)$"
+SENSOR_NAME_PATTERN = "(?iu)^(temperatura|temperature|humedad|humidity|umidade|(?:fase|phase)\\s+[123])$"
 
 
 def cuarto_congelacion(

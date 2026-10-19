@@ -8,17 +8,21 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(tanque\\s+vino|wine\\s+tank|tanque\\s+de\\s+vinho)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|temperature)$"
+
+
 def tanque(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
     min_hour: str,
     max_hour: str,
 ) -> Optional[DataFrame]:
-    base = factlecturas_extended_df.filter(col("device_type") == "Tanque vino")
+    base = factlecturas_extended_df.filter(col("device_type").rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (col("device_type") == "Tanque vino")
-            & (col("sensor_type") == "Temperatura")
+            (col("device_type").rlike(DEVICE_TYPE_PATTERN))
+            & col("sensor_type").rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,

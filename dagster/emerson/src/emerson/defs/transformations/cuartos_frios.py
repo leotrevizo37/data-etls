@@ -8,10 +8,10 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-DEVICE_TYPE_PATTERN = "(?iu)^cuarto\\s+fr(?:i|\\u00ed)o$"
-DEVICE_NAME_PATTERN = "(?iu)^cuarto\\s+fr(?:i|\\u00ed)o\\s+(2|3|4)$"
-SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|humedad|medici(?:o|\\u00f3)n\\s+de\\s+corriente)$"
-SENSOR_NAME_PATTERN = "(?iu)^(temperatura|humedad|fase\\s+[123])$"
+DEVICE_TYPE_PATTERN = "(?iu)^(?:cuarto\\s+fr(?:i|\\u00ed)o|cold\\s+room|(?:c[aâ]mara|sala)\\s+fria)$"
+DEVICE_NAME_PATTERN = "(?iu)^(?:cuarto\\s+fr(?:i|\\u00ed)o|cold\\s+room|(?:c[aâ]mara|sala)\\s+fria)\\s+(2|3|4)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|temperature|humedad|humidity|umidade|medici(?:o|\\u00f3)n\\s+de\\s+corriente|current\\s+measurement|medi[cç][aã]o\\s+de\\s+corrente)$"
+SENSOR_NAME_PATTERN = "(?iu)^(temperatura|temperature|humedad|humidity|umidade|(?:fase|phase)\\s+[123])$"
 
 
 def cuartos_frios(
