@@ -15,15 +15,11 @@ from pyspark.sql.types import (
 if TYPE_CHECKING:
     from ..resources import SparkResource, SqlDimServerResource
 
-HVAC_TEMPERATURE_SENSOR_TYPE = [
-    "Temperatura",
-    "Temperatura Actual",
-    "Temperatura C",
-    "Temperatura F"
-    ]
-HVAC_SWITCH_SENSOR_TYPE = "On/Off Termostato"
-LIGHT_DEVICE_TYPE = "Luminaria"
-LIGHT_SENSOR_TYPE = "Encendido"
+HVAC_DEVICE_TYPE_PATTERN = r"(?iu)^(?:a/c|ambiente|air\s+condition(?:ing|er)|ambient|ar[\s-]+condicionado)"
+HVAC_TEMPERATURE_SENSOR_TYPE = r"(?iu)^(?:(?:temperatura|temperature)(?:\s+(?:actual|atual|current|[cf]))?|current\s+temperature)$"
+HVAC_SWITCH_SENSOR_TYPE = r"(?iu)^(?:(?:on\s*/\s*off|liga(?:do)?\s*/\s*desliga(?:do)?)\s+(?:termostato|thermostat)|(?:termostato|thermostat)\s+(?:on\s*/\s*off|liga(?:do)?\s*/\s*desliga(?:do)?))$"
+LIGHT_DEVICE_TYPE = r"(?iu)^(?:lumin[aá]rias?|luminaires?|light(?:s|ing)?(?:\s+(?:fixtures?|controls?)(?:\s+.+)?)?|control(?:e|es)?(?:\s+(?:de|da|das))?\s+(?:luces|luzes|luz|ilumina(?:ci[oó]n|[cç][aã]o))(?:\s+.+)?|luces|luzes|luz)$"
+LIGHT_SENSOR_TYPE = r"(?iu)^(?:encendido|on|ligado|aceso|lumin[aá]rias?|luminaires?|light(?:s|ing)?(?:\s+(?:fixtures?|controls?)(?:\s+.+)?)?|control(?:e|es)?(?:\s+(?:de|da|das))?\s+(?:luces|luzes|luz|ilumina(?:ci[oó]n|[cç][aã]o))(?:\s+.+)?|luces|luzes|luz)$"
 _DAY_REPLACEMENTS = (
     (r"mon", "1"),
     (r"tue", "2"),
@@ -95,7 +91,7 @@ def _replace_day_tokens(column) -> F.Column:
 
 def _is_hvac_device_type(column_name: str = "device_type") -> F.Column:
     normalized = F.lower(F.trim(F.col(column_name).cast("string")))
-    return normalized.startswith("a/c") | normalized.startswith("ambiente")
+    return normalized.rlike(HVAC_DEVICE_TYPE_PATTERN)
 
 
 def _normalize_days(column) -> F.Column:
@@ -285,14 +281,14 @@ def build_hvac_expected_values(
     hvac_dimensions = active_dimensions.filter(_is_hvac_device_type("device_type"))
 
     temperature_dimensions = hvac_dimensions.filter(
-        F.col("sensor_type").isin(*HVAC_TEMPERATURE_SENSOR_TYPE)
+        F.trim(F.col("sensor_type")).rlike(HVAC_TEMPERATURE_SENSOR_TYPE)
     ).select(
         F.col("DeviceId").alias("device_id"),
         F.col("SensorId").alias("sensor_id"),
     )
 
     switch_dimensions = hvac_dimensions.filter(
-        F.col("sensor_type") == F.lit(HVAC_SWITCH_SENSOR_TYPE)
+        F.trim(F.col("sensor_type")).rlike(HVAC_SWITCH_SENSOR_TYPE)
     ).select(
         F.col("DeviceId").alias("device_id"),
         F.col("SensorId").alias("sensor_id"),
@@ -424,8 +420,8 @@ def build_lights_expected_values(
 ) -> DataFrame:
     active_dimensions = dimensions_df.filter(F.coalesce(F.col("Active"), F.lit(False)))
     lights_dimensions = active_dimensions.filter(
-        (F.col("device_type") == F.lit(LIGHT_DEVICE_TYPE))
-        & (F.col("sensor_type") == F.lit(LIGHT_SENSOR_TYPE))
+        (F.trim(F.col("device_type")).rlike(LIGHT_DEVICE_TYPE))
+        & (F.trim(F.col("sensor_type")).rlike(LIGHT_SENSOR_TYPE))
     ).select(
         F.col("SensorId").alias("sensor_id"),
         F.col("DeviceId").alias("device_id"),
