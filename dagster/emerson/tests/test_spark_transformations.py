@@ -81,12 +81,12 @@ class SparkTransformationsTests(unittest.TestCase):
         device_id = method_name + "-device"
         location_id = method_name + "-location"
         sensors = [
-            ("temperature", "Temperatura", "Temperatura", [5.0, 6.0]),
-            ("humidity", "Humedad", "Humedad", [50.0, 51.0]),
-            ("fase-1", "Medicion de corriente", "Fase 1", [4.0, 5.0]),
-            ("fase-2", "Medicion de corriente", "Fase 2", [6.0, 7.0]),
-            ("fase-3", "Medicion de corriente", "Fase 3", [8.0, 9.0]),
-            ("door", "Estado de Puerta", "Estado de Puerta", [1.0, 0.0]),
+            ("temperature", "Temperatura", "Air Temperature", [5.0, 6.0]),
+            ("humidity", "Humedad", "Relative Humidity", [50.0, 51.0]),
+            ("fase-1", "Medicion de corriente", "Current 1", [4.0, 5.0]),
+            ("fase-2", "Medicion de corriente", "Current 2", [6.0, 7.0]),
+            ("fase-3", "Medicion de corriente", "Current 3", [8.0, 9.0]),
+            ("door", "Estado de Puerta", "Door Status", [1.0, 0.0]),
         ]
 
         for sensor_idx, (suffix, sensor_type, sensor_name, values) in enumerate(
