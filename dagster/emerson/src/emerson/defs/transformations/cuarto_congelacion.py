@@ -27,7 +27,6 @@ def cuarto_congelacion(
         dimensions_df.filter(
             col("device_type").rlike(DEVICE_TYPE_PATTERN)
             & col("sensor_type").rlike(SENSOR_TYPE_PATTERN)
-            & col("sensor_name").rlike(SENSOR_NAME_PATTERN)
         ),
         min_hour,
         max_hour,
