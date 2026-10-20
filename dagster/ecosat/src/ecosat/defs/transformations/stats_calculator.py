@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pyspark.sql import DataFrame
+from pyspark.sql import Column, DataFrame
 from pyspark.sql.functions import (
     col,
     collect_list,
@@ -19,6 +19,28 @@ from pyspark.sql.functions import (
     stddev)
 
 
+SENSOR_TYPE_EQUIVALENCES = {
+    "Temperatura": ("Temperatura", "Temperature",),
+    "Humedad": ("Humedad", "Humidity", "Umidade",),
+    "CORRIENTE ELECTRICA": ("CORRIENTE ELECTRICA", "Electric Current", "Electric current", "Electrical Current", "Electrical current", "Corrente Elétrica", "Corrente elétrica", "Corrente Eletrica",),
+    "Velocidad del viento": ("Velocidad del viento", "Wind Speed", "Wind speed", "Velocidade do vento", "Velocidade do Vento",),
+    "Lluvia acumulada": ("Lluvia acumulada", "Accumulated Rainfall", "Accumulated rainfall", "Chuva acumulada", "Chuva Acumulada",),
+    "Dirección del viento": ("Dirección del viento", "Wind Direction", "Wind direction", "Direção do vento", "Direção do Vento", "Direcao do vento",),
+    "Porcentaje de Bateria": ("Porcentaje de Bateria", "Battery Percentage", "Battery percentage", "Porcentagem da bateria", "Porcentagem da Bateria", "Percentual de bateria",),
+}
+
+
+def sensor_type_filter(*sensor_types: str, column: Optional[Column] = None) -> Column:
+    equivalents = tuple(
+        value
+        for sensor_type in sensor_types
+        for value in SENSOR_TYPE_EQUIVALENCES.get(sensor_type, (sensor_type,))
+    )
+    if column is None:
+        column = col("sensor_type")
+    return column.isin(*equivalents)
+
+
 def stats_calculator(
         base: DataFrame,
         sensor_type: Optional[str] = "Corriente",
@@ -28,7 +50,7 @@ def stats_calculator(
 
     base = (
         base
-        .filter((trim(col("sensor_type")) == sensor_type))
+        .filter(sensor_type_filter(sensor_type, column=trim(col("sensor_type"))))
         .withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
     )
 

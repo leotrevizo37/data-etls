@@ -25,7 +25,7 @@ if str(PROJECT_SRC) not in sys.path:
 from ecosat.defs.transformations.lecturas_time_hours import (  # noqa: E402
     lecturas_time_hours,
 )
-from ecosat.defs.transformations.gabinete import gabinete  # noqa: E402
+from ecosat.defs.transformations import gabinete  # noqa: E402
 from ecosat.defs.transformations.stats_calculator import (  # noqa: E402
     stats_calculator,
 )
@@ -518,7 +518,7 @@ class SparkTransformationsTests(unittest.TestCase):
                     readings.append({
                         **dimension,
                         "TimeSpan": datetime(2026, 3, 29, 10, minute),
-                        "Value": value,
+                        "Value": float(minute == 25) if device_type == "CONTROL DE LUCES" else value,
                     })
 
         context = SimpleNamespace(
@@ -532,9 +532,9 @@ class SparkTransformationsTests(unittest.TestCase):
             self.spark.createDataFrame(readings),
         )
         rows = result.collect()
-        self.assertEqual(len(rows), 25)
-        self.assertEqual({row["SensorId"] for row in rows}, {row["SensorId"] for row in dimensions})
-        self.assertEqual(len({row["OperationId"] for row in rows}), 25)
+        self.assertEqual(len(rows), 18)
+        self.assertEqual({row["SensorId"] for row in rows}, {row["SensorId"] for row in dimensions if row["device_type"] != "CONTROL DE LUCES"})
+        self.assertEqual(len({row["OperationId"] for row in rows}), 18)
         for row in rows:
             self.assertEqual(row["ReadingsCount"], 2)
             self.assertEqual(row["MeasurementValue"], 20.0)
@@ -556,7 +556,6 @@ class SparkTransformationsTests(unittest.TestCase):
             ("sensor_fase", "Sensor fase ", "CORRIENTE ELECTRICA"),
             ("temperatura_humedad", "TEMPERATURA Y HUMEDAD", "Temperatura"),
             ("acometida", "ACOMETIDA", "CORRIENTE ELECTRICA"),
-            ("control_luces", "CONTROL DE LUCES", "CONTROL DE LUCES WS558"),
             ("weather_station", " Weather Station", "Velocidad del viento "),
         ):
             with self.subTest(method=method):

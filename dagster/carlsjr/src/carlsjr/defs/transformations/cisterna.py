@@ -8,8 +8,8 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-PATRON_DEVICE = r"(?iu)(cisterna)"
-PATRON_SENSOR = r"(?iu)(nivel|cisterna)"
+PATRON_DEVICE = r"(?iu)(cisterna|cistern)"
+PATRON_SENSOR = r"(?iu)(nivel|cisterna|level|cistern|n[ií]vel)"
 
 def cisterna(
     factlecturas_extended_df: DataFrame,

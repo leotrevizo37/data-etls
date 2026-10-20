@@ -4,7 +4,6 @@ from ..transformations import (raw_dimensions,
                                factlecturas_extended,
                                factReadingsMeasurement_device,
                                cisterna,
-                               presencia,
                                cuartos_refrigeracion,
                                sensor_events,
                                temperature_events)
@@ -34,8 +33,6 @@ class TransformationOps:
         )
     def factReadingsMeasurement_device(self, df:DataFrame) -> Optional[DataFrame]:
         return factReadingsMeasurement_device(df)
-    def presencia(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
-        return presencia(df, dims, min_hour, max_hour)
     def sensor_events(
             self,
             df: DataFrame,
