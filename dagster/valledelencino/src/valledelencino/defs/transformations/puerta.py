@@ -8,17 +8,21 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(puerta|door|porta)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(temperatura|temperature|humedad|humidity|umidade)$"
+
+
 def puerta(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
     min_hour: str,
     max_hour: str,
 ) -> Optional[DataFrame]:
-    base = factlecturas_extended_df.filter(col("device_type") == "Puerta")
+    base = factlecturas_extended_df.filter(col("device_type").rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (col("device_type") == "Puerta")
-            & (col("sensor_type").isin("Temperatura", "Humedad", "Estado"))
+            (col("device_type").rlike(DEVICE_TYPE_PATTERN))
+            & col("sensor_type").rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,
@@ -111,38 +115,9 @@ def puerta(
             )
         )
 
-    status_stats_df = stats_calculator(
-        base,
-        "Estado",
-        0,
-        1
-    )
-    if status_stats_df is not None:
-        status_stats_df = (
-            status_stats_df
-            .select(
-                "DeviceId",
-                "LocationId",
-                "SensorTyId",
-                "SensorId",
-                "TimeSpan",
-                "MeasurementValue",
-                "MeasurementStdDev",
-                "Min",
-                "Max",
-                "Anomalies",
-                "HasAnomalies",
-                "CorrectReadingsJson",
-                "AnomalousReadingsJson",
-                "sensor_type",
-                "ReadingsCount",
-                "device_type",
-            )
-        )
-
     stats_dfs = [
         stats_df
-        for stats_df in (state_stats_df, temperature_stats_df, status_stats_df)
+        for stats_df in (state_stats_df, temperature_stats_df)
         if stats_df is not None
     ]
 

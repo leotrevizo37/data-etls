@@ -8,17 +8,21 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(corriente\\s+general|general\\s+current|corrente\\s+geral)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(corriente|current|corrente)$"
+
+
 def corriente(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
     min_hour: str,
     max_hour: str,
 ) -> Optional[DataFrame]:
-    base = factlecturas_extended_df.filter(col("device_type") == "Corriente General")
+    base = factlecturas_extended_df.filter(col("device_type").rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (col("device_type") == "Corriente General")
-            & (col("sensor_type") == "Corriente")
+            (col("device_type").rlike(DEVICE_TYPE_PATTERN))
+            & col("sensor_type").rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,

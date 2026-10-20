@@ -7,6 +7,10 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
+DEVICE_TYPE_PATTERN = "(?iu)^(weather\\s+station|estaci[oó]n\\s+meteorol[oó]gica|esta[cç][aã]o\\s+meteorol[oó]gica)$"
+SENSOR_TYPE_PATTERN = "(?iu)^(velocidad\\s+del\\s+viento|wind\\s+speed|velocidade\\s+do\\s+vento|lluvia\\s+acumulada|accumulated\\s+rainfall|chuva\\s+acumulada|dirección\\s+del\\s+viento|wind\\s+direction|direção\\s+do\\s+vento|direcao\\s+do\\s+vento|temperatura|temperature|wts506\\s+\\-\\s+iot\\s+weather\\s+station|humedad|humidity|umidade|porcentaje\\s+de\\s+bateria|battery\\s+percentage|porcentagem\\s+da\\s+bateria|percentual\\s+de\\s+bateria)$"
+
+
 def weather_station(
     factlecturas_extended_df: DataFrame,
     dimensions_df: DataFrame,
@@ -22,11 +26,11 @@ def weather_station(
         "Humedad",
         "Porcentaje de Bateria",
     )
-    base = factlecturas_extended_df.filter(trim(col("device_type")) == "Weather Station")
+    base = factlecturas_extended_df.filter(trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
     scaffold_base_df = lecturas_time_hours(
         dimensions_df.filter(
-            (trim(col("device_type")) == "Weather Station")
-            & trim(col("sensor_type")).isin(*sensor_types)
+            (trim(col("device_type")).rlike(DEVICE_TYPE_PATTERN))
+            & trim(col("sensor_type")).rlike(SENSOR_TYPE_PATTERN)
         ),
         min_hour,
         max_hour,

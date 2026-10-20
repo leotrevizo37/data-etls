@@ -8,8 +8,8 @@ from .lecturas_time_hours import lecturas_time_hours
 from .stats_calculator import stats_calculator
 
 
-PATRON_DEVICE = r"(?iu)(refr|cong|conserv|fr[ií][ao])"
-PATRON_SENSOR = r"(?iu)(temp|hum|cor)"
+PATRON_DEVICE = r"(?iu)(refr|cong|conserv|fr[ií][ao]|cold\s+room|freezer\s+room)"
+PATRON_SENSOR = r"(?iu)(temp|hum|cor|current|umidade)"
 
 def cuartos_refrigeracion(
         factlecturas_extended_df: DataFrame,
@@ -22,6 +22,22 @@ def cuartos_refrigeracion(
             col("device_type").rlike(PATRON_DEVICE)
         )
     )
+    empty_base_df = (
+        lecturas_time_hours(
+            dimensions_df.filter(
+                (
+                    col("device_type").rlike(PATRON_DEVICE)
+                ) & (
+                    col("sensor_type").rlike(PATRON_SENSOR)
+                )
+            ),
+            min_hour,
+            max_hour
+        )
+    )
+
+    if empty_base_df is None:
+        return None
 
     if len(base.head(1)) == 0:
         empty_base_df = (

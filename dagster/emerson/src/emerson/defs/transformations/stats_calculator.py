@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pyspark.sql import DataFrame
+from pyspark.sql import Column, DataFrame
 from pyspark.sql.functions import (
     col,
     collect_list,
@@ -18,6 +18,24 @@ from pyspark.sql.functions import (
     stddev)
 
 
+SENSOR_TYPE_EQUIVALENCES = {
+    "Temperatura": ("Temperatura", "Temperature",),
+    "Humedad": ("Humedad", "Humidity", "Umidade",),
+    "Medicion de corriente": ("Medicion de corriente", "Current Measurement", "Current measurement", "Medição de corrente", "Medição de Corrente", "Medicao de corrente",),
+}
+
+
+def sensor_type_filter(*sensor_types: str, column: Optional[Column] = None) -> Column:
+    equivalents = tuple(
+        value
+        for sensor_type in sensor_types
+        for value in SENSOR_TYPE_EQUIVALENCES.get(sensor_type, (sensor_type,))
+    )
+    if column is None:
+        column = col("sensor_type")
+    return column.isin(*equivalents)
+
+
 def stats_calculator(
         base: DataFrame,
         sensor_type: Optional[str] = "Corriente",
@@ -27,7 +45,7 @@ def stats_calculator(
 
     base = (
         base
-        .filter((col("sensor_type") == sensor_type))
+        .filter(sensor_type_filter(sensor_type))
         .withColumn("HourStart", date_trunc("hour", col("TimeSpan")))
     )
 

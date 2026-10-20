@@ -7,7 +7,6 @@ from ..transformations import (raw_dimensions,
                                sensor_fase,
                                temperatura_humedad,
                                acometida,
-                               control_luces,
                                weather_station,
                                sensor_events,
                                light_events,
@@ -47,8 +46,6 @@ class TransformationOps:
         return temperatura_humedad(df, dims, min_hour, max_hour)
     def acometida(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return acometida(df, dims, min_hour, max_hour)
-    def control_luces(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
-        return control_luces(df, dims, min_hour, max_hour)
     def weather_station(self, df:DataFrame, dims:DataFrame, min_hour: str, max_hour: str) -> Optional[DataFrame]:
         return weather_station(df, dims, min_hour, max_hour)
     def sensor_events(
