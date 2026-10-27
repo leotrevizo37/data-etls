@@ -27,7 +27,6 @@ from pyspark.sql.window import Window
 OPEN_VALUE = 1
 CLOSE_VALUE = 0
 DOOR_DEVICE_TYPE_PATTERN = "(?iu)^cuarto\\s+(fr(?:i|\\u00ed)o|congelaci(?:o|\\u00f3)n|residuos)$"
-DOOR_DEVICE_NAME_PATTERN = "(?iu)^cuarto\\s+(fr(?:i|\\u00ed)o\\s+(2|3|4)|de\\s+congelaci(?:o|\\u00f3)n|de\\s+residuos)$"
 DOOR_SENSOR_PATTERN = "(?iu)^estado\\s+de\\s+puerta$"
 COMMUNICATION_THRESHOLD_MINUTES = 60
 
@@ -48,7 +47,6 @@ def sensor_events(
 ) -> DataFrame:
     base = factlecturas_extended_df.filter(
         col("device_type").rlike(DOOR_DEVICE_TYPE_PATTERN)
-        & col("device_name").rlike(DOOR_DEVICE_NAME_PATTERN)
         & col("sensor_type").rlike(DOOR_SENSOR_PATTERN)
     )
 

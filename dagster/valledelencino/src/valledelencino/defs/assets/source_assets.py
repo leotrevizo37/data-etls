@@ -25,6 +25,36 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["valledelencino", "dbo_sublocation_tys"]),
     group_name="valledelencino",
 )
+dbo_ProgramProfileTys = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_ProgramProfileTys"]),
+    group_name="valledelencino",
+)
+
+dbo_ProgramProfiles = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_ProgramProfiles"]),
+    group_name="valledelencino",
+)
+
+dbo_ProgramSchedules = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_ProgramSchedules"]),
+    group_name="valledelencino",
+)
+
+dbo_GroupSensors = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_GroupSensors"]),
+    group_name="valledelencino",
+)
+
+dbo_GroupHasSchedules = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_GroupHasSchedules"]),
+    group_name="valledelencino",
+)
+
+dbo_GroupHasSensors = SourceAsset(
+    key=AssetKey(["valledelencino", "dbo_GroupHasSensors"]),
+    group_name="valledelencino",
+)
+
 dbo_aspnetusers = SourceAsset(
     key=AssetKey(["valledelencino", "dbo_aspnetusers"]),
     group_name="valledelencino",

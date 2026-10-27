@@ -25,6 +25,36 @@ dbo_sublocation_tys = SourceAsset(
     key=AssetKey(["ecosat", "dbo_sublocation_tys"]),
     group_name="ecosat",
 )
+dbo_ProgramProfileTys = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_ProgramProfileTys"]),
+    group_name="ecosat",
+)
+
+dbo_ProgramProfiles = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_ProgramProfiles"]),
+    group_name="ecosat",
+)
+
+dbo_ProgramSchedules = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_ProgramSchedules"]),
+    group_name="ecosat",
+)
+
+dbo_GroupSensors = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_GroupSensors"]),
+    group_name="ecosat",
+)
+
+dbo_GroupHasSchedules = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_GroupHasSchedules"]),
+    group_name="ecosat",
+)
+
+dbo_GroupHasSensors = SourceAsset(
+    key=AssetKey(["ecosat", "dbo_GroupHasSensors"]),
+    group_name="ecosat",
+)
+
 dbo_aspnetusers = SourceAsset(
     key=AssetKey(["ecosat", "dbo_aspnetusers"]),
     group_name="ecosat",
