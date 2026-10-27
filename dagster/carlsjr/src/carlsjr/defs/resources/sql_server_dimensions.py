@@ -82,6 +82,21 @@ class SqlDimServerResource:
     def get_watermark(self) -> Optional[datetime]:
         return self._get_max_modified_at(["Sensors", "Locations", "Devices"])
 
+    def get_watermark_sensor_expected_values(self) -> Optional[datetime]:
+        return self._get_max_modified_at(
+            [
+                "Sensors",
+                "SensorTys",
+                "Devices",
+                "DeviceTys",
+                "GroupSensors",
+                "GroupHasSchedules",
+                "ProgramSchedules",
+                "ProgramProfileTys",
+                "ProgramProfiles",
+            ]
+        )
+
     def _get_max_modified_at(self, tables: list[str]) -> Optional[datetime]:
         conn_str = (
                 "DRIVER={ODBC Driver 18 for SQL Server}"

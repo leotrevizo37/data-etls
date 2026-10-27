@@ -7,6 +7,7 @@ __all__ = [
     "datalake_readings_extended",
     "factlecturas_extended",
     "raw_dimensions",
+    "sensor_expected_values",
     "gabinete",
     "cisternas",
     "sensor_fase",
