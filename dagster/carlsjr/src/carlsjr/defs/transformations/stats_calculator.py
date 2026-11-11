@@ -21,7 +21,7 @@ SENSOR_TYPE_EQUIVALENCES = {
     "Temperatura F": ("Temperatura F", "Temperature F",),
     "Humedad": ("Humedad", "Humidity", "Umidade",),
     "Corriente": ("Corriente", "Current", "Corrente",),
-    "nivel de cisterna porcentaje": ("nivel de cisterna porcentaje", "Cistern level percentage", "Cistern Level Percentage", "Nível da cisterna porcentagem", "Nível de cisterna porcentagem", "Nível da cisterna percentual", "Nivel da cisterna porcentagem",),
+    "nivel de cisterna porcentaje": ("nivel de cisterna porcentaje", "Nivel de cisterna porcentaje", "nivel de cisterna", "Nivel de cisterna", "Cistern level percentage", "Cistern Level Percentage", "Cistern level", "Cistern Level", "cistern level", "Nível da cisterna porcentagem", "Nível de cisterna porcentagem", "Nível da cisterna percentual", "Nivel da cisterna porcentagem", "Nível da cisterna", "Nível de cisterna", "Nivel da cisterna",),
 }
 
 
